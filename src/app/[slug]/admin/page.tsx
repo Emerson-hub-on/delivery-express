@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState, useCallback, useRef } from 'react'
+import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
 import { Product, CategoryItem, Order } from '@/types/product'
@@ -31,6 +32,25 @@ function todayLocalISO() {
 }
 
 export default function AdminPage() {
+  const params = useParams<{ slug: string }>()
+  const router = useRouter()
+
+  // ── Auth guard ──────────────────────────────────────────────
+  const [authReady, setAuthReady] = useState(false)
+
+  useEffect(() => {
+    // Aguarda a sessão estar disponível antes de carregar qualquer dado
+    supabase.auth.getSession().then(({ data, error }) => {
+      if (error || !data.session) {
+        // Sem sessão — redireciona para o login
+        router.replace(`/${params?.slug}/admin/login`)
+        return
+      }
+      setAuthReady(true)
+    })
+  }, [])
+
+  // ── Tabs & data state ───────────────────────────────────────
   const [tab, setTab] = useState<Tab>('products')
   const [error, setError] = useState<string | null>(null)
 
@@ -53,7 +73,10 @@ export default function AdminPage() {
   const [loadingMotoboys, setLoadingMotoboys] = useState(false)
   const [showMotoboyForm, setShowMotoboyForm] = useState(false)
 
+  // Só busca dados depois que a sessão foi confirmada
   useEffect(() => {
+    if (!authReady) return
+
     const fetchProducts = async () => {
       try {
         setLoadingProducts(true)
@@ -78,7 +101,7 @@ export default function AdminPage() {
 
     fetchProducts()
     fetchCategories()
-  }, [])
+  }, [authReady])
 
   const fetchOrders = useCallback(async () => {
     try {
@@ -110,14 +133,15 @@ export default function AdminPage() {
   useEffect(() => { fetchOrdersRef.current = fetchOrders }, [fetchOrders])
 
   useEffect(() => {
+    if (!authReady) return
     if (tab === 'orders' || tab === 'reports') {
       fetchOrdersRef.current()
       if (allOrders.length === 0) fetchAllOrders()
     }
-  }, [tab])
+  }, [tab, authReady])
 
   useEffect(() => {
-    if (tab !== 'motoboys') return
+    if (!authReady || tab !== 'motoboys') return
     const fetch = async () => {
       try {
         setLoadingMotoboys(true)
@@ -129,9 +153,10 @@ export default function AdminPage() {
       }
     }
     fetch()
-  }, [tab])
+  }, [tab, authReady])
 
   useEffect(() => {
+    if (!authReady) return
     const channel = supabase
       .channel('admin-orders-realtime')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' },
@@ -158,7 +183,7 @@ export default function AdminPage() {
       .subscribe()
 
     return () => { supabase.removeChannel(channel) }
-  }, [])
+  }, [authReady])
 
   const handleTabChange = (newTab: Tab) => {
     setTab(newTab)
@@ -174,6 +199,20 @@ export default function AdminPage() {
     setDateTo(today)
   }
 
+  // ── Auth loading screen ─────────────────────────────────────
+  if (!authReady) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center gap-4">
+        <div className="relative w-10 h-10">
+          <div className="absolute inset-0 rounded-full border-4 border-indigo-100" />
+          <div className="absolute inset-0 rounded-full border-4 border-indigo-600 border-t-transparent animate-spin" />
+        </div>
+        <p className="text-sm text-gray-400">Verificando autenticação…</p>
+      </div>
+    )
+  }
+
+  // ── Main render ─────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gray-50 text-black flex items-stretch">
       <AdminTabs
