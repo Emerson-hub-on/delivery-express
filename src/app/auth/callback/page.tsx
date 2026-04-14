@@ -5,29 +5,42 @@ import { supabase } from '@/lib/supabase'
 export default function AuthCallbackPage() {
   const redirected = useRef(false)
 
+  function safeRedirect(url: string) {
+    if (redirected.current) return
+    redirected.current = true
+    window.location.href = url
+  }
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const next = params.get('next') ?? '/'
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (redirected.current) return
+    // Fallback: se demorar mais de 10s, redireciona mesmo assim
+    const timeout = setTimeout(() => safeRedirect(next), 10_000)
 
-      if (event === 'SIGNED_IN' && session) {
-        redirected.current = true
-        subscription.unsubscribe()
-        window.location.href = next
-      }
-    })
+    supabase.auth
+      .exchangeCodeForSession(window.location.href)
+      .then(({ data, error }) => {
+        clearTimeout(timeout)
 
-    supabase.auth.exchangeCodeForSession(window.location.href).catch(() => {
-      if (!redirected.current) {
-        redirected.current = true
-        subscription.unsubscribe()
-        window.location.href = next
-      }
-    })
+        if (error || !data.session) {
+          // Tenta pegar sessão já existente antes de desistir
+          return supabase.auth.getSession().then(({ data: sd }) => {
+            safeRedirect(next)
+          })
+        }
 
-    return () => subscription.unsubscribe()
+        safeRedirect(next)
+      })
+      .catch(() => {
+        clearTimeout(timeout)
+        // Código pode já ter sido trocado (refresh da página) — tenta sessão existente
+        supabase.auth.getSession().then(({ data: sd }) => {
+          safeRedirect(next)
+        })
+      })
+
+    return () => clearTimeout(timeout)
   }, [])
 
   return (
