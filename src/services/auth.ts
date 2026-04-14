@@ -21,7 +21,7 @@ export async function signUp(
   return user
 }
 
-export async function signIn(email: string, password: string) {
+export async function signIn(email: string, password: string, companyId: string) {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password })
   if (error) throw error
   return data.user

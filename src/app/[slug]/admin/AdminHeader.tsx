@@ -27,14 +27,15 @@ export function AdminHeader({
   showMotoboyForm,
 }: AdminHeaderProps) {
   const subtitle: Record<Tab, string | null> = {
-    products:   `${productCount} produtos cadastrados`,
+    products: `${productCount} produtos cadastrados`,
     categories: `${categoryCount} categorias cadastradas`,
-    motoboys:   `${motoboyCount} motoboys cadastrados`,
-    orders:     null,
-    reports:    null,
-    fiscal:     'Emita e gerencie cupons fiscais (NFC-e)',
-    settings:   'Personalize o visual da sua loja',
-    cash:       'Abertura e fechamento de caixa',
+    motoboys: `${motoboyCount} motoboys cadastrados`,
+    orders: null,
+    reports: null,
+    fiscal: 'Emita e gerencie cupons fiscais (NFC-e)',
+    settings: 'Personalize o visual da sua loja',
+    cash: 'Abertura e fechamento de caixa',
+    ifood: null
   }
 
   return (
