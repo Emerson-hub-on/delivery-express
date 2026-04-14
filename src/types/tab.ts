@@ -1,0 +1,10 @@
+export type Tab =
+  | 'products'
+  | 'categories'
+  | 'orders'
+  | 'reports'
+  | 'motoboys'
+  | 'fiscal'
+  | 'settings'
+  | 'cash'
+  | 'ifood'
