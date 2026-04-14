@@ -1,18 +1,33 @@
 'use client'
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 
 export default function AuthCallbackPage() {
+  const redirected = useRef(false)
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const next = params.get('next') ?? '/'
 
-    supabase.auth.exchangeCodeForSession(window.location.href).then(({ data }) => {
-      const email = data.session?.user?.email ?? ''
-      window.location.href = `${next}?auth_success=${encodeURIComponent(email)}`
-    }).catch(() => {
-      window.location.href = next
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (redirected.current) return
+
+      if (event === 'SIGNED_IN' && session) {
+        redirected.current = true
+        subscription.unsubscribe()
+        window.location.href = next
+      }
     })
+
+    supabase.auth.exchangeCodeForSession(window.location.href).catch(() => {
+      if (!redirected.current) {
+        redirected.current = true
+        subscription.unsubscribe()
+        window.location.href = next
+      }
+    })
+
+    return () => subscription.unsubscribe()
   }, [])
 
   return (
