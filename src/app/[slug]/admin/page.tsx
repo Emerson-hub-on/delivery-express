@@ -155,6 +155,12 @@ export default function AdminPage() {
     fetch()
   }, [tab, authReady])
 
+// Refs para acessar os valores atuais dentro do canal sem recriá-lo
+const dateFromRef = useRef(dateFrom)
+const dateToRef   = useRef(dateTo)
+useEffect(() => { dateFromRef.current = dateFrom }, [dateFrom])
+useEffect(() => { dateToRef.current   = dateTo   }, [dateTo])
+
 useEffect(() => {
   if (!authReady) return
   const channel = supabase
@@ -163,19 +169,21 @@ useEffect(() => {
       (payload) => {
         const newOrder = payload.new as Order
 
-        // Verifica se o pedido está dentro do filtro de data atual
         const orderDate = newOrder.created_at
           ? new Date(newOrder.created_at).toLocaleDateString('en-CA', { timeZone: 'America/Recife' })
           : null
 
+        // Lê via ref — sem recriar o canal quando o filtro muda
+        const from = dateFromRef.current
+        const to   = dateToRef.current
+
         const dentroDoFiltro = !orderDate || (
-          (!dateFrom || orderDate >= dateFrom) &&
-          (!dateTo   || orderDate <= dateTo)
+          (!from || orderDate >= from) &&
+          (!to   || orderDate <= to)
         )
 
         if (dentroDoFiltro) {
           setOrders(prev => {
-            // Evita duplicatas
             if (prev.some(o => o.id === newOrder.id)) return prev
             return [newOrder, ...prev]
           })
@@ -190,10 +198,8 @@ useEffect(() => {
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders' },
       (payload) => {
         const incoming = payload.new as Order
-        const patch = (prev: Order[]) => prev.map(o => {
-          if (o.id !== incoming.id) return o
-          return { ...o, ...incoming }
-        })
+        const patch = (prev: Order[]) =>
+          prev.map(o => o.id !== incoming.id ? o : { ...o, ...incoming })
         setOrders(patch)
         setAllOrders(patch)
       }
@@ -201,7 +207,7 @@ useEffect(() => {
     .subscribe()
 
   return () => { supabase.removeChannel(channel) }
-}, [authReady, dateFrom, dateTo])  // ← adiciona dateFrom e dateTo nas deps
+}, [authReady]) // ← canal criado uma única vez
 
   const handleTabChange = (newTab: Tab) => {
     setTab(newTab)
