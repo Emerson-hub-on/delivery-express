@@ -26,6 +26,10 @@ export default function AuthCallbackPage() {
       .exchangeCodeForSession(window.location.href)
       .then(({ data, error }) => {
         clearTimeout(timeout)
+        if (error) {
+      // Veja o erro real no console do browser em produção
+      console.error('[AuthCallback] Erro:', error.message, error)
+    }
         if (error || !data.session) {
           return supabase.auth.getSession().then(() => safeRedirect(next))
         }
