@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/master-auth'
+import { getSupabaseAdmin } from '@/lib/master-auth'
 
 export async function POST(req: NextRequest) {
   try {
@@ -10,8 +10,9 @@ export async function POST(req: NextRequest) {
     const paymentId = body.data?.id
     if (!paymentId) return NextResponse.json({ received: true })
 
-    // Busca a empresa pelo payment_gateway_id para pegar a secret key correta
-    const { data: order } = await supabaseAdmin
+    const supabase = getSupabaseAdmin()
+
+    const { data: order } = await supabase
       .from('orders')
       .select('id, company_id')
       .eq('payment_gateway_id', String(paymentId))
@@ -19,7 +20,7 @@ export async function POST(req: NextRequest) {
 
     if (!order) return NextResponse.json({ received: true })
 
-    const { data: company } = await supabaseAdmin
+    const { data: company } = await supabase
       .from('companies')
       .select('mp_secret_key')
       .eq('id', order.company_id)
@@ -28,13 +29,13 @@ export async function POST(req: NextRequest) {
     const secretKey = company?.mp_secret_key ?? process.env.MERCADOPAGO_TOKEN!
 
     const response = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
-      headers: { 'Authorization': `Bearer ${secretKey}` },
+      headers: { Authorization: `Bearer ${secretKey}` },
     })
 
     const payment = await response.json()
 
     if (payment.status === 'approved') {
-      await supabaseAdmin
+      await supabase
         .from('orders')
         .update({ status: 'confirmed' })
         .eq('id', order.id)

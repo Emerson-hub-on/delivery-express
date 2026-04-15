@@ -9,6 +9,8 @@ import { Form, FormField, FormItem, FormLabel, FormMessage } from "@/components/
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { useCustomerAddress } from "@/hooks/useCustomerAddress"
+import { useParams } from "next/navigation"
+import { supabase } from "@/lib/supabase"
 
 const formSchema = z.object({
   cep:        z.string().optional(),
@@ -27,6 +29,8 @@ type Props = {
 }
 
 export const StepAddress = ({ setStep }: Props) => {
+  const params = useParams<{ slug: string }>()
+  const [companyId, setCompanyId] = useState('')
   const { address, setAddress } = useCheckoutStore(state => state)
   const { address: savedAddress, loading: loadingSaved } = useCustomerAddress()
   const [usingSaved, setUsingSaved] = useState(false)
@@ -45,6 +49,19 @@ export const StepAddress = ({ setStep }: Props) => {
       state:      address?.state      ?? "",
     },
   })
+
+  useEffect(() => {
+  if (!params?.slug) return
+
+  supabase
+    .from('companies')
+    .select('id')
+    .eq('slug', params.slug)
+    .maybeSingle()
+    .then(({ data }) => {
+      if (data) setCompanyId(data.id)
+    })
+}, [params?.slug])
 
   useEffect(() => {
     if (!address && savedAddress) {

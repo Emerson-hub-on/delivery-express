@@ -4,14 +4,16 @@ import { getIfoodToken } from '@/lib/ifood-token'
 
 const IFOOD_API = 'https://merchant-api.ifood.com.br'
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-)
+export const dynamic = 'force-dynamic'
 
 export async function POST(req: NextRequest) {
+  const supabaseAdmin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL ?? '',
+    process.env.SUPABASE_SERVICE_ROLE_KEY ?? '',
+  )
+
   try {
-    const { ifoodId } = await req.json()
+    const { ifoodId } = await req.json() as { ifoodId?: string }
     if (!ifoodId) {
       return NextResponse.json({ error: 'ifoodId obrigatório' }, { status: 400 })
     }
@@ -30,14 +32,17 @@ export async function POST(req: NextRequest) {
     if (!res.ok) {
       const text = await res.text()
       console.error(`[iFood Dispatch] Erro ${res.status}:`, text)
-      // Não bloqueia — o despacho interno já aconteceu
-      return NextResponse.json({ warning: 'Despacho notificado localmente, mas falhou no iFood', details: text }, { status: 200 })
+      return NextResponse.json(
+        { warning: 'Despacho notificado localmente, mas falhou no iFood', details: text },
+        { status: 200 }
+      )
     }
 
     console.log(`[iFood Dispatch] Pedido ${ifoodId} despachado no iFood`)
     return NextResponse.json({ success: true })
-  } catch (err: any) {
-    console.error('[iFood Dispatch] Erro:', err.message)
-    return NextResponse.json({ error: err.message }, { status: 500 })
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Erro desconhecido'
+    console.error('[iFood Dispatch] Erro:', message)
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }

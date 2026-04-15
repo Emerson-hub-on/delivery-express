@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useRef } from 'react'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@supabase/supabase-js'
 
 export default function AuthCallbackPage() {
   const redirected = useRef(false)
@@ -12,32 +12,28 @@ export default function AuthCallbackPage() {
   }
 
   useEffect(() => {
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    )
+
     const params = new URLSearchParams(window.location.search)
     const next = params.get('next') ?? '/'
 
-    // Fallback: se demorar mais de 10s, redireciona mesmo assim
     const timeout = setTimeout(() => safeRedirect(next), 10_000)
 
     supabase.auth
       .exchangeCodeForSession(window.location.href)
       .then(({ data, error }) => {
         clearTimeout(timeout)
-
         if (error || !data.session) {
-          // Tenta pegar sessão já existente antes de desistir
-          return supabase.auth.getSession().then(({ data: sd }) => {
-            safeRedirect(next)
-          })
+          return supabase.auth.getSession().then(() => safeRedirect(next))
         }
-
         safeRedirect(next)
       })
       .catch(() => {
         clearTimeout(timeout)
-        // Código pode já ter sido trocado (refresh da página) — tenta sessão existente
-        supabase.auth.getSession().then(({ data: sd }) => {
-          safeRedirect(next)
-        })
+        supabase.auth.getSession().then(() => safeRedirect(next))
       })
 
     return () => clearTimeout(timeout)

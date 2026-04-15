@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/master-auth'
 import { getCompanyMpKeys } from '@/lib/get-company-mp-keys'
 
 export async function GET(req: NextRequest) {
@@ -12,7 +11,7 @@ export async function GET(req: NextRequest) {
   const { secretKey } = await getCompanyMpKeys(Number(orderIdParam))
 
   const response = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
-    headers: { 'Authorization': `Bearer ${secretKey}` },
+    headers: { Authorization: `Bearer ${secretKey}` },
   })
 
   const data = await response.json()

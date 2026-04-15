@@ -111,7 +111,7 @@ export function StepCard({ setStep }: Props) {
         setSavedOrderCode(order.code)
 
         if (!isPickup && user) {
-          try { await updateCustomerProfile(user.id, { address }) } catch {}
+          try { await updateCustomerProfile(user.id, companyId, { address }) } catch {}
         }
 
         setOrderReady(true)

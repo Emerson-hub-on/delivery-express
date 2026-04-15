@@ -51,8 +51,9 @@ export async function POST(req: NextRequest) {
       status:        data.status,
       statusDetail:  data.status_detail,
     })
-  } catch (err: any) {
-    console.error('Card route error:', err)
-    return NextResponse.json({ error: err.message ?? 'Erro interno' }, { status: 500 })
-  }
+  } catch (err) {
+  const message = err instanceof Error ? err.message : 'Erro interno'
+  console.error('Card route error:', err)
+  return NextResponse.json({ error: message }, { status: 500 })
+} 
 }

@@ -12,10 +12,7 @@ import { createClient } from '@supabase/supabase-js'
 import axios from 'axios'
 
 // ── Supabase admin (bypassa RLS para upsert server-side) ────────────────────
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!  // service_role — nunca exponha no client
-)
+
 
 // ── iFood API base ───────────────────────────────────────────────────────────
 const IFOOD_API = 'https://merchant-api.ifood.com.br'
@@ -163,6 +160,10 @@ function normalizeName(name: string): string {
 // ── 4. Handler principal ─────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   try {
+    const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!  // service_role — nunca exponha no client
+)
     const body       = await req.json().catch(() => ({}))
     const merchantId = body.merchantId ?? process.env.IFOOD_MERCHANT_ID
 
@@ -306,8 +307,9 @@ export async function POST(req: NextRequest) {
       summary: { created, updated, skipped, total: results.length },
       results,
     })
-  } catch (err: any) {
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Erro interno.'
     console.error('[ifood/sync-catalog]', err)
-    return NextResponse.json({ error: err.message ?? 'Erro interno.' }, { status: 500 })
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }

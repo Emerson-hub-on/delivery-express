@@ -202,7 +202,7 @@ export const StepFinish = ({ setStep, onRequireAuth }: Props) => {
 
   const saveAddressToProfile = async (userId: string) => {
     if (isPickup) return
-    try { await updateCustomerProfile(userId, { address }) } catch {}
+    try { await updateCustomerProfile(userId, companyId, { address }) } catch {}
   }
 
   const generatePix = async (order: { id: number; code: string }) => {
@@ -223,9 +223,9 @@ export const StepFinish = ({ setStep, onRequireAuth }: Props) => {
       setPixData(result)
       await supabase.from('orders').update({ payment_gateway_id: result.mercadoPagoId }).eq('id', order.id)
       startPolling(result.mercadoPagoId, order.id)
-    } catch (err: any) {
-      setPixError(err.message ?? 'Não foi possível gerar o Pix. Tente novamente.')
-    }
+    } catch (err: unknown) {
+  setPixError(err instanceof Error ? err.message : 'Não foi possível gerar o Pix. Tente novamente.')
+}
   }
 
   const handleSendOrder = async (e: React.MouseEvent) => {

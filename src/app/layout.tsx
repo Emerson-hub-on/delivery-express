@@ -29,8 +29,9 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`min-h-screen flex flex-col`}
-      >
+  className="min-h-screen flex flex-col"
+  suppressHydrationWarning
+>
 
         <ThemeProvider
           attribute="class"

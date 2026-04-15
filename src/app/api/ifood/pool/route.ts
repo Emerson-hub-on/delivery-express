@@ -1,12 +1,3 @@
-/**
- * app/api/ifood/poll/route.ts
- *
- * POST /api/ifood/poll
- * Body: { companyId: string }
- *
- * Chamada pelo cron a cada 30s. Não chamar diretamente do browser.
- */
-
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getIfoodToken } from '@/lib/ifood-token'
@@ -14,13 +5,7 @@ import { mapIfoodToOrder, IfoodOrder } from '@/services/ifood-mapper'
 
 const IFOOD_API = 'https://merchant-api.ifood.com.br'
 
-// Service role bypassa RLS — só usar no server
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-)
-
-// ── Chamada autenticada ao iFood ──────────────────────────────
+export const dynamic = 'force-dynamic'
 
 async function fetchIfood<T>(path: string, token: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${IFOOD_API}${path}`, {
@@ -38,33 +23,32 @@ async function fetchIfood<T>(path: string, token: string, options?: RequestInit)
   }
 
   if (res.status === 204) return {} as T
-  return res.json()
+  return res.json() as Promise<T>
 }
-
-// ── Tenta vincular ao customer pelo telefone ──────────────────
-
-async function resolveCustomerId(phone: string | null, companyId: string): Promise<string | null> {
-  if (!phone) return null
-  const { data } = await supabaseAdmin
-    .from('customers')
-    .select('id')
-    .eq('phone', phone)
-    .eq('company_id', companyId)
-    .single()
-  return data?.id ?? null
-}
-
-// ── Tipos de evento ───────────────────────────────────────────
 
 interface IfoodEvent {
   id:      string
-  code:    string   // 'PLACED' | 'CONFIRMED' | 'CANCELLED' | ...
+  code:    string
   orderId: string
 }
 
-// ── Handler ───────────────────────────────────────────────────
-
 export async function POST(req: NextRequest) {
+  const supabaseAdmin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL ?? '',
+    process.env.SUPABASE_SERVICE_ROLE_KEY ?? '',
+  )
+
+  async function resolveCustomerId(phone: string | null, companyId: string): Promise<string | null> {
+    if (!phone) return null
+    const { data } = await supabaseAdmin
+      .from('customers')
+      .select('id')
+      .eq('phone', phone)
+      .eq('company_id', companyId)
+      .single()
+    return data?.id ?? null
+  }
+
   // 1. Autenticação
   const cronSecret = process.env.CRON_SECRET
   if (cronSecret) {
@@ -77,7 +61,7 @@ export async function POST(req: NextRequest) {
   // 2. companyId no body
   let companyId: string | undefined
   try {
-    const body = await req.json()
+    const body = await req.json() as { companyId?: string }
     companyId = body?.companyId
   } catch { /* body vazio */ }
 
@@ -85,7 +69,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'companyId ausente no body' }, { status: 400 })
   }
 
-  // IFOOD_MERCHANT_ID = 7b1abb84-e900-4be8-94c0-207e10d0fb4c
   if (!process.env.IFOOD_MERCHANT_ID) {
     return NextResponse.json({ error: 'IFOOD_MERCHANT_ID não configurado' }, { status: 500 })
   }
@@ -110,7 +93,6 @@ export async function POST(req: NextRequest) {
     // 4. Processa pedidos novos
     for (const event of placedEvents) {
       try {
-        // Idempotência
         const { data: existing } = await supabaseAdmin
           .from('orders')
           .select('id')
@@ -140,9 +122,10 @@ export async function POST(req: NextRequest) {
 
         savedCount++
         console.log(`[iFood] Pedido ${event.orderId} salvo`)
-      } catch (err: any) {
-        console.error(`[iFood] Erro em ${event.orderId}:`, err.message)
-        errors.push(`${event.orderId}: ${err.message}`)
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Erro desconhecido'
+        console.error(`[iFood] Erro em ${event.orderId}:`, message)
+        errors.push(`${event.orderId}: ${message}`)
       }
     }
 
@@ -157,8 +140,9 @@ export async function POST(req: NextRequest) {
       total_events: events.length,
       ...(errors.length ? { errors } : {}),
     })
-  } catch (err: any) {
-    console.error('[iFood] Erro crítico:', err)
-    return NextResponse.json({ error: err.message }, { status: 500 })
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Erro desconhecido'
+    console.error('[iFood] Erro crítico:', message)
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }

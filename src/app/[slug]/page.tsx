@@ -5,11 +5,6 @@ import CardapioPage from './CardapioPage'
 
 export const revalidate = 60
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
-
 type CompanyProfile = {
   banner_url: string | null
   logo_url: string | null
@@ -24,6 +19,11 @@ export default async function SlugPage({
   params: Promise<{ slug: string }>
 }) {
   const { slug } = await params
+
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
 
   const { data: company } = await supabase
     .from('companies')

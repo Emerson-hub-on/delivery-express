@@ -3,11 +3,13 @@ import { cookies } from 'next/headers'
 import { createClient } from '@supabase/supabase-js'
 import { SignJWT, jwtVerify } from 'jose'
 
-// Client com service_role — só usar no servidor!
-export const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+// ✅ Lazy — só instancia quando chamado, não na importação
+export function getSupabaseAdmin() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key) throw new Error('Supabase env vars não configuradas')
+  return createClient(url, key)
+}
 
 const SECRET = new TextEncoder().encode(
   process.env.MASTER_JWT_SECRET ?? 'master-secret-change-me'
@@ -15,7 +17,7 @@ const SECRET = new TextEncoder().encode(
 const COOKIE = 'master_session'
 
 export async function verifyMasterCredentials(email: string, password: string) {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await getSupabaseAdmin()
     .rpc('check_master_password', { p_email: email, p_password: password })
 
   if (error || !data) return null

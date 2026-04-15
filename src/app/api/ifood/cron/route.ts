@@ -1,26 +1,16 @@
-/**
- * app/api/ifood/cron/route.ts
- *
- * Invocado pelo cron-job.org a cada 30s.
- *
- * Configure no cron-job.org:
- *   URL:     https://nonsubmissive-brady-unblemished.ngrok-free.dev/api/ifood/cron?slug=SEU_SLUG
- *   Método:  GET
- *   Headers:
- *     Authorization: Bearer SEU_CRON_SECRET
- *     ngrok-skip-browser-warning: 1
- */
-
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-)
+export const dynamic = 'force-dynamic' // ← garante que a route nunca é estática
 
 export async function GET(req: NextRequest) {
-  // ── 1. Autenticação ─────────────────────────────────────────
+  // ── Instancia aqui dentro para evitar erro no build ──────────
+  const supabaseAdmin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL ?? '',
+    process.env.SUPABASE_SERVICE_ROLE_KEY ?? '',
+  )
+
+  // ── 1. Autenticação ──────────────────────────────────────────
   const cronSecret = process.env.CRON_SECRET
   if (cronSecret) {
     const auth = req.headers.get('authorization') ?? ''
@@ -50,8 +40,7 @@ export async function GET(req: NextRequest) {
   }
 
   // ── 4. Chama /api/ifood/poll ─────────────────────────────────
-  // NEXT_PUBLIC_APP_URL = https://nonsubmissive-brady-unblemished.ngrok-free.dev
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL!
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? ''
 
   try {
     const res = await fetch(`${baseUrl}/api/ifood/poll`, {
@@ -64,10 +53,11 @@ export async function GET(req: NextRequest) {
       body: JSON.stringify({ companyId: company.id }),
     })
 
-    const data = await res.json()
-    return NextResponse.json({ slug, companyId: company.id, ...data }, { status: res.status })
-  } catch (err: any) {
-    console.error('[iFood Cron]', err.message)
-    return NextResponse.json({ error: err.message }, { status: 500 })
+    const data: unknown = await res.json()
+    return NextResponse.json({ slug, companyId: company.id, ...(data as object) }, { status: res.status })
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Erro desconhecido'
+    console.error('[iFood Cron]', message)
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }

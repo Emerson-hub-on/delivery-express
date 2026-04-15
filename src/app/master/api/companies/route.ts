@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getMasterSession, supabaseAdmin } from '@/lib/master-auth'
+import { getMasterSession, getSupabaseAdmin } from '@/lib/master-auth'
 
 export async function GET() {
   const session = await getMasterSession()
   if (!session) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 
-  const { data, error } = await supabaseAdmin
+  const supabase = getSupabaseAdmin()
+
+  const { data, error } = await supabase
     .from('companies')
     .select('id, name, email, slug, created_at, mp_public_key, mp_secret_key')
     .order('created_at', { ascending: false })
@@ -19,6 +21,7 @@ export async function POST(req: NextRequest) {
   if (!session) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 
   const { name, email, password, slug } = await req.json()
+  const supabase = getSupabaseAdmin()
 
   if (!/^[a-z0-9-]+$/.test(slug)) {
     return NextResponse.json(
@@ -27,7 +30,7 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  const { data: existing } = await supabaseAdmin
+  const { data: existing } = await supabase
     .from('companies')
     .select('id')
     .eq('slug', slug)
@@ -37,7 +40,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Esse slug já está em uso.' }, { status: 400 })
   }
 
-  const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+  const { data: authData, error: authError } = await supabase.auth.admin.createUser({
     email,
     password,
     email_confirm: true,
@@ -46,7 +49,7 @@ export async function POST(req: NextRequest) {
 
   if (authError) return NextResponse.json({ error: authError.message }, { status: 400 })
 
-  await supabaseAdmin
+  await supabase
     .from('companies')
     .update({ slug })
     .eq('id', authData.user.id)
@@ -59,6 +62,7 @@ export async function PATCH(req: NextRequest) {
   if (!session) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 
   const { id, name, email, slug, password, mp_public_key, mp_secret_key } = await req.json()
+  const supabase = getSupabaseAdmin()
 
   if (!id) return NextResponse.json({ error: 'ID obrigatório' }, { status: 400 })
 
@@ -67,7 +71,7 @@ export async function PATCH(req: NextRequest) {
   }
 
   if (slug) {
-    const { data: existing } = await supabaseAdmin
+    const { data: existing } = await supabase
       .from('companies')
       .select('id')
       .eq('slug', slug)
@@ -77,14 +81,12 @@ export async function PATCH(req: NextRequest) {
     if (existing) return NextResponse.json({ error: 'Slug já em uso.' }, { status: 400 })
   }
 
-  // Monta update da company — inclui mp_public_key e mp_secret_key
   const companyUpdate: Record<string, string | null> = { name, slug }
 
-  // Permite salvar, atualizar ou limpar as keys (null = excluir)
   if (mp_public_key !== undefined) companyUpdate.mp_public_key = mp_public_key || null
   if (mp_secret_key !== undefined) companyUpdate.mp_secret_key = mp_secret_key || null
 
-  const { error: companyError } = await supabaseAdmin
+  const { error: companyError } = await supabase
     .from('companies')
     .update(companyUpdate)
     .eq('id', id)
@@ -96,7 +98,7 @@ export async function PATCH(req: NextRequest) {
   if (password && password.length >= 6) authUpdate.password = password
 
   if (Object.keys(authUpdate).length > 0) {
-    const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(id, authUpdate)
+    const { error: authError } = await supabase.auth.admin.updateUserById(id, authUpdate)
     if (authError) return NextResponse.json({ error: authError.message }, { status: 500 })
   }
 

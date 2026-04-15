@@ -1,10 +1,12 @@
-import { supabaseAdmin } from '@/lib/master-auth'
+import { getSupabaseAdmin } from '@/lib/master-auth'
 
 export async function getCompanyMpKeys(orderId: number): Promise<{
   secretKey: string
   publicKey: string
 }> {
-  const { data: order, error: orderError } = await supabaseAdmin
+  const supabase = getSupabaseAdmin()
+
+  const { data: order, error: orderError } = await supabase
     .from('orders')
     .select('company_id')
     .eq('id', orderId)
@@ -12,7 +14,7 @@ export async function getCompanyMpKeys(orderId: number): Promise<{
 
   if (orderError || !order) throw new Error('Pedido não encontrado')
 
-  const { data: company, error: companyError } = await supabaseAdmin
+  const { data: company, error: companyError } = await supabase
     .from('companies')
     .select('mp_secret_key, mp_public_key')
     .eq('id', order.company_id)
