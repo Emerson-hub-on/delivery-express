@@ -24,6 +24,7 @@ export async function signUp(
 export async function signIn(email: string, password: string, companyId: string) {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password })
   if (error) throw error
+  await supabase.auth.getSession()
 
   const user = data.user
   if (!user) throw new Error('Usuário não encontrado.')
@@ -57,6 +58,7 @@ export async function signOut() {
 
 export async function getSession() {
   const { data } = await supabase.auth.getSession()
+  console.log(data.session)
   return data.session
 }
 

@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useRef } from 'react'
-import { createClient } from '@supabase/supabase-js'
+import { supabase } from '@/lib/supabase' // 🔥 usa o client correto
 
 export default function AuthCallbackPage() {
   const redirected = useRef(false)
@@ -12,33 +12,36 @@ export default function AuthCallbackPage() {
   }
 
   useEffect(() => {
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    )
-
     const params = new URLSearchParams(window.location.search)
     const next = params.get('next') ?? '/'
+    const code = params.get('code')
 
     const timeout = setTimeout(() => safeRedirect(next), 10_000)
 
-    supabase.auth
-      .exchangeCodeForSession(window.location.href)
-      .then(({ data, error }) => {
-        clearTimeout(timeout)
-        if (error) {
-      // Veja o erro real no console do browser em produção
-      console.error('[AuthCallback] Erro:', error.message, error)
-    }
-        if (error || !data.session) {
-          return supabase.auth.getSession().then(() => safeRedirect(next))
+    const handleAuth = async () => {
+      try {
+        // 🔥 troca correta do código por sessão
+        if (code) {
+          const { error } = await supabase.auth.exchangeCodeForSession(code)
+
+          if (error) {
+            console.error('[AuthCallback] Erro:', error.message)
+          }
         }
+
+        // 🔥 garante que a sessão foi persistida
+        await supabase.auth.getSession()
+
         safeRedirect(next)
-      })
-      .catch(() => {
+      } catch (err) {
+        console.error('[AuthCallback] Exception:', err)
+        safeRedirect(next)
+      } finally {
         clearTimeout(timeout)
-        supabase.auth.getSession().then(() => safeRedirect(next))
-      })
+      }
+    }
+
+    handleAuth()
 
     return () => clearTimeout(timeout)
   }, [])
