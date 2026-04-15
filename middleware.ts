@@ -1,4 +1,3 @@
-// middleware.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { jwtVerify } from 'jose'
 import { createServerClient } from '@supabase/ssr'
@@ -10,13 +9,14 @@ const MASTER_SECRET = new TextEncoder().encode(
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
 
-  // ── Proteção /master ───────────────────────────────────
   if (
     pathname.startsWith('/_next') ||
-    pathname.includes('.') // arquivos estáticos (.js, .css, .ico etc)
+    pathname.includes('.')
   ) {
     return NextResponse.next()
   }
+
+  // ── Proteção /master ───────────────────────────────────
   if (pathname.startsWith('/master')) {
     const isPublic =
       pathname === '/master/login' ||
@@ -43,7 +43,8 @@ export async function middleware(req: NextRequest) {
     const isPublic = pathname === `/${slug}/admin/login`
     if (isPublic) return NextResponse.next()
 
-    const res = NextResponse.next()
+    // ← cria o response ANTES e usa ele em tudo (inclusive no redirect)
+    let res = NextResponse.next()
 
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -52,9 +53,11 @@ export async function middleware(req: NextRequest) {
         cookies: {
           getAll: () => req.cookies.getAll(),
           setAll: (cookiesToSet) => {
-            cookiesToSet.forEach(({ name, value, options }) =>
+            // ← aplica cookies tanto no request quanto no response
+            cookiesToSet.forEach(({ name, value, options }) => {
+              req.cookies.set(name, value)
               res.cookies.set(name, value, options)
-            )
+            })
           },
         },
       }
@@ -66,20 +69,20 @@ export async function middleware(req: NextRequest) {
       return NextResponse.redirect(new URL(`/${slug}/admin/login`, req.url))
     }
 
-    // Verifica se é admin desta company específica pelo slug
+    // ← query corrigida: company.user_id deve bater com user.id
     const { data: company } = await supabase
       .from('companies')
       .select('id')
-      .eq('id', user.id)
+      .eq('user_id', user.id)   // ← era .eq('id', user.id) — errado
       .eq('slug', slug)
       .maybeSingle()
 
     if (!company) {
-      const redirectRes = NextResponse.redirect(new URL(`/${slug}/admin/login`, req.url))
+      res = NextResponse.redirect(new URL(`/${slug}/admin/login`, req.url))
       req.cookies.getAll().forEach(cookie => {
-        if (cookie.name.includes('sb-')) redirectRes.cookies.delete(cookie.name)
+        if (cookie.name.includes('sb-')) res.cookies.delete(cookie.name)
       })
-      return redirectRes
+      return res
     }
 
     return res
