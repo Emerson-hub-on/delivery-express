@@ -133,7 +133,7 @@ export function mapIfoodToOrder(
   return {
     company_id:     companyId,
     ifood_id:       o.id,
-    created_at:     o.createdAt,
+    created_at: new Date(o.createdAt).toLocaleString('sv-SE', { timeZone: 'America/Recife' }).replace(' ', 'T'),
     status:         'pending',
     total:          resolveTotal(o),
     customer:       o.customer?.name ?? 'Cliente iFood',

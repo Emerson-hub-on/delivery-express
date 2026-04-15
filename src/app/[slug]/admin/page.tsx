@@ -155,35 +155,53 @@ export default function AdminPage() {
     fetch()
   }, [tab, authReady])
 
-  useEffect(() => {
-    if (!authReady) return
-    const channel = supabase
-      .channel('admin-orders-realtime')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' },
-        (payload) => {
-          const newOrder = payload.new as Order
-          setOrders(prev => [newOrder, ...prev])
-          setAllOrders(prev => [newOrder, ...prev])
-        }
-      )
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders' },
-        (payload) => {
-          const incoming = payload.new as Order
-          const patch = (prev: Order[]) => prev.map(o => {
-            if (o.id !== incoming.id) return o
-            const updates = Object.fromEntries(
-              Object.entries(incoming).filter(([_, v]) => v !== undefined)
-            )
-            return { ...o, ...updates }
-          })
-          setOrders(patch)
-          setAllOrders(patch)
-        }
-      )
-      .subscribe()
+useEffect(() => {
+  if (!authReady) return
+  const channel = supabase
+    .channel('admin-orders-realtime')
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' },
+      (payload) => {
+        const newOrder = payload.new as Order
 
-    return () => { supabase.removeChannel(channel) }
-  }, [authReady])
+        // Verifica se o pedido está dentro do filtro de data atual
+        const orderDate = newOrder.created_at
+          ? new Date(newOrder.created_at).toLocaleDateString('en-CA', { timeZone: 'America/Recife' })
+          : null
+
+        const dentroDoFiltro = !orderDate || (
+          (!dateFrom || orderDate >= dateFrom) &&
+          (!dateTo   || orderDate <= dateTo)
+        )
+
+        if (dentroDoFiltro) {
+          setOrders(prev => {
+            // Evita duplicatas
+            if (prev.some(o => o.id === newOrder.id)) return prev
+            return [newOrder, ...prev]
+          })
+        }
+
+        setAllOrders(prev => {
+          if (prev.some(o => o.id === newOrder.id)) return prev
+          return [newOrder, ...prev]
+        })
+      }
+    )
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders' },
+      (payload) => {
+        const incoming = payload.new as Order
+        const patch = (prev: Order[]) => prev.map(o => {
+          if (o.id !== incoming.id) return o
+          return { ...o, ...incoming }
+        })
+        setOrders(patch)
+        setAllOrders(patch)
+      }
+    )
+    .subscribe()
+
+  return () => { supabase.removeChannel(channel) }
+}, [authReady, dateFrom, dateTo])  // ← adiciona dateFrom e dateTo nas deps
 
   const handleTabChange = (newTab: Tab) => {
     setTab(newTab)
