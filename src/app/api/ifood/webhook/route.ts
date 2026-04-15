@@ -133,18 +133,37 @@ export async function POST(req: NextRequest) {
 
   try {
     if (fullCode === 'PLACED') {
-      processOrder(orderId, merchantId, db).catch((err: unknown) => {
-        const message = err instanceof Error ? err.message : 'Erro desconhecido'
-        console.error('[iFood Webhook] Erro ao processar pedido:', message)
-      })
-      return NextResponse.json({ received: true })
-    }
+  // Aguarda para capturar o erro real nos logs
+  try {
+    await processOrder(orderId, merchantId, db)
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Erro desconhecido'
+    console.error(`[iFood Webhook] PLACED falhou para ${orderId}:`, message)
+    // Retorna 200 mesmo assim — o CONFIRMED vai recuperar
+  }
+  return NextResponse.json({ received: true })
+}
 
-    if (fullCode === 'CONFIRMED') {
-      await db.from('orders').update({ status: 'confirmed' }).eq('ifood_id', orderId)
-      console.log(`[iFood Webhook] Pedido ${orderId} confirmado (sync)`)
-      return NextResponse.json({ received: true })
-    }
+ if (fullCode === 'CONFIRMED') {
+  // Tenta salvar o pedido caso o PLACED tenha falhado
+  const { data: existing } = await db
+    .from('orders')
+    .select('id')
+    .eq('ifood_id', orderId)
+    .single()
+
+  if (!existing) {
+    // Pedido não existe ainda — salva agora
+    console.log(`[iFood Webhook] CONFIRMED sem pedido salvo — salvando ${orderId}`)
+    await processOrder(orderId, merchantId, db)
+  } else {
+    // Já existe — só atualiza o status
+    await db.from('orders').update({ status: 'confirmed' }).eq('ifood_id', orderId)
+    console.log(`[iFood Webhook] Pedido ${orderId} confirmado`)
+  }
+
+  return NextResponse.json({ received: true })
+}
 
 if (fullCode === 'DELIVERY_DROP_CODE_REQUESTED') {
   const token = await getIfoodToken()
