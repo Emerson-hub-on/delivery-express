@@ -108,31 +108,38 @@ export function OrdersTab({
   const isIfoodOrder     = (order: Order) => !!order.ifood_id
 
   // ── Aceitar pedido iFood ──────────────────────────────────────
-  const handleAcceptIfood = async (order: Order) => {
-    if (!order.ifood_id) return
-    if (!confirm(`Aceitar pedido #${order.code ?? order.id} do iFood?`)) return
+const handleAcceptIfood = async (order: Order) => {
+  if (!order.ifood_id) return
+  if (!confirm(`Aceitar pedido #${order.code ?? order.id} do iFood?`)) return
 
-    setAcceptingId(order.id)
-    try {
-      const res = await fetch('/api/ifood/confirm', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ifoodId: order.ifood_id }),
-      })
+  setAcceptingId(order.id)
+  try {
+    const res = await fetch('/api/ifood/confirm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ifoodId: order.ifood_id }),
+    })
 
-      if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.error ?? 'Erro ao confirmar pedido')
-      }
+    const data = await res.json()
 
-      const { order: updated } = await res.json()
-      setOrders(prev => prev.map(o => o.id === order.id ? { ...o, ...updated } : o))
-    } catch (e: any) {
-      onError(e.message)
-    } finally {
-      setAcceptingId(null)
+    if (!res.ok) {
+      throw new Error(data.error ?? 'Erro ao confirmar pedido')
     }
+
+    // Atualiza localmente independente do retorno
+    setOrders(prev =>
+      prev.map(o =>
+        o.id === order.id
+          ? { ...o, status: 'confirmed', ...(data.order ?? {}) }
+          : o
+      )
+    )
+  } catch (e: any) {
+    onError(e.message)
+  } finally {
+    setAcceptingId(null)
   }
+}
 
 const dispatchOrder = async (id: number) => {
   try {
