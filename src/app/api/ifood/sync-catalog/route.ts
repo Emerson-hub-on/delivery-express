@@ -64,10 +64,22 @@ async function fetchCatalog(token: string, merchantId: string): Promise<IfoodCat
   )
   if (!listRes.ok) throw new Error(`iFood catalogs list: ${listRes.status}`)
 
-  const catalogs = await listRes.json()
-  const catalogId: string = catalogs[0]?.catalogId
-  if (!catalogId) throw new Error('Nenhum catálogo ativo encontrado no iFood')
+const catalogs = await listRes.json()
 
+console.log('CATALOG RESPONSE:', catalogs)
+
+if (!Array.isArray(catalogs) && !catalogs.catalogs) {
+  throw new Error(`Resposta inválida do iFood: ${JSON.stringify(catalogs)}`)
+}
+
+const catalogId =
+  catalogs[0]?.catalogId ||
+  catalogs.catalogs?.[0]?.id ||
+  catalogs.catalogs?.[0]?.catalogId
+
+if (!catalogId) {
+  throw new Error('Nenhum catálogo encontrado no iFood')
+}
   // 2. Detalhe do catálogo
   const detailRes = await fetch(
     `https://merchant-api.ifood.com.br/catalog/v2.0/merchants/${merchantId}/catalogs/${catalogId}`,
