@@ -6,6 +6,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { AuthSuccessToast } from "@/components/auth/AuthSucessToast";
 import { Suspense } from "react";
 import { Footer } from "@/components/ui/footer";
+import { Analytics } from '@vercel/analytics/next';
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -49,6 +50,7 @@ export default function RootLayout({
           </Suspense>
         </ThemeProvider>
         <Toaster />
+        <Analytics />
       </body>
     </html>
   );
