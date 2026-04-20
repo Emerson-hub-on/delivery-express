@@ -15,19 +15,22 @@ const supabase = createClient(
 
 interface IfoodItem {
   id: string
-  description: string
+  description?: string  // v1.0
+  name?: string         // v2.0
   details?: string
-  unitPrice: number
+  unitPrice?: number    // v1.0
   unitMinPrice?: number
   imagePath?: string
   logoUrl?: string
+  price?: { value: number; originalValue?: number } // v2.0
 }
 
 interface IfoodCategory {
   id: string
   name: string
   status: 'AVAILABLE' | 'UNAVAILABLE'
-  itemOffers: IfoodItem[]
+  itemOffers?: IfoodItem[] // v1.0
+  items?: IfoodItem[]      // v2.0
 }
 
 interface IfoodCatalog {
@@ -90,11 +93,10 @@ async function fetchCatalog(token: string, merchantId: string): Promise<IfoodCat
   if (catRes.ok) {
     const categories = await catRes.json()
     console.log('CATEGORIES SAMPLE:', JSON.stringify(categories).slice(0, 400))
-    // A resposta é array de categorias — encapsula no formato esperado
     return { categories: Array.isArray(categories) ? categories : categories.categories ?? [] }
   }
 
-  // 2b. Fallback: /sellableItems com groupId
+  // 2b. Fallback: /sellableItems com groupId (v1.0)
   console.log('Tentando sellableItems com groupId:', groupId)
   const sellRes = await fetch(
     `https://merchant-api.ifood.com.br/catalog/v1.0/merchants/${merchantId}/catalogs/${groupId}/sellableItems`,
@@ -107,8 +109,8 @@ async function fetchCatalog(token: string, merchantId: string): Promise<IfoodCat
   const items = await sellRes.json()
   console.log('SELLABLE SAMPLE:', JSON.stringify(items).slice(0, 400))
 
-  // Converte formato sellableItems → formato IfoodCatalog esperado pelo restante do código
-  const categoryMap = new Map<string, { id: string; name: string; status: 'AVAILABLE' | 'UNAVAILABLE'; itemOffers: any[] }>()
+  // Converte formato sellableItems → IfoodCatalog
+  const categoryMap = new Map<string, IfoodCategory>()
   for (const item of items) {
     const catId = item.categoryId
     if (!categoryMap.has(catId)) {
@@ -119,7 +121,7 @@ async function fetchCatalog(token: string, merchantId: string): Promise<IfoodCat
         itemOffers: [],
       })
     }
-    categoryMap.get(catId)!.itemOffers.push({
+    categoryMap.get(catId)!.itemOffers!.push({
       id: item.itemId,
       description: item.itemName,
       details: item.itemDescription,
@@ -135,10 +137,11 @@ async function fetchCatalog(token: string, merchantId: string): Promise<IfoodCat
 
 export async function POST(req: NextRequest) {
   console.log('ENV CHECK:', {
-  clientId: process.env.IFOOD_CLIENT_ID ? '✅ presente' : '❌ ausente',
-  clientSecret: process.env.IFOOD_CLIENT_SECRET ? '✅ presente' : '❌ ausente',
-  merchantId: process.env.IFOOD_MERCHANT_ID ? '✅ presente' : '❌ ausente',
-})
+    clientId:   process.env.IFOOD_CLIENT_ID     ? '✅ presente' : '❌ ausente',
+    clientSecret: process.env.IFOOD_CLIENT_SECRET ? '✅ presente' : '❌ ausente',
+    merchantId: process.env.IFOOD_MERCHANT_ID   ? '✅ presente' : '❌ ausente',
+  })
+
   try {
     // Auth: valida Bearer token do Supabase
     const authHeader = req.headers.get('Authorization') ?? ''
@@ -153,24 +156,20 @@ export async function POST(req: NextRequest) {
     }
 
     // Busca company_id do usuário logado
-// ✅ CORRETO (baseado no seu banco)
-const { data: company, error: companyError } = await supabase
-  .from('companies')
-  .select('id')
-  .eq('user_id', user.id)
-  .single()
+    const { data: company, error: companyError } = await supabase
+      .from('companies')
+      .select('id')
+      .eq('user_id', user.id)
+      .single()
 
-if (companyError || !company) {
-  return NextResponse.json(
-    { error: 'Empresa não encontrada para este usuário' },
-    { status: 400 }
-  )
-}
-
-const companyId = company.id
-    if (!companyId) {
-      return NextResponse.json({ error: 'company_id não encontrado para este usuário' }, { status: 400 })
+    if (companyError || !company) {
+      return NextResponse.json(
+        { error: 'Empresa não encontrada para este usuário' },
+        { status: 400 }
+      )
     }
+
+    const companyId = company.id
 
     const body = await req.json().catch(() => ({}))
     const merchantId: string = body.merchantId ?? process.env.IFOOD_MERCHANT_ID ?? ''
@@ -179,10 +178,10 @@ const companyId = company.id
     }
 
     // 1. Busca catálogo no iFood
-    const token = await getIfoodToken()
+    const token   = await getIfoodToken()
     const catalog = await fetchCatalog(token, merchantId)
 
-    // 2. Busca ifood_ids já existentes no banco (para diferenciar created vs updated)
+    // 2. Busca ifood_ids já existentes no banco
     const { data: existing } = await supabase
       .from('products')
       .select('ifood_id')
@@ -201,48 +200,55 @@ const companyId = company.id
       reason?: string
     }
 
-    const results: SyncResult[] = []
+    const results: SyncResult[]            = []
     const toUpsert: Record<string, unknown>[] = []
 
     for (const cat of catalog.categories) {
-      for (const item of cat.itemOffers) {
-        // Ignora categorias/itens indisponíveis
+      // Compatibilidade v1.0 (itemOffers) e v2.0 (items)
+      const offers = cat.itemOffers ?? cat.items ?? []
+
+      for (const item of offers) {
+        const name = item.description ?? item.name ?? ''
+
         if (cat.status === 'UNAVAILABLE') {
-          results.push({ ifood_id: item.id, name: item.description, action: 'skipped', reason: 'Categoria indisponível no iFood' })
+          results.push({ ifood_id: item.id, name, action: 'skipped', reason: 'Categoria indisponível no iFood' })
           continue
         }
 
-        if (!item.unitPrice || item.unitPrice <= 0) {
-          results.push({ ifood_id: item.id, name: item.description, action: 'skipped', reason: 'Preço inválido ou zero' })
+        // v2.0 retorna price.value, v1.0 retorna unitPrice direto
+        const rawPrice = item.price?.value ?? item.unitPrice ?? 0
+
+        if (!rawPrice || rawPrice <= 0) {
+          results.push({ ifood_id: item.id, name, action: 'skipped', reason: 'Preço inválido ou zero' })
           continue
         }
 
-        // Preço: divide por 100 se vier em centavos (> 500 é heurística, ajuste se necessário)
-        const price = item.unitPrice > 500 ? item.unitPrice / 100 : item.unitPrice
+        // Divide por 100 se vier em centavos (heurística: > 500)
+        const price = rawPrice > 500 ? rawPrice / 100 : rawPrice
 
         toUpsert.push({
-          ifood_id: item.id,
-          company_id: companyId,
-          name: item.description,
+          ifood_id:    item.id,
+          company_id:  companyId,
+          name,
           description: item.details ?? null,
-          image: item.imagePath ?? item.logoUrl ?? '',
+          image:       item.imagePath ?? item.logoUrl ?? '',
           price,
-          category: cat.name,
-          active: true,
+          category:    cat.name,
+          active:      true,
           // Defaults fiscais Simples Nacional
-          cfop: '5102',
-          unit_com: 'UN',
-          origem: 0,
-          icms_csosn: '400',
-          pis_cst: '07',
-          pis_aliq: 0,
-          cofins_cst: '07',
+          cfop:        '5102',
+          unit_com:    'UN',
+          origem:      0,
+          icms_csosn:  '400',
+          pis_cst:     '07',
+          pis_aliq:    0,
+          cofins_cst:  '07',
           cofins_aliq: 0,
         })
 
         results.push({
           ifood_id: item.id,
-          name: item.description,
+          name,
           action: existingIds.has(item.id) ? 'updated' : 'created',
         })
       }
@@ -262,7 +268,7 @@ const companyId = company.id
       created: results.filter((r) => r.action === 'created').length,
       updated: results.filter((r) => r.action === 'updated').length,
       skipped: results.filter((r) => r.action === 'skipped').length,
-      total: results.length,
+      total:   results.length,
     }
 
     return NextResponse.json({
