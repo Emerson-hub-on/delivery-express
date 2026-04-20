@@ -37,24 +37,27 @@ interface IfoodCatalog {
 // ── Auth iFood ────────────────────────────────────────────────────────────────
 
 async function getIfoodToken(): Promise<string> {
+  const params = [
+    `grantType=client_credentials`,
+    `clientId=${encodeURIComponent(process.env.IFOOD_CLIENT_ID ?? '')}`,
+    `clientSecret=${encodeURIComponent(process.env.IFOOD_CLIENT_SECRET ?? '')}`,
+  ].join('&')
+
   const res = await fetch(
     'https://merchant-api.ifood.com.br/authentication/v1.0/oauth/token',
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        grant_type: 'client_credentials',        // ← snake_case
-        client_id: process.env.IFOOD_CLIENT_ID!,     // ← snake_case
-        client_secret: process.env.IFOOD_CLIENT_SECRET!, // ← snake_case
-      }),
+      body: params,
     }
   )
+
   if (!res.ok) {
     const text = await res.text()
     throw new Error(`iFood auth: ${res.status} ${text}`)
   }
+
   const data = await res.json()
-  // Alguns ambientes retornam access_token, outros accessToken
   return (data.accessToken ?? data.access_token) as string
 }
 
@@ -97,6 +100,11 @@ if (!catalogId) {
 // ── Handler ───────────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
+  console.log('ENV CHECK:', {
+  clientId: process.env.IFOOD_CLIENT_ID ? '✅ presente' : '❌ ausente',
+  clientSecret: process.env.IFOOD_CLIENT_SECRET ? '✅ presente' : '❌ ausente',
+  merchantId: process.env.IFOOD_MERCHANT_ID ? '✅ presente' : '❌ ausente',
+})
   try {
     // Auth: valida Bearer token do Supabase
     const authHeader = req.headers.get('Authorization') ?? ''
