@@ -64,37 +64,38 @@ async function getIfoodToken(): Promise<string> {
 // ── Busca catálogo ────────────────────────────────────────────────────────────
 
 async function fetchCatalog(token: string, merchantId: string): Promise<IfoodCatalog> {
-  // 1. Lista catálogos do merchant
+  // 1. Lista catálogos
   const listRes = await fetch(
     `https://merchant-api.ifood.com.br/catalog/v2.0/merchants/${merchantId}/catalogs`,
     { headers: { Authorization: `Bearer ${token}` } }
   )
   if (!listRes.ok) throw new Error(`iFood catalogs list: ${listRes.status}`)
 
-const catalogs = await listRes.json()
+  const catalogs = await listRes.json()
+  const catalogId = catalogs[0]?.catalogId
+  if (!catalogId) throw new Error('Nenhum catálogo encontrado no iFood')
 
-console.log('CATALOG RESPONSE:', catalogs)
-
-if (!Array.isArray(catalogs) && !catalogs.catalogs) {
-  throw new Error(`Resposta inválida do iFood: ${JSON.stringify(catalogs)}`)
-}
-
-const catalogId =
-  catalogs[0]?.catalogId ||
-  catalogs.catalogs?.[0]?.id ||
-  catalogs.catalogs?.[0]?.catalogId
-
-if (!catalogId) {
-  throw new Error('Nenhum catálogo encontrado no iFood')
-}
-  // 2. Detalhe do catálogo
-  const detailRes = await fetch(
-    `https://merchant-api.ifood.com.br/catalog/v2.0/merchants/${merchantId}/catalogs/${catalogId}`,
+  // 2. Busca categorias do catálogo (endpoint correto)
+  const categoriesRes = await fetch(
+    `https://merchant-api.ifood.com.br/catalog/v2.0/merchants/${merchantId}/catalogs/${catalogId}/unsavedChanges`,
     { headers: { Authorization: `Bearer ${token}` } }
   )
-  if (!detailRes.ok) throw new Error(`iFood catalog detail: ${detailRes.status}`)
 
-  return detailRes.json()
+  if (!categoriesRes.ok) {
+    // Fallback: tenta endpoint sem unsavedChanges
+    const fallbackRes = await fetch(
+      `https://merchant-api.ifood.com.br/catalog/v2.0/merchants/${merchantId}/categories?catalogId=${catalogId}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    )
+    if (!fallbackRes.ok) throw new Error(`iFood catalog detail: ${fallbackRes.status}`)
+    
+    const categories = await fallbackRes.json()
+    return { categories }
+  }
+  console.log('CATALOG ID:', catalogId)
+  console.log('CATEGORIES STATUS:', categoriesRes.status, await categoriesRes.text())
+
+  return categoriesRes.json()
 }
 
 // ── Handler ───────────────────────────────────────────────────────────────────
