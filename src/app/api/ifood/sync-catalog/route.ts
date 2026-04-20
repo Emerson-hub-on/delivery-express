@@ -43,15 +43,19 @@ async function getIfoodToken(): Promise<string> {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
-        grantType: 'client_credentials',
-        clientId: process.env.IFOOD_CLIENT_ID!,
-        clientSecret: process.env.IFOOD_CLIENT_SECRET!,
+        grant_type: 'client_credentials',        // ← snake_case
+        client_id: process.env.IFOOD_CLIENT_ID!,     // ← snake_case
+        client_secret: process.env.IFOOD_CLIENT_SECRET!, // ← snake_case
       }),
     }
   )
-  if (!res.ok) throw new Error(`iFood auth: ${res.status} ${await res.text()}`)
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`iFood auth: ${res.status} ${text}`)
+  }
   const data = await res.json()
-  return data.accessToken as string
+  // Alguns ambientes retornam access_token, outros accessToken
+  return (data.accessToken ?? data.access_token) as string
 }
 
 // ── Busca catálogo ────────────────────────────────────────────────────────────
