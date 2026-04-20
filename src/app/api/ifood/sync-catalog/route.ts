@@ -64,6 +64,7 @@ async function getIfoodToken(): Promise<string> {
 // ── Busca catálogo ────────────────────────────────────────────────────────────
 
 async function fetchCatalog(token: string, merchantId: string): Promise<IfoodCatalog> {
+  // 1. Lista catálogos
   const listRes = await fetch(
     `https://merchant-api.ifood.com.br/catalog/v2.0/merchants/${merchantId}/catalogs`,
     { headers: { Authorization: `Bearer ${token}` } }
@@ -71,29 +72,63 @@ async function fetchCatalog(token: string, merchantId: string): Promise<IfoodCat
   if (!listRes.ok) throw new Error(`iFood catalogs list: ${listRes.status}`)
 
   const catalogs = await listRes.json()
-  const catalogId = catalogs[0]?.catalogId
-  if (!catalogId) throw new Error('Nenhum catálogo encontrado')
+  console.log('CATALOGS:', JSON.stringify(catalogs))
 
-  console.log('CATALOG ID:', catalogId)
+  const catalog = catalogs[0]
+  if (!catalog) throw new Error('Nenhum catálogo encontrado')
 
-  // Testa os 3 endpoints possíveis e loga cada resultado
-  const endpoints = [
-    `https://merchant-api.ifood.com.br/catalog/v2.0/merchants/${merchantId}/catalogs/${catalogId}/unsavedChanges`,
-    `https://merchant-api.ifood.com.br/catalog/v2.0/merchants/${merchantId}/catalogs/${catalogId}`,
-    `https://merchant-api.ifood.com.br/catalog/v2.0/merchants/${merchantId}/categories?catalogId=${catalogId}`,
-  ]
+  const groupId   = catalog.groupId    // ← para sellableItems
+  const catalogId = catalog.catalogId  // ← para categories
 
-  for (const url of endpoints) {
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
-    const body = await res.text()
-    console.log(`ENDPOINT ${res.status}:`, url.split('/').slice(-2).join('/'), '→', body.slice(0, 300))
-    
-    if (res.ok) {
-      return JSON.parse(body) as IfoodCatalog
-    }
+  // 2a. Tenta /categories?include_items=true (v2.0)
+  const catRes = await fetch(
+    `https://merchant-api.ifood.com.br/catalog/v2.0/merchants/${merchantId}/catalogs/${catalogId}/categories?include_items=true`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  )
+  console.log('CATEGORIES STATUS:', catRes.status)
+
+  if (catRes.ok) {
+    const categories = await catRes.json()
+    console.log('CATEGORIES SAMPLE:', JSON.stringify(categories).slice(0, 400))
+    // A resposta é array de categorias — encapsula no formato esperado
+    return { categories: Array.isArray(categories) ? categories : categories.categories ?? [] }
   }
 
-  throw new Error('Nenhum endpoint de catálogo funcionou — veja os logs acima')
+  // 2b. Fallback: /sellableItems com groupId
+  console.log('Tentando sellableItems com groupId:', groupId)
+  const sellRes = await fetch(
+    `https://merchant-api.ifood.com.br/catalog/v1.0/merchants/${merchantId}/catalogs/${groupId}/sellableItems`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  )
+  console.log('SELLABLE STATUS:', sellRes.status)
+
+  if (!sellRes.ok) throw new Error(`iFood sellableItems: ${sellRes.status}`)
+
+  const items = await sellRes.json()
+  console.log('SELLABLE SAMPLE:', JSON.stringify(items).slice(0, 400))
+
+  // Converte formato sellableItems → formato IfoodCatalog esperado pelo restante do código
+  const categoryMap = new Map<string, { id: string; name: string; status: 'AVAILABLE' | 'UNAVAILABLE'; itemOffers: any[] }>()
+  for (const item of items) {
+    const catId = item.categoryId
+    if (!categoryMap.has(catId)) {
+      categoryMap.set(catId, {
+        id: catId,
+        name: item.categoryName ?? 'Sem categoria',
+        status: 'AVAILABLE',
+        itemOffers: [],
+      })
+    }
+    categoryMap.get(catId)!.itemOffers.push({
+      id: item.itemId,
+      description: item.itemName,
+      details: item.itemDescription,
+      unitPrice: item.itemPrice?.value ?? 0,
+      imagePath: item.logosUrls?.[0] ?? '',
+    })
+  }
+
+  return { categories: Array.from(categoryMap.values()) }
 }
 
 // ── Handler ───────────────────────────────────────────────────────────────────
