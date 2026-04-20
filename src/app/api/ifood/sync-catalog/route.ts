@@ -1,7 +1,8 @@
 // app/api/ifood/sync-catalog/route.ts
 //
-// Versão detalhada do import: retorna created / updated / skipped por item.
-// Esperado pelo componente IfoodSync.
+// Versão corrigida: busca itens por categoria individualmente (a rota
+// /categories?include_items=true retorna items:[] no iFood).
+// Também cadastra categorias automaticamente no Supabase se não existirem.
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
@@ -15,26 +16,28 @@ const supabase = createClient(
 
 interface IfoodItem {
   id: string
-  description?: string  // v1.0
-  name?: string         // v2.0
+  description?: string   // v1.0
+  name?: string          // v2.0
   details?: string
-  unitPrice?: number    // v1.0
+  unitPrice?: number     // v1.0
   unitMinPrice?: number
   imagePath?: string
   logoUrl?: string
-  price?: { value: number; originalValue?: number } // v2.0
+  externalCode?: string
+  serving?: string
+  price?: { value: number; originalValue?: number }  // v2.0
+  productImage?: { files?: { fileName?: string }[] } // v2.0
+  status?: string
+  sku?: string
 }
 
 interface IfoodCategory {
   id: string
   name: string
   status: 'AVAILABLE' | 'UNAVAILABLE'
-  itemOffers?: IfoodItem[] // v1.0
-  items?: IfoodItem[]      // v2.0
-}
-
-interface IfoodCatalog {
-  categories: IfoodCategory[]
+  sequence?: number
+  itemOffers?: IfoodItem[]  // v1.0 sellableItems
+  items?: IfoodItem[]       // v2.0 categories (pode vir vazio!)
 }
 
 // ── Auth iFood ────────────────────────────────────────────────────────────────
@@ -64,10 +67,35 @@ async function getIfoodToken(): Promise<string> {
   return (data.accessToken ?? data.access_token) as string
 }
 
-// ── Busca catálogo ────────────────────────────────────────────────────────────
+// ── Busca itens de uma categoria ──────────────────────────────────────────────
 
-async function fetchCatalog(token: string, merchantId: string): Promise<IfoodCatalog> {
-  // 1. Lista catálogos
+async function fetchItemsByCategory(
+  token: string,
+  merchantId: string,
+  catalogId: string,
+  categoryId: string
+): Promise<IfoodItem[]> {
+  const url = `https://merchant-api.ifood.com.br/catalog/v2.0/merchants/${merchantId}/catalogs/${catalogId}/categories/${categoryId}/items`
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+
+  console.log(`  CATEGORY ${categoryId} items status: ${res.status}`)
+  if (!res.ok) {
+    console.warn(`  Falha ao buscar itens da categoria ${categoryId}: ${res.status}`)
+    return []
+  }
+
+  const data = await res.json()
+  // A resposta pode ser um array direto ou { items: [...] }
+  return Array.isArray(data) ? data : (data.items ?? data.itemOffers ?? [])
+}
+
+// ── Busca catálogo completo ───────────────────────────────────────────────────
+
+async function fetchCatalog(
+  token: string,
+  merchantId: string
+): Promise<{ categories: IfoodCategory[]; catalogId: string }> {
+  // 1. Lista catálogos disponíveis
   const listRes = await fetch(
     `https://merchant-api.ifood.com.br/catalog/v2.0/merchants/${merchantId}/catalogs`,
     { headers: { Authorization: `Bearer ${token}` } }
@@ -80,23 +108,34 @@ async function fetchCatalog(token: string, merchantId: string): Promise<IfoodCat
   const catalog = catalogs[0]
   if (!catalog) throw new Error('Nenhum catálogo encontrado')
 
-  const groupId   = catalog.groupId    // ← para sellableItems
-  const catalogId = catalog.catalogId  // ← para categories
+  const catalogId = catalog.catalogId
+  const groupId   = catalog.groupId
 
-  // 2a. Tenta /categories?include_items=true (v2.0)
+  // 2. Busca categorias (sem items — iFood retorna items:[] nesta rota)
   const catRes = await fetch(
-    `https://merchant-api.ifood.com.br/catalog/v2.0/merchants/${merchantId}/catalogs/${catalogId}/categories?include_items=true`,
+    `https://merchant-api.ifood.com.br/catalog/v2.0/merchants/${merchantId}/catalogs/${catalogId}/categories`,
     { headers: { Authorization: `Bearer ${token}` } }
   )
   console.log('CATEGORIES STATUS:', catRes.status)
 
   if (catRes.ok) {
-    const categories = await catRes.json()
-    console.log('CATEGORIES SAMPLE:', JSON.stringify(categories).slice(0, 400))
-    return { categories: Array.isArray(categories) ? categories : categories.categories ?? [] }
+    const categories: IfoodCategory[] = await catRes.json().then(d =>
+      Array.isArray(d) ? d : d.categories ?? []
+    )
+    console.log(`CATEGORIES COUNT: ${categories.length}`)
+
+    // 3. Para cada categoria DISPONÍVEL, busca os itens individualmente
+    for (const cat of categories) {
+      if (cat.status !== 'AVAILABLE') continue
+      const items = await fetchItemsByCategory(token, merchantId, catalogId, cat.id)
+      cat.items = items
+      console.log(`  ${cat.name}: ${items.length} item(s)`)
+    }
+
+    return { categories, catalogId }
   }
 
-  // 2b. Fallback: /sellableItems com groupId (v1.0)
+  // Fallback: sellableItems v1.0
   console.log('Tentando sellableItems com groupId:', groupId)
   const sellRes = await fetch(
     `https://merchant-api.ifood.com.br/catalog/v1.0/merchants/${merchantId}/catalogs/${groupId}/sellableItems`,
@@ -106,12 +145,11 @@ async function fetchCatalog(token: string, merchantId: string): Promise<IfoodCat
 
   if (!sellRes.ok) throw new Error(`iFood sellableItems: ${sellRes.status}`)
 
-  const items = await sellRes.json()
-  console.log('SELLABLE SAMPLE:', JSON.stringify(items).slice(0, 400))
+  const sellItems = await sellRes.json()
+  console.log('SELLABLE SAMPLE:', JSON.stringify(sellItems).slice(0, 400))
 
-  // Converte formato sellableItems → IfoodCatalog
   const categoryMap = new Map<string, IfoodCategory>()
-  for (const item of items) {
+  for (const item of sellItems) {
     const catId = item.categoryId
     if (!categoryMap.has(catId)) {
       categoryMap.set(catId, {
@@ -130,21 +168,46 @@ async function fetchCatalog(token: string, merchantId: string): Promise<IfoodCat
     })
   }
 
-  return { categories: Array.from(categoryMap.values()) }
+  return { categories: Array.from(categoryMap.values()), catalogId }
+}
+
+// ── Garante que categoria existe no Supabase ──────────────────────────────────
+
+async function upsertCategory(
+  companyId: string,
+  name: string,
+  sortOrder: number
+): Promise<void> {
+  const { error } = await supabase
+    .from('categories')
+    .upsert(
+      {
+        name,
+        label: name,       // label = name por padrão
+        company_id: companyId,
+        active: true,
+        sort_order: sortOrder,
+      },
+      { onConflict: 'name', ignoreDuplicates: true }  // não sobrescreve se já existe
+    )
+
+  if (error) {
+    console.warn(`Aviso ao upsert categoria "${name}":`, error.message)
+  }
 }
 
 // ── Handler ───────────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
   console.log('ENV CHECK:', {
-    clientId:   process.env.IFOOD_CLIENT_ID     ? '✅ presente' : '❌ ausente',
+    clientId:     process.env.IFOOD_CLIENT_ID     ? '✅ presente' : '❌ ausente',
     clientSecret: process.env.IFOOD_CLIENT_SECRET ? '✅ presente' : '❌ ausente',
-    merchantId: process.env.IFOOD_MERCHANT_ID   ? '✅ presente' : '❌ ausente',
+    merchantId:   process.env.IFOOD_MERCHANT_ID   ? '✅ presente' : '❌ ausente',
   })
 
   try {
     // Auth: valida Bearer token do Supabase
-    const authHeader = req.headers.get('Authorization') ?? ''
+    const authHeader  = req.headers.get('Authorization') ?? ''
     const accessToken = authHeader.replace('Bearer ', '').trim()
     if (!accessToken) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
@@ -177,9 +240,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'merchantId obrigatório' }, { status: 400 })
     }
 
-    // 1. Busca catálogo no iFood
-    const token   = await getIfoodToken()
-    const catalog = await fetchCatalog(token, merchantId)
+    // 1. Busca catálogo completo (com itens por categoria)
+    const token = await getIfoodToken()
+    const { categories } = await fetchCatalog(token, merchantId)
 
     // 2. Busca ifood_ids já existentes no banco
     const { data: existing } = await supabase
@@ -190,7 +253,7 @@ export async function POST(req: NextRequest) {
 
     const existingIds = new Set((existing ?? []).map((r) => r.ifood_id as string))
 
-    // 3. Monta lista e classifica cada item
+    // 3. Processa categorias e itens
     type SyncAction = 'created' | 'updated' | 'skipped'
 
     interface SyncResult {
@@ -200,18 +263,30 @@ export async function POST(req: NextRequest) {
       reason?: string
     }
 
-    const results: SyncResult[]            = []
+    const results: SyncResult[]             = []
     const toUpsert: Record<string, unknown>[] = []
 
-    for (const cat of catalog.categories) {
+    for (let i = 0; i < categories.length; i++) {
+      const cat = categories[i]
+
+      // Cadastra categoria no Supabase se não existir
+      if (cat.status === 'AVAILABLE') {
+        await upsertCategory(companyId, cat.name, cat.sequence ?? i)
+      }
+
       // Compatibilidade v1.0 (itemOffers) e v2.0 (items)
-      const offers = cat.itemOffers ?? cat.items ?? []
+      const offers = cat.items ?? cat.itemOffers ?? []
 
       for (const item of offers) {
-        const name = item.description ?? item.name ?? ''
+        const name = item.name ?? item.description ?? ''
 
         if (cat.status === 'UNAVAILABLE') {
           results.push({ ifood_id: item.id, name, action: 'skipped', reason: 'Categoria indisponível no iFood' })
+          continue
+        }
+
+        if (!name) {
+          results.push({ ifood_id: item.id, name: item.id, action: 'skipped', reason: 'Item sem nome' })
           continue
         }
 
@@ -226,15 +301,22 @@ export async function POST(req: NextRequest) {
         // Divide por 100 se vier em centavos (heurística: > 500)
         const price = rawPrice > 500 ? rawPrice / 100 : rawPrice
 
+        // Imagem: v2.0 pode vir em productImage.files ou imagePath/logoUrl
+        const image =
+          item.productImage?.files?.[0]?.fileName ??
+          item.imagePath ??
+          item.logoUrl ??
+          ''
+
         toUpsert.push({
           ifood_id:    item.id,
           company_id:  companyId,
           name,
           description: item.details ?? null,
-          image:       item.imagePath ?? item.logoUrl ?? '',
+          image,
           price,
           category:    cat.name,
-          active:      true,
+          active:      item.status !== 'UNAVAILABLE',
           // Defaults fiscais Simples Nacional
           cfop:        '5102',
           unit_com:    'UN',
