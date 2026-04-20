@@ -64,7 +64,6 @@ async function getIfoodToken(): Promise<string> {
 // ── Busca catálogo ────────────────────────────────────────────────────────────
 
 async function fetchCatalog(token: string, merchantId: string): Promise<IfoodCatalog> {
-  // 1. Lista catálogos
   const listRes = await fetch(
     `https://merchant-api.ifood.com.br/catalog/v2.0/merchants/${merchantId}/catalogs`,
     { headers: { Authorization: `Bearer ${token}` } }
@@ -73,29 +72,28 @@ async function fetchCatalog(token: string, merchantId: string): Promise<IfoodCat
 
   const catalogs = await listRes.json()
   const catalogId = catalogs[0]?.catalogId
-  if (!catalogId) throw new Error('Nenhum catálogo encontrado no iFood')
+  if (!catalogId) throw new Error('Nenhum catálogo encontrado')
 
-  // 2. Busca categorias do catálogo (endpoint correto)
-  const categoriesRes = await fetch(
-    `https://merchant-api.ifood.com.br/catalog/v2.0/merchants/${merchantId}/catalogs/${catalogId}/unsavedChanges`,
-    { headers: { Authorization: `Bearer ${token}` } }
-  )
-
-  if (!categoriesRes.ok) {
-    // Fallback: tenta endpoint sem unsavedChanges
-    const fallbackRes = await fetch(
-      `https://merchant-api.ifood.com.br/catalog/v2.0/merchants/${merchantId}/categories?catalogId=${catalogId}`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    )
-    if (!fallbackRes.ok) throw new Error(`iFood catalog detail: ${fallbackRes.status}`)
-    
-    const categories = await fallbackRes.json()
-    return { categories }
-  }
   console.log('CATALOG ID:', catalogId)
-  console.log('CATEGORIES STATUS:', categoriesRes.status, await categoriesRes.text())
 
-  return categoriesRes.json()
+  // Testa os 3 endpoints possíveis e loga cada resultado
+  const endpoints = [
+    `https://merchant-api.ifood.com.br/catalog/v2.0/merchants/${merchantId}/catalogs/${catalogId}/unsavedChanges`,
+    `https://merchant-api.ifood.com.br/catalog/v2.0/merchants/${merchantId}/catalogs/${catalogId}`,
+    `https://merchant-api.ifood.com.br/catalog/v2.0/merchants/${merchantId}/categories?catalogId=${catalogId}`,
+  ]
+
+  for (const url of endpoints) {
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+    const body = await res.text()
+    console.log(`ENDPOINT ${res.status}:`, url.split('/').slice(-2).join('/'), '→', body.slice(0, 300))
+    
+    if (res.ok) {
+      return JSON.parse(body) as IfoodCatalog
+    }
+  }
+
+  throw new Error('Nenhum endpoint de catálogo funcionou — veja os logs acima')
 }
 
 // ── Handler ───────────────────────────────────────────────────────────────────
