@@ -1,17 +1,15 @@
 'use client'
-import { useRef, useState } from 'react'
-import ReCAPTCHA from 'react-google-recaptcha'
+import { useState } from 'react'
 import { useCheckoutStore } from '@/stores/checkout-store'
 import { Button } from '../ui/button'
 import { CheckoutSteps } from '@/types/checkout-steps'
 import { Input } from '@/components/ui/input'
 
-// Apenas os 4 métodos válidos no banco
 const PAYMENT_OPTIONS = [
-  { value: 'pix',     label: 'Pix',              icon: '💠' },
-  { value: 'credito', label: 'Cartão de Crédito', icon: '💳' },
-  { value: 'debito',  label: 'Cartão de Débito',  icon: '💳' },
-  { value: 'dinheiro',label: 'Dinheiro',           icon: '💵' },
+  { value: 'pix',      label: 'Pix',              icon: '💠' },
+  { value: 'credito',  label: 'Cartão de Crédito', icon: '💳' },
+  { value: 'debito',   label: 'Cartão de Débito',  icon: '💳' },
+  { value: 'dinheiro', label: 'Dinheiro',           icon: '💵' },
 ]
 
 function isValidCpf(cpf: string) {
@@ -44,63 +42,32 @@ type Props = {
 
 export const StepPayment = ({ setStep }: Props) => {
   const { paymentMethod, payWhen, cpf, setPaymentMethod, setCpf } = useCheckoutStore(s => s)
-  const [cpfInput, setCpfInput]         = useState(cpf ? maskCpf(cpf) : '')
-  const [cpfError, setCpfError]         = useState('')
-  const [captchaToken, setCaptchaToken] = useState<string | null>(null)
-  const [captchaError, setCaptchaError] = useState('')
-  const recaptchaRef = useRef<ReCAPTCHA>(null)
+  const [cpfInput, setCpfInput] = useState(cpf ? maskCpf(cpf) : '')
+  const [cpfError, setCpfError] = useState('')
 
-  // CPF só é obrigatório para Pix pagando agora (geração de QR via Mercado Pago)
   const needsCpf = (paymentMethod === 'pix' || paymentMethod === 'credito' || paymentMethod === 'debito') && payWhen === 'now'
-
-  // Cartão de crédito/débito pagando agora vai para tela de cartão
   const isCardNow = (paymentMethod === 'credito' || paymentMethod === 'debito') && payWhen === 'now'
 
-const handleContinue = async () => {
-  if (needsCpf) {
-    if (!isValidCpf(cpfInput)) {
-      setCpfError('CPF inválido')
-      return
+  const handleContinue = () => {
+    if (needsCpf) {
+      if (!isValidCpf(cpfInput)) {
+        setCpfError('CPF inválido')
+        return
+      }
+      setCpf(cpfInput.replace(/\D/g, ''))
     }
-    setCpf(cpfInput.replace(/\D/g, ''))
-  }
 
-  // Pagar na entrega → não precisa de captcha, avança direto
-  if (payWhen !== 'now') {
-    // Dinheiro na entrega → pede troco antes
-    if (paymentMethod === 'dinheiro') {
-      setStep('change')
-    } else {
-      setStep('finish')
-    }
-    return
-  }
-  if (!captchaToken) {
-    setCaptchaError('Por favor, confirme que você não é um robô.')
-    return
-  }
-
-  try {
-    const res = await fetch('/api/recaptcha/verify', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token: captchaToken }),
-    })
-    const data = await res.json()
-
-    if (!data.success) {
-      setCaptchaError('Verificação falhou. Tente novamente.')
-      recaptchaRef.current?.reset()
-      setCaptchaToken(null)
+    if (payWhen !== 'now') {
+      if (paymentMethod === 'dinheiro') {
+        setStep('change')
+      } else {
+        setStep('finish')
+      }
       return
     }
 
     setStep(isCardNow ? 'card' : 'finish')
-  } catch (err) {
-    console.error('[reCAPTCHA] erro:', err)
-    setCaptchaError('Erro ao verificar. Tente novamente.')
   }
-}
 
   const canContinue = !!paymentMethod && (!needsCpf || cpfInput.length === 14)
 
@@ -109,9 +76,10 @@ const handleContinue = async () => {
       <p className="text-sm text-gray-500 text-center">
         {payWhen === 'now' ? 'Como você vai pagar?' : 'Qual a forma de pagamento?'}
       </p>
-
-      <div className="grid grid-cols-2 gap-3">
-        {PAYMENT_OPTIONS.map(option => (
+    <div className="grid grid-cols-2 gap-3">
+      {PAYMENT_OPTIONS
+        .filter(option => !(payWhen === 'now' && option.value === 'dinheiro'))
+        .map(option => (
           <button
             key={option.value}
             onClick={() => { setPaymentMethod(option.value); setCpfError('') }}
@@ -125,7 +93,7 @@ const handleContinue = async () => {
             <span className="text-xs font-medium text-gray-700 text-center">{option.label}</span>
           </button>
         ))}
-      </div>
+    </div>
 
       {needsCpf && (
         <div className="flex flex-col gap-1">
@@ -136,19 +104,6 @@ const handleContinue = async () => {
             onChange={e => { setCpfInput(maskCpf(e.target.value)); setCpfError('') }}
           />
           {cpfError && <p className="text-xs text-red-500">{cpfError}</p>}
-        </div>
-      )}
-
-      {paymentMethod && payWhen === 'now' && (
-        <div className="flex flex-col items-center gap-1">
-          <ReCAPTCHA
-            ref={recaptchaRef}
-            sitekey={process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY!}
-            onChange={(token) => { setCaptchaToken(token); setCaptchaError('') }}
-            onExpired={() => { setCaptchaToken(null); setCaptchaError('Verificação expirada. Refaça.') }}
-            hl="pt-BR"
-          />
-          {captchaError && <p className="text-xs text-red-500">{captchaError}</p>}
         </div>
       )}
 

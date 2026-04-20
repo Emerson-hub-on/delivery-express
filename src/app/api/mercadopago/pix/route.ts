@@ -13,6 +13,7 @@ export async function POST(req: NextRequest) {
       transaction_amount: total,
       description: `Pedido ${orderCode ?? orderId}`,
       payment_method_id: 'pix',
+      external_reference: String(orderCode ?? orderId),
       payer: {
         email: customerEmail || 'cliente@loja.com',
         first_name: customerName,

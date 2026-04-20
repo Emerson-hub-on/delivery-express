@@ -17,6 +17,7 @@ export async function POST(req: NextRequest) {
       description: `Pedido ${orderCode}`,
       payment_method_id: paymentMethodId,
       installments: installments ?? 1,
+      external_reference: String(orderCode ?? orderId),
       ...(issuerId ? { issuer_id: issuerId } : {}),
       token,
       payer: {

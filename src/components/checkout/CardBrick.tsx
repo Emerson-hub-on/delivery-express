@@ -1,12 +1,10 @@
 'use client'
+import { useEffect, useRef, useState } from 'react'
 import { initMercadoPago, CardPayment } from '@mercadopago/sdk-react'
-
-initMercadoPago(process.env.NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY!, {
-  locale: 'pt-BR',
-})
 
 interface CardBrickProps {
   total: number
+  publicKey: string
   onSubmit: (formData: {
     token: string
     paymentMethodId: string
@@ -16,14 +14,26 @@ interface CardBrickProps {
   onError: (error: string) => void
 }
 
-export function CardBrick({ total, onSubmit, onError }: CardBrickProps) {
+export function CardBrick({ total, publicKey, onSubmit, onError }: CardBrickProps) {
+  const initializedRef = useRef(false)
+  const [initialized, setInitialized] = useState(false)
+
+  useEffect(() => {
+    if (!publicKey || initializedRef.current) return
+    initMercadoPago(publicKey, { locale: 'pt-BR' })
+    initializedRef.current = true
+    setInitialized(true)
+  }, [publicKey])
+
+  if (!initialized) return null
+
   return (
     <CardPayment
       initialization={{ amount: total }}
       customization={{
         paymentMethods: {
           minInstallments: 1,
-          maxInstallments: 12,  // ← até 12x
+          maxInstallments: 12,
         },
         visual: { style: { theme: 'default' } },
       }}

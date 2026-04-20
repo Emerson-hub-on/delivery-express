@@ -130,6 +130,7 @@ export function IfoodSync() {
         </button>
       </div>
 
+
       {/* Erro */}
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3">
