@@ -1,8 +1,7 @@
 // app/api/ifood/sync-catalog/route.ts
 //
-// Versão corrigida: busca itens por categoria individualmente (a rota
-// /categories?include_items=true retorna items:[] no iFood).
-// Também cadastra categorias automaticamente no Supabase se não existirem.
+// Usa sellableItems v1.0 (com groupId) como estratégia principal,
+// pois a API v2.0 retorna items:[] nas categorias e 404 nos items por categoria.
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
@@ -12,23 +11,18 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// ── Tipos iFood ───────────────────────────────────────────────────────────────
+// ── Tipos ─────────────────────────────────────────────────────────────────────
 
 interface IfoodItem {
   id: string
-  description?: string   // v1.0
-  name?: string          // v2.0
+  name?: string
+  description?: string
   details?: string
-  unitPrice?: number     // v1.0
-  unitMinPrice?: number
+  unitPrice?: number
   imagePath?: string
   logoUrl?: string
-  externalCode?: string
-  serving?: string
-  price?: { value: number; originalValue?: number }  // v2.0
-  productImage?: { files?: { fileName?: string }[] } // v2.0
+  price?: { value: number }
   status?: string
-  sku?: string
 }
 
 interface IfoodCategory {
@@ -36,8 +30,7 @@ interface IfoodCategory {
   name: string
   status: 'AVAILABLE' | 'UNAVAILABLE'
   sequence?: number
-  itemOffers?: IfoodItem[]  // v1.0 sellableItems
-  items?: IfoodItem[]       // v2.0 categories (pode vir vazio!)
+  items: IfoodItem[]
 }
 
 // ── Auth iFood ────────────────────────────────────────────────────────────────
@@ -57,143 +50,136 @@ async function getIfoodToken(): Promise<string> {
       body: params,
     }
   )
-
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error(`iFood auth: ${res.status} ${text}`)
-  }
+  if (!res.ok) throw new Error(`iFood auth: ${res.status} ${await res.text()}`)
 
   const data = await res.json()
   return (data.accessToken ?? data.access_token) as string
 }
 
-// ── Busca itens de uma categoria ──────────────────────────────────────────────
+// ── Estratégia 1: sellableItems v1.0 (groupId) ───────────────────────────────
 
-async function fetchItemsByCategory(
+async function fetchViaSellableItems(
   token: string,
   merchantId: string,
-  catalogId: string,
-  categoryId: string
-): Promise<IfoodItem[]> {
-  const url = `https://merchant-api.ifood.com.br/catalog/v2.0/merchants/${merchantId}/catalogs/${catalogId}/categories/${categoryId}/items`
+  groupId: string
+): Promise<IfoodCategory[] | null> {
+  const url = `https://merchant-api.ifood.com.br/catalog/v1.0/merchants/${merchantId}/catalogs/${groupId}/sellableItems`
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+  console.log('SELLABLE STATUS:', res.status)
 
-  console.log(`  CATEGORY ${categoryId} items status: ${res.status}`)
-  if (!res.ok) {
-    console.warn(`  Falha ao buscar itens da categoria ${categoryId}: ${res.status}`)
-    return []
-  }
+  if (!res.ok) return null
 
-  const data = await res.json()
-  // A resposta pode ser um array direto ou { items: [...] }
-  return Array.isArray(data) ? data : (data.items ?? data.itemOffers ?? [])
-}
+  const raw = await res.json()
+  console.log('SELLABLE COUNT:', Array.isArray(raw) ? raw.length : 'não é array')
+  console.log('SELLABLE SAMPLE:', JSON.stringify(raw).slice(0, 600))
 
-// ── Busca catálogo completo ───────────────────────────────────────────────────
+  if (!Array.isArray(raw) || raw.length === 0) return null
 
-async function fetchCatalog(
-  token: string,
-  merchantId: string
-): Promise<{ categories: IfoodCategory[]; catalogId: string }> {
-  // 1. Lista catálogos disponíveis
-  const listRes = await fetch(
-    `https://merchant-api.ifood.com.br/catalog/v2.0/merchants/${merchantId}/catalogs`,
-    { headers: { Authorization: `Bearer ${token}` } }
-  )
-  if (!listRes.ok) throw new Error(`iFood catalogs list: ${listRes.status}`)
+  // Agrupa por categoria
+  const map = new Map<string, IfoodCategory>()
+  for (const item of raw) {
+    const catId   = item.categoryId   ?? 'sem-categoria'
+    const catName = item.categoryName ?? 'Sem categoria'
 
-  const catalogs = await listRes.json()
-  console.log('CATALOGS:', JSON.stringify(catalogs))
-
-  const catalog = catalogs[0]
-  if (!catalog) throw new Error('Nenhum catálogo encontrado')
-
-  const catalogId = catalog.catalogId
-  const groupId   = catalog.groupId
-
-  // 2. Busca categorias (sem items — iFood retorna items:[] nesta rota)
-  const catRes = await fetch(
-    `https://merchant-api.ifood.com.br/catalog/v2.0/merchants/${merchantId}/catalogs/${catalogId}/categories`,
-    { headers: { Authorization: `Bearer ${token}` } }
-  )
-  console.log('CATEGORIES STATUS:', catRes.status)
-
-  if (catRes.ok) {
-    const categories: IfoodCategory[] = await catRes.json().then(d =>
-      Array.isArray(d) ? d : d.categories ?? []
-    )
-    console.log(`CATEGORIES COUNT: ${categories.length}`)
-
-    // 3. Para cada categoria DISPONÍVEL, busca os itens individualmente
-    for (const cat of categories) {
-      if (cat.status !== 'AVAILABLE') continue
-      const items = await fetchItemsByCategory(token, merchantId, catalogId, cat.id)
-      cat.items = items
-      console.log(`  ${cat.name}: ${items.length} item(s)`)
+    if (!map.has(catId)) {
+      map.set(catId, { id: catId, name: catName, status: 'AVAILABLE', items: [] })
     }
 
-    return { categories, catalogId }
-  }
-
-  // Fallback: sellableItems v1.0
-  console.log('Tentando sellableItems com groupId:', groupId)
-  const sellRes = await fetch(
-    `https://merchant-api.ifood.com.br/catalog/v1.0/merchants/${merchantId}/catalogs/${groupId}/sellableItems`,
-    { headers: { Authorization: `Bearer ${token}` } }
-  )
-  console.log('SELLABLE STATUS:', sellRes.status)
-
-  if (!sellRes.ok) throw new Error(`iFood sellableItems: ${sellRes.status}`)
-
-  const sellItems = await sellRes.json()
-  console.log('SELLABLE SAMPLE:', JSON.stringify(sellItems).slice(0, 400))
-
-  const categoryMap = new Map<string, IfoodCategory>()
-  for (const item of sellItems) {
-    const catId = item.categoryId
-    if (!categoryMap.has(catId)) {
-      categoryMap.set(catId, {
-        id: catId,
-        name: item.categoryName ?? 'Sem categoria',
-        status: 'AVAILABLE',
-        itemOffers: [],
-      })
-    }
-    categoryMap.get(catId)!.itemOffers!.push({
-      id: item.itemId,
-      description: item.itemName,
-      details: item.itemDescription,
-      unitPrice: item.itemPrice?.value ?? 0,
-      imagePath: item.logosUrls?.[0] ?? '',
+    map.get(catId)!.items.push({
+      id:          item.itemId ?? item.id,
+      name:        item.itemName ?? item.name ?? item.description ?? '',
+      description: item.itemName ?? item.name ?? '',
+      details:     item.itemDescription ?? item.details ?? null,
+      unitPrice:   item.itemPrice?.value ?? item.unitPrice ?? item.price?.value ?? 0,
+      imagePath:   item.logosUrls?.[0] ?? item.imagePath ?? item.logoUrl ?? '',
+      status:      item.status ?? 'AVAILABLE',
     })
   }
 
-  return { categories: Array.from(categoryMap.values()), catalogId }
+  return Array.from(map.values())
 }
 
-// ── Garante que categoria existe no Supabase ──────────────────────────────────
+// ── Estratégia 2: catalog v2.0 items direto ───────────────────────────────────
 
-async function upsertCategory(
-  companyId: string,
-  name: string,
-  sortOrder: number
-): Promise<void> {
+async function fetchViaV2Full(
+  token: string,
+  merchantId: string,
+  catalogId: string
+): Promise<IfoodCategory[] | null> {
+  const url = `https://merchant-api.ifood.com.br/catalog/v2.0/merchants/${merchantId}/catalogs/${catalogId}/items`
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+  console.log('V2 ITEMS STATUS:', res.status)
+
+  if (!res.ok) return null
+
+  const raw = await res.json()
+  console.log('V2 ITEMS SAMPLE:', JSON.stringify(raw).slice(0, 600))
+
+  const items: any[] = Array.isArray(raw) ? raw : raw.items ?? []
+  if (items.length === 0) return null
+
+  const map = new Map<string, IfoodCategory>()
+  for (const item of items) {
+    const catId   = item.categoryId   ?? 'sem-categoria'
+    const catName = item.categoryName ?? 'Sem categoria'
+    if (!map.has(catId)) {
+      map.set(catId, { id: catId, name: catName, status: 'AVAILABLE', items: [] })
+    }
+    map.get(catId)!.items.push({
+      id:        item.id,
+      name:      item.name ?? item.description ?? '',
+      details:   item.details ?? null,
+      unitPrice: item.price?.value ?? item.unitPrice ?? 0,
+      imagePath: item.imagePath ?? item.logoUrl ?? '',
+      status:    item.status ?? 'AVAILABLE',
+    })
+  }
+  return Array.from(map.values())
+}
+
+// ── Estratégia 3: merchant menu ───────────────────────────────────────────────
+
+async function fetchViaMerchantMenu(
+  token: string,
+  merchantId: string
+): Promise<IfoodCategory[] | null> {
+  const url = `https://merchant-api.ifood.com.br/merchant/v1.0/merchants/${merchantId}/menu`
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+  console.log('MERCHANT MENU STATUS:', res.status)
+
+  if (!res.ok) return null
+
+  const raw = await res.json()
+  console.log('MERCHANT MENU SAMPLE:', JSON.stringify(raw).slice(0, 600))
+
+  const sections: any[] = raw.sections ?? raw.categories ?? raw.menu ?? []
+  if (sections.length === 0) return null
+
+  return sections.map((sec: any) => ({
+    id:     sec.id ?? sec.categoryId ?? '',
+    name:   sec.name ?? sec.categoryName ?? 'Sem categoria',
+    status: sec.status === 'UNAVAILABLE' ? 'UNAVAILABLE' : 'AVAILABLE',
+    items:  (sec.items ?? sec.itemOffers ?? []).map((i: any) => ({
+      id:        i.id,
+      name:      i.name ?? i.description ?? '',
+      details:   i.details ?? null,
+      unitPrice: i.price?.value ?? i.unitPrice ?? 0,
+      imagePath: i.imagePath ?? i.logoUrl ?? '',
+      status:    i.status ?? 'AVAILABLE',
+    })),
+  }))
+}
+
+// ── Garante categoria no Supabase ─────────────────────────────────────────────
+
+async function upsertCategory(companyId: string, name: string, sortOrder: number) {
   const { error } = await supabase
     .from('categories')
     .upsert(
-      {
-        name,
-        label: name,       // label = name por padrão
-        company_id: companyId,
-        active: true,
-        sort_order: sortOrder,
-      },
-      { onConflict: 'name', ignoreDuplicates: true }  // não sobrescreve se já existe
+      { name, label: name, company_id: companyId, active: true, sort_order: sortOrder },
+      { onConflict: 'name', ignoreDuplicates: true }
     )
-
-  if (error) {
-    console.warn(`Aviso ao upsert categoria "${name}":`, error.message)
-  }
+  if (error) console.warn(`Aviso categoria "${name}":`, error.message)
 }
 
 // ── Handler ───────────────────────────────────────────────────────────────────
@@ -206,19 +192,13 @@ export async function POST(req: NextRequest) {
   })
 
   try {
-    // Auth: valida Bearer token do Supabase
     const authHeader  = req.headers.get('Authorization') ?? ''
     const accessToken = authHeader.replace('Bearer ', '').trim()
-    if (!accessToken) {
-      return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
-    }
+    if (!accessToken) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 
     const { data: { user }, error: authError } = await supabase.auth.getUser(accessToken)
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Sessão inválida' }, { status: 401 })
-    }
+    if (authError || !user) return NextResponse.json({ error: 'Sessão inválida' }, { status: 401 })
 
-    // Busca company_id do usuário logado
     const { data: company, error: companyError } = await supabase
       .from('companies')
       .select('id')
@@ -226,98 +206,108 @@ export async function POST(req: NextRequest) {
       .single()
 
     if (companyError || !company) {
-      return NextResponse.json(
-        { error: 'Empresa não encontrada para este usuário' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Empresa não encontrada' }, { status: 400 })
     }
 
     const companyId = company.id
-
     const body = await req.json().catch(() => ({}))
     const merchantId: string = body.merchantId ?? process.env.IFOOD_MERCHANT_ID ?? ''
-    if (!merchantId) {
-      return NextResponse.json({ error: 'merchantId obrigatório' }, { status: 400 })
+    if (!merchantId) return NextResponse.json({ error: 'merchantId obrigatório' }, { status: 400 })
+
+    // 1. Token + info do catálogo
+    const token = await getIfoodToken()
+
+    const listRes = await fetch(
+      `https://merchant-api.ifood.com.br/catalog/v2.0/merchants/${merchantId}/catalogs`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    )
+    if (!listRes.ok) throw new Error(`iFood catalogs list: ${listRes.status}`)
+    const catalogs = await listRes.json()
+    console.log('CATALOGS:', JSON.stringify(catalogs))
+
+    const catalog   = catalogs[0]
+    const catalogId = catalog?.catalogId ?? ''
+    const groupId   = catalog?.groupId   ?? ''
+
+    // 2. Tenta estratégias em ordem até obter itens
+    let categories: IfoodCategory[] | null = null
+
+    console.log('--- Tentando sellableItems v1.0 ---')
+    categories = await fetchViaSellableItems(token, merchantId, groupId)
+
+    if (!categories || categories.every(c => c.items.length === 0)) {
+      console.log('--- Tentando items v2.0 direto no catálogo ---')
+      categories = await fetchViaV2Full(token, merchantId, catalogId)
     }
 
-    // 1. Busca catálogo completo (com itens por categoria)
-    const token = await getIfoodToken()
-    const { categories } = await fetchCatalog(token, merchantId)
+    if (!categories || categories.every(c => c.items.length === 0)) {
+      console.log('--- Tentando merchant menu ---')
+      categories = await fetchViaMerchantMenu(token, merchantId)
+    }
 
-    // 2. Busca ifood_ids já existentes no banco
+    if (!categories || categories.length === 0) {
+      return NextResponse.json({
+        message: 'Nenhum item encontrado no iFood. Verifique se há produtos ativos no cardápio.',
+        summary: { created: 0, updated: 0, skipped: 0, total: 0 },
+        results: [],
+      })
+    }
+
+    console.log('TOTAL CATEGORIES WITH ITEMS:', categories.filter(c => c.items.length > 0).length)
+
+    // 3. ifood_ids já existentes
     const { data: existing } = await supabase
       .from('products')
       .select('ifood_id')
       .eq('company_id', companyId)
       .not('ifood_id', 'is', null)
 
-    const existingIds = new Set((existing ?? []).map((r) => r.ifood_id as string))
+    const existingIds = new Set((existing ?? []).map(r => r.ifood_id as string))
 
-    // 3. Processa categorias e itens
+    // 4. Processa
     type SyncAction = 'created' | 'updated' | 'skipped'
+    interface SyncResult { ifood_id: string; name: string; action: SyncAction; reason?: string }
 
-    interface SyncResult {
-      ifood_id: string
-      name: string
-      action: SyncAction
-      reason?: string
-    }
-
-    const results: SyncResult[]             = []
+    const results:  SyncResult[]              = []
     const toUpsert: Record<string, unknown>[] = []
 
     for (let i = 0; i < categories.length; i++) {
       const cat = categories[i]
 
-      // Cadastra categoria no Supabase se não existir
-      if (cat.status === 'AVAILABLE') {
+      if (cat.status === 'AVAILABLE' && cat.items.length > 0) {
         await upsertCategory(companyId, cat.name, cat.sequence ?? i)
       }
 
-      // Compatibilidade v1.0 (itemOffers) e v2.0 (items)
-      const offers = cat.items ?? cat.itemOffers ?? []
-
-      for (const item of offers) {
+      for (const item of cat.items) {
         const name = item.name ?? item.description ?? ''
 
         if (cat.status === 'UNAVAILABLE') {
-          results.push({ ifood_id: item.id, name, action: 'skipped', reason: 'Categoria indisponível no iFood' })
+          results.push({ ifood_id: item.id, name, action: 'skipped', reason: 'Categoria indisponível' })
           continue
         }
-
         if (!name) {
           results.push({ ifood_id: item.id, name: item.id, action: 'skipped', reason: 'Item sem nome' })
           continue
         }
 
-        // v2.0 retorna price.value, v1.0 retorna unitPrice direto
         const rawPrice = item.price?.value ?? item.unitPrice ?? 0
-
         if (!rawPrice || rawPrice <= 0) {
           results.push({ ifood_id: item.id, name, action: 'skipped', reason: 'Preço inválido ou zero' })
           continue
         }
 
-        // Divide por 100 se vier em centavos (heurística: > 500)
+        // Heurística centavos: se > 500 divide por 100
         const price = rawPrice > 500 ? rawPrice / 100 : rawPrice
-
-        // Imagem: v2.0 pode vir em productImage.files ou imagePath/logoUrl
-        const image =
-          item.productImage?.files?.[0]?.fileName ??
-          item.imagePath ??
-          item.logoUrl ??
-          ''
 
         toUpsert.push({
           ifood_id:    item.id,
           company_id:  companyId,
           name,
           description: item.details ?? null,
-          image,
+          image:       item.imagePath ?? '',
           price,
           category:    cat.name,
           active:      item.status !== 'UNAVAILABLE',
-          // Defaults fiscais Simples Nacional
           cfop:        '5102',
           unit_com:    'UN',
           origem:      0,
@@ -336,20 +326,18 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 4. Upsert em lote
+    // 5. Upsert em lote
     if (toUpsert.length > 0) {
       const { error: upsertError } = await supabase
         .from('products')
         .upsert(toUpsert, { onConflict: 'ifood_id,company_id', ignoreDuplicates: false })
-
       if (upsertError) throw new Error(`Supabase: ${upsertError.message}`)
     }
 
-    // 5. Resumo
     const summary = {
-      created: results.filter((r) => r.action === 'created').length,
-      updated: results.filter((r) => r.action === 'updated').length,
-      skipped: results.filter((r) => r.action === 'skipped').length,
+      created: results.filter(r => r.action === 'created').length,
+      updated: results.filter(r => r.action === 'updated').length,
+      skipped: results.filter(r => r.action === 'skipped').length,
       total:   results.length,
     }
 
