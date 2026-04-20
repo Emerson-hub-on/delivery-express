@@ -95,13 +95,21 @@ export async function POST(req: NextRequest) {
     }
 
     // Busca company_id do usuário logado
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('company_id')
-      .eq('id', user.id)
-      .single()
+// ✅ CORRETO (baseado no seu banco)
+const { data: company, error: companyError } = await supabase
+  .from('companies')
+  .select('id')
+  .eq('user_id', user.id)
+  .single()
 
-    const companyId: string = profile?.company_id ?? process.env.IFOOD_COMPANY_ID ?? ''
+if (companyError || !company) {
+  return NextResponse.json(
+    { error: 'Empresa não encontrada para este usuário' },
+    { status: 400 }
+  )
+}
+
+const companyId = company.id
     if (!companyId) {
       return NextResponse.json({ error: 'company_id não encontrado para este usuário' }, { status: 400 })
     }
