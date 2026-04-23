@@ -1,7 +1,7 @@
 // components/checkout/step-user.tsx
 'use client'
 import { CheckoutSteps } from "@/types/checkout-steps"
-import { Dispatch, SetStateAction, useState } from "react"
+import { Dispatch, SetStateAction, useEffect, useState } from "react"
 import { useForm } from "react-hook-form"
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -54,32 +54,30 @@ export const StepUser = ({ setStep, requireAuth = false, companyId = '' }: Props
     defaultValues: { phone },
   })
 
-  const handleGoogle = async () => {
-    const profile = await signInWithGoogle()
-    if (!profile) return
+  useEffect(() => {
+    if (!user) return
 
-    const { data: { user: u } } = await supabase.auth.getUser()
-    if (u) {
-      const { data: customerProfile } = await supabase
-        .from('customers')
-        .select('name, phone')
-        .eq('id', u.id)
-        .single()
+    supabase
+      .from('customers')
+      .select('name, phone')
+      .eq('id', user.id)
+      .single()
+      .then(({ data }) => {
+        const resolvedName  = data?.name  ?? user.user_metadata?.full_name ?? ''
+        const resolvedPhone = data?.phone ?? ''
 
-      const resolvedName  = customerProfile?.name  ?? profile.name ?? ''
-      const resolvedPhone = customerProfile?.phone ?? ''
+        setName(resolvedName)
+        if (resolvedPhone) {
+          setPhone(resolvedPhone)
+          phoneForm.setValue('phone', resolvedPhone, { shouldValidate: true })
+        }
+      })
+  }, [user?.id])
 
-      setName(resolvedName)
-      if (resolvedPhone) setPhone(resolvedPhone)
-
-      if (resolvedName.length >= 2 && resolvedPhone.replace(/\D/g, '').length >= 10) {
-        setStep('delivery')
-      } else {
-        // Preenche o que tiver e deixa o cliente completar
-        phoneForm.setValue('phone', resolvedPhone, { shouldValidate: !!resolvedPhone })
-      }
-    }
-  }
+const handleGoogle = async () => {
+  await signInWithGoogle()
+  // O redirect acontece automaticamente — esse código nunca executa
+}
 
   // Após login/cadastro no modo requireAuth, volta para finish
   const handleAuthSuccess = () => setStep('finish')
