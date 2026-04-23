@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import { ChevronLeft, ChevronRight } from "lucide-react"
 import { getProductsByCompany, getAllProducts } from "@/services/product"
 import { getCategoriesByCompany, getAllCategories } from "@/services/category"
 import { Product, CategoryItem } from "@/types/product"
@@ -17,9 +18,12 @@ export const ProductSelect = ({ companyId }: Props) => {
   const [categories, setCategories] = useState<CategoryItem[]>([])
   const [loading, setLoading] = useState(true)
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
+  const [showLeft, setShowLeft] = useState(false)
+  const [showRight, setShowRight] = useState(false)
 
   const searchQuery = useCompanyStore(s => s.searchQuery)
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({})
+  const tabsRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const load = async () => {
@@ -39,6 +43,31 @@ export const ProductSelect = ({ companyId }: Props) => {
     load()
   }, [companyId])
 
+  const updateArrows = () => {
+    const el = tabsRef.current
+    if (!el) return
+    setShowLeft(el.scrollLeft > 8)
+    setShowRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 8)
+  }
+
+  useEffect(() => {
+    const el = tabsRef.current
+    if (!el) return
+    updateArrows()
+    el.addEventListener('scroll', updateArrows)
+    window.addEventListener('resize', updateArrows)
+    return () => {
+      el.removeEventListener('scroll', updateArrows)
+      window.removeEventListener('resize', updateArrows)
+    }
+  }, [categories])
+
+  const scrollTabs = (direction: 'left' | 'right') => {
+    const el = tabsRef.current
+    if (!el) return
+    el.scrollBy({ left: direction === 'left' ? -160 : 160, behavior: 'smooth' })
+  }
+
   const handleCategorySelect = (categoryName: string) => {
     setActiveCategory(categoryName)
 
@@ -48,7 +77,7 @@ export const ProductSelect = ({ companyId }: Props) => {
     const targetY = el.getBoundingClientRect().top + window.scrollY - 80
     const startY = window.scrollY
     const distance = targetY - startY
-    const duration = 800 // ms — aumente para mais lento
+    const duration = 800
     let startTime: number | null = null
 
     const easeInOut = (t: number) =>
@@ -82,20 +111,59 @@ export const ProductSelect = ({ companyId }: Props) => {
     <div className="space-y-6">
 
       {!isSearching && categories.length > 0 && (
-        <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {categories.map(cat => (
-            <button
-              key={cat.id}
-              onClick={() => handleCategorySelect(cat.name)}
-              className={`shrink-0 px-4 py-1.5 rounded-full text-sm font-medium border transition-colors whitespace-nowrap
-                ${activeCategory === cat.name
-                  ? 'bg-red-500 border-red-500 text-white'
-                  : 'border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800'
-                }`}
-            >
-              {cat.label}
-            </button>
-          ))}
+        <div className="relative">
+          {/* Seta esquerda */}
+          {showLeft && (
+            <div className="absolute left-0 top-0 bottom-1 z-10 flex items-center">
+              <div className="absolute inset-y-0 left-0 w-10 bg-gradient-to-r from-white dark:from-zinc-950 to-transparent pointer-events-none" />
+              <button
+                onClick={() => scrollTabs('left')}
+                className="relative z-10 w-7 h-7 flex items-center justify-center rounded-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 shadow-sm text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
+              >
+                <ChevronLeft size={15} />
+              </button>
+            </div>
+          )}
+
+          {/* Lista de tabs */}
+          <div
+            ref={tabsRef}
+            className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            style={{ scrollPaddingInline: '2rem' }}
+          >
+            {/* espaço reservado para seta esquerda */}
+            {showLeft && <div className="shrink-0 w-6" />}
+
+            {categories.map(cat => (
+              <button
+                key={cat.id}
+                onClick={() => handleCategorySelect(cat.name)}
+                className={`shrink-0 px-4 py-1.5 rounded-full text-sm font-medium border transition-colors whitespace-nowrap
+                  ${activeCategory === cat.name
+                    ? 'bg-red-500 border-red-500 text-white'
+                    : 'border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+                  }`}
+              >
+                {cat.label}
+              </button>
+            ))}
+
+            {/* espaço reservado para seta direita */}
+            {showRight && <div className="shrink-0 w-6" />}
+          </div>
+
+          {/* Seta direita */}
+          {showRight && (
+            <div className="absolute right-0 top-0 bottom-1 z-10 flex items-center">
+              <div className="absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-white dark:from-zinc-950 to-transparent pointer-events-none" />
+              <button
+                onClick={() => scrollTabs('right')}
+                className="relative z-10 w-7 h-7 flex items-center justify-center rounded-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 shadow-sm text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
+              >
+                <ChevronRight size={15} />
+              </button>
+            </div>
+          )}
         </div>
       )}
 
