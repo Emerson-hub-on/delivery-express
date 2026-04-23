@@ -11,40 +11,34 @@ export default function AuthCallbackPage() {
     window.location.href = url
   }
 
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    const next = params.get('next') ?? '/'
-    const code = params.get('code')
+useEffect(() => {
+  const code = new URLSearchParams(window.location.search).get('code')
+  // ✅ lê o destino salvo antes do redirect
+  const next = sessionStorage.getItem('auth_next') ?? '/'
+  sessionStorage.removeItem('auth_next')
 
-    const timeout = setTimeout(() => safeRedirect(next), 10_000)
+  const timeout = setTimeout(() => safeRedirect(next), 10_000)
 
-    const handleAuth = async () => {
-      try {
-        // 🔥 troca correta do código por sessão
-        if (code) {
-          const { error } = await supabase.auth.exchangeCodeForSession(code)
-
-          if (error) {
-            console.error('[AuthCallback] Erro:', error.message)
-          }
-        }
-
-        // 🔥 garante que a sessão foi persistida
-        await supabase.auth.getSession()
-
-        safeRedirect(next)
-      } catch (err) {
-        console.error('[AuthCallback] Exception:', err)
-        safeRedirect(next)
-      } finally {
-        clearTimeout(timeout)
+  const handleAuth = async () => {
+    try {
+      if (code) {
+        const { error } = await supabase.auth.exchangeCodeForSession(code)
+        if (error) console.error('[AuthCallback] Erro:', error.message)
       }
+
+      await supabase.auth.getSession()
+      safeRedirect(next)
+    } catch (err) {
+      console.error('[AuthCallback] Exception:', err)
+      safeRedirect(next)
+    } finally {
+      clearTimeout(timeout)
     }
+  }
 
-    handleAuth()
-
-    return () => clearTimeout(timeout)
-  }, [])
+  handleAuth()
+  return () => clearTimeout(timeout)
+}, [])
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center gap-6">
