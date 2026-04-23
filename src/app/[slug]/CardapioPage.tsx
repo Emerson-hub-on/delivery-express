@@ -24,7 +24,7 @@ const CardapioPage = ({ companyId, slug, companyName, bannerUrl, logoUrl, minOrd
 }, [companyId]) // dependências completas
 
   return (
-    <div className="w-full min-h-screen flex flex-col"> {/* removido max-w-2xl daqui */}
+    <div className="w-full min-h-screen flex flex-col px-4"> {/* removido max-w-2xl daqui */}
       <Header slug={slug} companyId={companyId} />
       <div className="flex-1 w-full max-w-2xl mx-auto"> {/* max-w só no conteúdo */}
         <Suspense fallback={<TabsSkeleton />}>
