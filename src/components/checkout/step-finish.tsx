@@ -174,6 +174,8 @@ export const StepFinish = ({ setStep, onRequireAuth }: Props) => {
       product_name: item.product.name,
       quantity:     item.quantity,
       unit_price:   item.product.price,
+      addons:       item.addons,
+      observation:  item.observation || null,
     }))
 
     const deliveryPin = !isPickup ? generateDeliveryPin() : undefined

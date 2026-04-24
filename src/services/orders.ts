@@ -40,6 +40,32 @@ export const getOrdersByDateRange = async (from: string, to: string): Promise<Or
   if (error) throw new Error(error.message)
   return (data ?? []) as Order[]
 }
+export async function getOrderByCode(code: number): Promise<Order | null> {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return null
+
+  const { data: byCode, error: errCode } = await supabase
+    .from('orders')
+    .select('*')   // sem join de items
+    .eq('company_id', user.id)
+    .eq('code', String(code))
+    .limit(1)
+    .maybeSingle()
+
+  if (errCode) console.error('[GET ORDER BY CODE ERROR]', errCode.message)
+  if (byCode) return byCode as Order
+
+  const { data: byId, error: errId } = await supabase
+    .from('orders')
+    .select('*')   // sem join de items
+    .eq('company_id', user.id)
+    .eq('id', code)
+    .limit(1)
+    .maybeSingle()
+
+  if (errId) console.error('[GET ORDER BY ID ERROR]', errId.message)
+  return (byId ?? null) as Order | null
+}
 
 export const createOrder = async (
   order: Omit<Order, 'id' | 'created_at' | 'code'> & { company_id?: string; delivery_pin?: string }

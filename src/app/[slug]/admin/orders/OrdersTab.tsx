@@ -5,6 +5,7 @@ import { updateOrderStatus, assignMotoboy } from '@/services/orders'
 import { getPaymentLabel } from '@/lib/payment-labels'
 import { getAllMotoboys } from '@/services/motoboys'
 import { Motoboy } from '@/types/motoboy'
+import React from 'react';
 
 const STATUS_ORDER_DELIVERY = ['pending', 'confirmed', 'delivering', 'completed', 'cancelled'] as const
 const STATUS_ORDER_PICKUP = ['pending', 'Pronto p/ retirada', 'completed', 'cancelled'] as const
@@ -51,8 +52,6 @@ const COLUMN_CONFIG: Record<Exclude<KanbanColumn, 'all'>, { title: string; color
   completed: { title: 'Concluído',          color: 'border-t-green-500',  dot: 'bg-green-500'  },
 }
 
-// ── Formatação monetária segura ───────────────────────────────
-/** Converte qualquer valor para string monetária — nunca lança exceção */
 function fmt(value: unknown): string {
   const n = Number(value)
   return isNaN(n) ? '0,00' : n.toFixed(2).replace('.', ',')
@@ -84,12 +83,17 @@ interface OrdersTabProps {
   onDateToChange: (v: string) => void
   onFilter: () => void
   onClearFilter: () => void
+  orderSearch: string
+  searchedOrder: Order | null
+  searchingOrder: boolean
+  onClearSearch: () => void
 }
 
 export function OrdersTab({
   orders, setOrders, loading, onError,
   dateFrom, dateTo, onDateFromChange, onDateToChange,
-  onFilter, onClearFilter,
+  onFilter, onClearFilter, orderSearch,
+  searchedOrder, searchingOrder, onClearSearch,
 }: OrdersTabProps) {
   const [expandedOrder, setExpandedOrder]               = useState<number | null>(null)
   const [mobileTab, setMobileTab]                       = useState<KanbanColumn>('all')
@@ -107,61 +111,47 @@ export function OrdersTab({
   const getStatusOptions = (order: Order) => isPickup(order) ? STATUS_OPTIONS_PICKUP : STATUS_OPTIONS_DELIVERY
   const isIfoodOrder     = (order: Order) => !!order.ifood_id
 
-  // ── Aceitar pedido iFood ──────────────────────────────────────
-const handleAcceptIfood = async (order: Order) => {
-  if (!order.ifood_id) return
-  if (!confirm(`Aceitar pedido #${order.code ?? order.id} do iFood?`)) return
-
-  setAcceptingId(order.id)
-  try {
-    const res = await fetch('/api/ifood/confirm', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ifoodId: order.ifood_id }),
-    })
-
-    const data = await res.json()
-
-    if (!res.ok) {
-      throw new Error(data.error ?? 'Erro ao confirmar pedido')
-    }
-
-    // Atualiza localmente independente do retorno
-    setOrders(prev =>
-      prev.map(o =>
-        o.id === order.id
-          ? { ...o, status: 'confirmed', ...(data.order ?? {}) }
-          : o
-      )
-    )
-  } catch (e: any) {
-    onError(e.message)
-  } finally {
-    setAcceptingId(null)
-  }
-}
-
-const dispatchOrder = async (id: number) => {
-  try {
-    const updated = await updateOrderStatus(id, 'delivering')
-    setOrders(prev => prev.map(o =>
-      o.id === id ? { ...o, status: 'delivering', dispatched_at: updated.dispatched_at } : o
-    ))
-
-    // Notifica o iFood se for pedido deles
-    const order = orders.find(o => o.id === id)
-    if (order?.ifood_id) {
-      fetch('/api/ifood/dispatch', {
+  const handleAcceptIfood = async (order: Order) => {
+    if (!order.ifood_id) return
+    if (!confirm(`Aceitar pedido #${order.code ?? order.id} do iFood?`)) return
+    setAcceptingId(order.id)
+    try {
+      const res = await fetch('/api/ifood/confirm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ifoodId: order.ifood_id }),
-      }).catch(err => console.warn('[iFood Dispatch] Falha silenciosa:', err.message))
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Erro ao confirmar pedido')
+      setOrders(prev =>
+        prev.map(o => o.id === order.id ? { ...o, status: 'confirmed', ...(data.order ?? {}) } : o)
+      )
+    } catch (e: any) {
+      onError(e.message)
+    } finally {
+      setAcceptingId(null)
     }
-  } catch (e: any) { onError(e.message) }
-}
+  }
+
+  const dispatchOrder = async (id: number) => {
+    try {
+      const updated = await updateOrderStatus(id, 'delivering')
+      setOrders(prev => prev.map(o =>
+        o.id === id ? { ...o, status: 'delivering', dispatched_at: updated.dispatched_at } : o
+      ))
+      const order = orders.find(o => o.id === id)
+      if (order?.ifood_id) {
+        fetch('/api/ifood/dispatch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ifoodId: order.ifood_id }),
+        }).catch(err => console.warn('[iFood Dispatch] Falha silenciosa:', err.message))
+      }
+    } catch (e: any) { onError(e.message) }
+  }
 
   const handleUpdateStatus = async (id: number, status: string) => {
-    const order = orders.find(o => o.id === id)
+    const order = orders.find(o => o.id === id) ?? searchedOrder ?? null
     if (!order) return
     const statusOrder  = getStatusOrder(order)
     const currentIndex = statusOrder.indexOf(order.status as any)
@@ -196,7 +186,7 @@ const dispatchOrder = async (id: number) => {
   const getOrdersForMobile = () =>
     mobileTab === 'all' ? orders : getOrdersForColumn(mobileTab)
 
-  const dialogOrder               = motoboyDialogOrderId !== null ? orders.find(o => o.id === motoboyDialogOrderId) ?? null : null
+  const dialogOrder               = motoboyDialogOrderId !== null ? (orders.find(o => o.id === motoboyDialogOrderId) ?? (searchedOrder?.id === motoboyDialogOrderId ? searchedOrder : null)) : null
   const dialogIsAlreadyDispatched = dialogOrder?.status === 'delivering'
 
   return (
@@ -233,6 +223,49 @@ const dispatchOrder = async (id: number) => {
           </span>
         )}
       </div>
+
+      {/* ── Resultado de busca por número ── */}
+      {orderSearch.length > 0 && (
+        <div className="mb-4 shrink-0 max-h-[60vh] overflow-y-auto">
+          {searchingOrder ? (
+            <div className="bg-white border border-gray-200 rounded-xl px-4 py-5 flex items-center gap-3">
+              <div className="w-4 h-4 border-2 border-gray-300 border-t-gray-700 rounded-full animate-spin shrink-0" />
+              <p className="text-sm text-gray-400">Buscando pedido <span className="font-medium text-gray-600">#{orderSearch}</span>…</p>
+            </div>
+          ) : searchedOrder ? (
+            <div className="bg-white border-2 border-gray-900 rounded-xl overflow-hidden shadow-lg">
+            <div className="flex items-center justify-between px-4 py-2.5 bg-gray-900 sticky top-0 z-10">  {/* ← sticky no header */}
+              <span className="text-xs font-semibold text-white">🔍 Pedido #{searchedOrder.code ?? searchedOrder.id} encontrado</span>
+              <button onClick={onClearSearch} className="text-gray-400 hover:text-white text-xs transition-colors">✕ Fechar busca</button>
+            </div>
+              <div className="p-3">
+                <OrderCard
+                  order={searchedOrder}
+                  expanded={true}
+                  onToggle={() => {}}
+                  onUpdateStatus={handleUpdateStatus}
+                  onChangeMotoboy={id => setMotoboyDialogOrderId(id)}
+                  onAcceptIfood={handleAcceptIfood}
+                  isPickup={isPickup(searchedOrder)}
+                  isIfood={isIfoodOrder(searchedOrder)}
+                  isAccepting={acceptingId === searchedOrder.id}
+                  statusOptions={getStatusOptions(searchedOrder)}
+                  statusOrder={getStatusOrder(searchedOrder)}
+                  motoboys={motoboys}
+                  highlighted={false}
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="bg-white border border-gray-200 rounded-xl px-4 py-5 flex items-center justify-between">
+              <p className="text-sm text-gray-400">
+                Nenhum pedido encontrado com o número <span className="font-medium text-gray-600">#{orderSearch}</span>.
+              </p>
+              <button onClick={onClearSearch} className="text-xs text-gray-400 hover:text-gray-600 transition-colors ml-4 shrink-0">✕</button>
+            </div>
+          )}
+        </div>
+      )}
 
       {loading ? (
         <div className="bg-white border border-gray-200 rounded-xl p-5 shrink-0">
@@ -279,6 +312,7 @@ const dispatchOrder = async (id: number) => {
                   statusOptions={getStatusOptions(order)}
                   statusOrder={getStatusOrder(order)}
                   motoboys={motoboys}
+                  highlighted={false}
                 />
               ))
             )}
@@ -316,6 +350,7 @@ const dispatchOrder = async (id: number) => {
                           statusOptions={getStatusOptions(order)}
                           statusOrder={getStatusOrder(order)}
                           motoboys={motoboys}
+                          highlighted={false}
                         />
                       ))
                     )}
@@ -359,23 +394,28 @@ interface OrderCardProps {
   statusOptions: typeof STATUS_OPTIONS_DELIVERY | typeof STATUS_OPTIONS_PICKUP
   statusOrder: typeof STATUS_ORDER_DELIVERY | typeof STATUS_ORDER_PICKUP
   motoboys: Motoboy[]
+  highlighted: boolean
 }
 
 function OrderCard({
   order, expanded, onToggle, onUpdateStatus, onChangeMotoboy,
   onAcceptIfood, isPickup, isIfood, isAccepting,
-  statusOptions, statusOrder, motoboys,
+  statusOptions, statusOrder, motoboys, highlighted,
 }: OrderCardProps) {
 
   const isPending      = order.status === 'pending'
   const isNotFinished  = !['completed', 'cancelled'].includes(order.status)
 
   return (
-    <div className={`border rounded-lg overflow-hidden bg-white shrink-0 ${
-      isIfood && isPending ? 'border-orange-300 ring-1 ring-orange-200' : 'border-gray-100'
-    }`}>
+    <div className={[
+      'border rounded-lg overflow-hidden bg-white shrink-0',
+      highlighted
+        ? 'order-highlight'
+        : isIfood && isPending
+          ? 'border-orange-300 ring-1 ring-orange-200'
+          : 'border-gray-100',
+    ].join(' ')}>
 
-      {/* ── Banner iFood pendente ── */}
       {isIfood && isPending && (
         <div className="bg-orange-50 border-b border-orange-200 px-4 py-2 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
@@ -392,15 +432,12 @@ function OrderCard({
         </div>
       )}
 
-      {/* ── Cabeçalho do card ── */}
       <div className="flex flex-col px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors gap-1" onClick={onToggle}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <p className="text-sm font-semibold text-gray-900">Pedido #{order.code ?? order.id}</p>
             {isIfood && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-100 text-orange-600 font-medium">
-                iFood
-              </span>
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-100 text-orange-600 font-medium">iFood</span>
             )}
           </div>
           {order.delivery_type && (
@@ -412,7 +449,7 @@ function OrderCard({
         </div>
 
         <div className="flex flex-col gap-0.5 mt-0.5">
-          <p className="text-xs text-gray-400 font-medium">Status time:</p>
+          <p className="text-[10px] text-gray-400 font-medium">Status time:</p>
           <span className="text-xs text-gray-400">🕐 Pedido: {formatDateTime(order.created_at)}</span>
           {order.dispatched_at && (
             <span className="text-xs text-blue-400">🛵 Despachado: {formatDateTime(order.dispatched_at)}</span>
@@ -448,7 +485,6 @@ function OrderCard({
         <span className="text-xs text-gray-400 mt-0.5">{expanded ? '▲ Ver menos' : '▼ Ver mais'}</span>
       </div>
 
-      {/* ── Detalhes expandidos ── */}
       {expanded && (
         <div className="border-t border-gray-100 px-4 py-3 bg-gray-50 space-y-3">
 
@@ -505,15 +541,40 @@ function OrderCard({
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {(order.items ?? []).map((item, i) => (
-                  <tr key={i}>
-                    <td className="py-1.5 text-gray-700">{item.product_name}</td>
-                    <td className="py-1.5 text-center text-gray-500">{item.quantity}</td>
-                    <td className="py-1.5 text-right text-gray-500">R$ {fmt(item.unit_price)}</td>
-                    <td className="py-1.5 text-right text-gray-700 font-medium">R$ {fmt(item.quantity * item.unit_price)}</td>
-                  </tr>
-                ))}
-              </tbody>
+  {(order.items ?? []).map((item, i) => {
+    console.log(`[OrderCard] item[${i}]:`, item)
+    return (
+      <React.Fragment key={i}>
+        <tr>
+          <td className="py-1.5 text-gray-700">{item.product_name}</td>
+          <td className="py-1.5 text-center text-gray-500">{item.quantity}</td>
+          <td className="py-1.5 text-right text-gray-500">R$ {fmt(item.unit_price)}</td>
+          <td className="py-1.5 text-right text-gray-700 font-medium">R$ {fmt(item.quantity * item.unit_price)}</td>
+        </tr>
+
+        {(item.addons ?? []).map((addon, j) => (
+          <tr key={`addon-${i}-${j}`}>
+            <td className="pb-1 pl-3 text-gray-400 text-[10px]" colSpan={2}>
+              ↳ {addon.qty}× {addon.itemName}
+            </td>
+            <td className="pb-1 text-right text-gray-400 text-[10px]">
+              {addon.subtotal > 0 ? `+R$ ${fmt(addon.subtotal)}` : ''}
+            </td>
+            <td />
+          </tr>
+        ))}
+
+        {item.observation && (
+          <tr>
+            <td className="pb-1.5 pl-1 text-[10px] text-amber-600 italic" colSpan={4}>
+              OBS: "{item.observation}"
+            </td>
+          </tr>
+        )}
+      </React.Fragment>
+    )
+  })}
+</tbody>
             </table>
           )}
 

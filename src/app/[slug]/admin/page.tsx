@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { Product, CategoryItem, Order } from '@/types/product'
 import { getAllProducts } from '@/services/product'
 import { getAllCategories } from '@/services/category'
-import { getAllOrders, getOrdersByDateRange } from '@/services/orders'
+import { getAllOrders, getOrderByCode, getOrdersByDateRange } from '@/services/orders'
 import { getAllMotoboys } from '@/services/motoboys'
 import { Motoboy } from '@/types/motoboy'
 import { IfoodSync } from '@/components/ifood/ifood-sync'
@@ -53,6 +53,10 @@ export default function AdminPage() {
   // ── Tabs & data state ───────────────────────────────────────
   const [tab, setTab] = useState<Tab>('products')
   const [error, setError] = useState<string | null>(null)
+  const [orderSearch, setOrderSearch] = useState('')
+  const [searchedOrder, setSearchedOrder] = useState<Order | null>(null)
+  const [searchingOrder, setSearchingOrder] = useState(false)
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const [products, setProducts] = useState<Product[]>([])
   const [loadingProducts, setLoadingProducts] = useState(true)
@@ -103,6 +107,21 @@ export default function AdminPage() {
     fetchCategories()
   }, [authReady])
 
+  useEffect(() => {
+  if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current)
+  if (!orderSearch) { setSearchedOrder(null); return }
+
+  searchTimeoutRef.current = setTimeout(async () => {
+    setSearchingOrder(true)
+    try {
+      const found = await getOrderByCode(Number(orderSearch))
+      setSearchedOrder(found)
+    } finally {
+      setSearchingOrder(false)
+    }
+  }, 400)
+}, [orderSearch])
+
   const fetchOrders = useCallback(async () => {
     try {
       setLoadingOrders(true)
@@ -140,20 +159,21 @@ export default function AdminPage() {
     }
   }, [tab, authReady])
 
-  useEffect(() => {
-    if (!authReady || tab !== 'motoboys') return
-    const fetch = async () => {
-      try {
-        setLoadingMotoboys(true)
-        setMotoboys(await getAllMotoboys())
-      } catch (e: any) {
-        setError(e.message)
-      } finally {
-        setLoadingMotoboys(false)
-      }
+useEffect(() => {
+  if (!authReady) return   // ← remove a condição de tab
+  const fetch = async () => {
+    try {
+      setLoadingMotoboys(true)
+      setMotoboys(await getAllMotoboys())
+    } catch (e: any) {
+      setError(e.message)
+    } finally {
+      setLoadingMotoboys(false)
     }
-    fetch()
-  }, [tab, authReady])
+  }
+  fetch()
+}, [authReady]) 
+
 
 // Refs para acessar os valores atuais dentro do canal sem recriá-lo
 const dateFromRef = useRef(dateFrom)
@@ -209,13 +229,15 @@ useEffect(() => {
   return () => { supabase.removeChannel(channel) }
 }, [authReady]) // ← canal criado uma única vez
 
-  const handleTabChange = (newTab: Tab) => {
-    setTab(newTab)
-    setError(null)
-    setShowProductForm(false)
-    setShowCatForm(false)
-    setShowMotoboyForm(false)
-  }
+const handleTabChange = (newTab: Tab) => {
+  setTab(newTab)
+  setError(null)
+  setOrderSearch('')
+  setSearchedOrder(null)
+  setShowProductForm(false)
+  setShowCatForm(false)
+  setShowMotoboyForm(false)
+}
 
   const handleClearFilter = () => {
     const today = todayLocalISO()
@@ -258,7 +280,9 @@ useEffect(() => {
           showProductForm={showProductForm}
           showCategoryForm={showCatForm}
           showMotoboyForm={showMotoboyForm}
-        />
+          orderSearch={orderSearch}
+          onOrderSearchChange={(v) => { setOrderSearch(v); if (!v) setSearchedOrder(null) }}
+/>
 
         {error && (
           <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm flex items-start justify-between gap-3">
@@ -306,6 +330,11 @@ useEffect(() => {
             onDateToChange={setDateTo}
             onFilter={fetchOrders}
             onClearFilter={handleClearFilter}
+            orderSearch={orderSearch}
+            searchedOrder={searchedOrder}
+            searchingOrder={searchingOrder}
+            onClearSearch={() => { setOrderSearch(''); setSearchedOrder(null) } }
+            
           />
         )}
 

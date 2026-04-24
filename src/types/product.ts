@@ -1,5 +1,5 @@
 // types/product.ts
-
+import type { CartAddon } from './addon'
 export type Category = string
 
 // ── Tipos fiscais ─────────────────────────────────────────────
@@ -98,6 +98,8 @@ export type OrderItem = {
   product_name: string
   quantity: number
   unit_price: number
+  addons?: CartAddon[]
+  observation?: string | null
 }
 
 export type OrderAddress = {

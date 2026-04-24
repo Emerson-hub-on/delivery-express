@@ -5,10 +5,10 @@ import { MinusIcon, PlusIcon, Trash2Icon } from "lucide-react";
 
 type Props = {
   cartItem: Cart;
-}
+};
 
 export const CartItemQuantity = ({ cartItem }: Props) => {
-  const { updateQty, removeFromCart } = useCartStore(state => state);
+  const { updateQty, removeFromCart } = useCartStore((state) => state);
 
   const handlePlus = () => updateQty(cartItem.id, cartItem.quantity + 1);
   const handleMinus = () => {
@@ -20,13 +20,29 @@ export const CartItemQuantity = ({ cartItem }: Props) => {
   };
 
   return (
-    <div className="flex items-center gap-2">
-      <Button onClick={handlePlus} variant="outline" size="icon" className="size-5">
-        <PlusIcon className="size-3" />
+    <div className="flex items-center gap-1 bg-muted rounded-full px-1 py-0.5 border border-border/60">
+      <Button
+        onClick={handleMinus}
+        variant="ghost"
+        size="icon"
+        className="size-6 rounded-full hover:bg-background hover:shadow-sm transition-all"
+      >
+        {cartItem.quantity <= 1 ? (
+          <Trash2Icon className="size-3 text-destructive" />
+        ) : (
+          <MinusIcon className="size-3" />
+        )}
       </Button>
-      <div>{cartItem.quantity}</div>
-      <Button onClick={handleMinus} variant="outline" size="icon" className="size-5">
-        {cartItem.quantity <= 1 ? <Trash2Icon className="size-3" /> : <MinusIcon className="size-3" />}
+      <span className="text-xs font-semibold w-4 text-center tabular-nums">
+        {cartItem.quantity}
+      </span>
+      <Button
+        onClick={handlePlus}
+        variant="ghost"
+        size="icon"
+        className="size-6 rounded-full hover:bg-background hover:shadow-sm transition-all"
+      >
+        <PlusIcon className="size-3" />
       </Button>
     </div>
   );
