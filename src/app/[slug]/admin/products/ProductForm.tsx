@@ -120,7 +120,7 @@ export function ProductForm({
           <div className="flex items-center gap-4">
             <div
               onClick={() => fileInputRef.current?.click()}
-              className="w-20 h-20 rounded-xl border-2 border-dashed border-gray-200 flex items-center justify-center overflow-hidden cursor-pointer hover:border-gray-400 transition-colors flex-shrink-0"
+              className="w-20 h-20 rounded-xl border-2 border-dashed border-gray-200 flex items-center justify-center overflow-hidden cursor-pointer hover:border-gray-400 transition-colors shrink-0"
             >
               {imagePreview
                 ? <img src={imagePreview} alt="preview" className="w-full h-full object-cover" />

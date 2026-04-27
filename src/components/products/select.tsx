@@ -115,7 +115,7 @@ export const ProductSelect = ({ companyId }: Props) => {
           {/* Seta esquerda */}
           {showLeft && (
             <div className="absolute left-0 top-0 bottom-1 z-10 flex items-center">
-              <div className="absolute inset-y-0 left-0 w-10 bg-gradient-to-r from-white dark:from-zinc-950 to-transparent pointer-events-none" />
+              <div className="absolute inset-y-0 left-0 w-10 bg-linear-to-r from-white dark:from-zinc-950 to-transparent pointer-events-none" />
               <button
                 onClick={() => scrollTabs('left')}
                 className="relative z-10 w-7 h-7 flex items-center justify-center rounded-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 shadow-sm text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
@@ -155,7 +155,7 @@ export const ProductSelect = ({ companyId }: Props) => {
           {/* Seta direita */}
           {showRight && (
             <div className="absolute right-0 top-0 bottom-1 z-10 flex items-center">
-              <div className="absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-white dark:from-zinc-950 to-transparent pointer-events-none" />
+              <div className="absolute inset-y-0 right-0 w-10 bg-linear-to-l from-white dark:from-zinc-950 to-transparent pointer-events-none" />
               <button
                 onClick={() => scrollTabs('right')}
                 className="relative z-10 w-7 h-7 flex items-center justify-center rounded-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 shadow-sm text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"

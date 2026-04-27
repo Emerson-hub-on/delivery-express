@@ -1,11 +1,5 @@
 'use client'
 // components/ifood/ifood-sync.tsx
-//
-// Fluxo:
-//  1. Usuário clica "Sincronizar" → API retorna preview com preços iFood vs sistema
-//  2. Itens "updated" aparecem com checkbox para o usuário escolher quais atualizar
-//  3. Botão "Atualizar selecionados" confirma o upsert no banco
-//  4. Itens "created" são criados automaticamente (sem necessidade de confirmação)
 
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
@@ -302,7 +296,7 @@ export function IfoodSync() {
           </div>
 
           {/* Lista */}
-          <div className="space-y-2 max-h-[480px] overflow-y-auto pr-1">
+          <div className="space-y-2 max-h-120 overflow-y-auto pr-1">
             {filtered.length === 0 ? (
               <p className="text-xs text-gray-400 text-center py-6">Nenhum item nesta categoria.</p>
             ) : (
