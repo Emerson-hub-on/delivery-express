@@ -55,9 +55,9 @@ const paymentMethods = [
 
 export const Footer = () => {
   return (
-    <footer className="w-full">
+    <footer className="w-full pb-16 md:pb-0">
 
-      <div className="h-0.5 bg-gradient-to-r from-orange-700 via-orange-400 to-orange-700" />
+      <div className="h-0.5 bg-linear-to-r from-orange-700 via-orange-400 to-orange-700" />
 
       <div className="bg-[#0d1b2a] text-zinc-100 px-4 py-10">
         <div className="max-w-7xl mx-auto">
