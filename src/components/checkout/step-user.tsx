@@ -14,7 +14,7 @@ import { useAuth } from "@/hooks/useAuth"
 import { supabase } from '@/lib/supabase'
 import { RegisterForm } from "@/components/auth/RegisterForm"
 import { LoginForm } from "@/components/auth/LoginForm"
-import { Phone } from "lucide-react"
+import { Phone, Check } from "lucide-react"
 
 const fullSchema = z.object({
   name:  z.string().min(2, 'Preencha seu nome'),
@@ -156,31 +156,37 @@ export const StepUser = ({ setStep, requireAuth = false, companyId = '' }: Props
         </div>
 
         {/* ✅ Telefone cadastrado — mesmo padrão do StepAddress */}
+        {/* Telefone cadastrado */}
         {savedPhone && (
           <button
             type="button"
             onClick={() => setPhoneMode('saved')}
             className={`w-full flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition-colors
               ${phoneMode === 'saved'
-                ? 'border-gray-300 bg-gray-50'
+                ? 'border-green-400 bg-green-50'
                 : 'border-gray-200 bg-white hover:bg-gray-50'}`}
           >
-            <Phone size={16} className="text-gray-400 shrink-0" />
+            <Phone size={16} className={phoneMode === 'saved' ? 'text-green-500 shrink-0' : 'text-gray-400 shrink-0'} />
             <div className="flex-1 min-w-0">
-              <p className="text-xs text-gray-500 font-medium">Telefone cadastrado</p>
-              <p className="text-sm text-gray-800">{savedPhone}</p>
+              <p className={`text-xs font-medium ${phoneMode === 'saved' ? 'text-green-700' : 'text-gray-500'}`}>
+                Telefone cadastrado
+              </p>
+              <p className={`text-sm ${phoneMode === 'saved' ? 'text-green-800' : 'text-gray-800'}`}>
+                {savedPhone}
+              </p>
             </div>
-            {/* Radio visual */}
-            <div className={`w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center
-              ${phoneMode === 'saved' ? 'border-gray-800' : 'border-gray-300'}`}>
-              {phoneMode === 'saved' && (
-                <div className="w-2 h-2 rounded-full bg-gray-800" />
-              )}
-            </div>
+            {/* ✅ Check verde quando selecionado, radio cinza quando não */}
+            {phoneMode === 'saved' ? (
+              <div className="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center shrink-0">
+                <Check size={12} className="text-white" />
+              </div>
+            ) : (
+              <div className="w-4 h-4 rounded-full border-2 border-gray-300 shrink-0" />
+            )}
           </button>
         )}
 
-        {/* ✅ Opção: usar outro telefone */}
+        {/* Usar outro telefone */}
         <button
           type="button"
           onClick={() => {
@@ -189,19 +195,20 @@ export const StepUser = ({ setStep, requireAuth = false, companyId = '' }: Props
           }}
           className={`w-full flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition-colors
             ${phoneMode === 'new'
-              ? 'border-gray-300 bg-gray-50'
+              ? 'border-green-400 bg-green-50'
               : 'border-gray-200 bg-white hover:bg-gray-50'}`}
         >
-          <Phone size={16} className="text-gray-400 shrink-0" />
-          <span className="text-sm text-gray-700 flex-1">
+          <Phone size={16} className={phoneMode === 'new' ? 'text-green-500 shrink-0' : 'text-gray-400 shrink-0'} />
+          <span className={`text-sm flex-1 ${phoneMode === 'new' ? 'text-green-800' : 'text-gray-700'}`}>
             {savedPhone ? 'Usar outro telefone' : 'Informar telefone'}
           </span>
-          <div className={`w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center
-            ${phoneMode === 'new' ? 'border-gray-800' : 'border-gray-300'}`}>
-            {phoneMode === 'new' && (
-              <div className="w-2 h-2 rounded-full bg-gray-800" />
-            )}
-          </div>
+          {phoneMode === 'new' ? (
+            <div className="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center shrink-0">
+              <Check size={12} className="text-white" />
+            </div>
+          ) : (
+            <div className="w-4 h-4 rounded-full border-2 border-gray-300 shrink-0" />
+          )}
         </button>
 
         {/* ✅ Formulário só aparece no modo 'new' */}

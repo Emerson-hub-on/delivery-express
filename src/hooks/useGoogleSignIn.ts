@@ -11,14 +11,14 @@ export function useGoogleSignIn() {
     setError(null)
 
     try {
-      sessionStorage.setItem('auth_next', window.location.pathname)
-
       const origin = process.env.NEXT_PUBLIC_APP_URL ?? window.location.origin
+      // ✅ passa o pathname atual como ?next= para o callback usar
+      const next = window.location.pathname
 
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${origin}/auth/callback`,
+          redirectTo: `${origin}/auth/callback?next=${encodeURIComponent(next)}`,
           queryParams: { access_type: 'offline', prompt: 'consent' },
         },
       })

@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useRef } from 'react'
-import { supabase } from '@/lib/supabase' // 🔥 usa o client correto
+import { supabase } from '@/lib/supabase'
 
 export default function AuthCallbackPage() {
   const redirected = useRef(false)
@@ -11,34 +11,39 @@ export default function AuthCallbackPage() {
     window.location.href = url
   }
 
-useEffect(() => {
-  const code = new URLSearchParams(window.location.search).get('code')
-  // ✅ lê o destino salvo antes do redirect
-  const next = sessionStorage.getItem('auth_next') ?? '/'
-  sessionStorage.removeItem('auth_next')
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const code = params.get('code')
 
-  const timeout = setTimeout(() => safeRedirect(next), 10_000)
+    // ✅ lê next da URL primeiro, fallback para sessionStorage, fallback para '/'
+    const next =
+      params.get('next') ??
+      sessionStorage.getItem('auth_next') ??
+      '/'
+    sessionStorage.removeItem('auth_next')
 
-  const handleAuth = async () => {
-    try {
-      if (code) {
-        const { error } = await supabase.auth.exchangeCodeForSession(code)
-        if (error) console.error('[AuthCallback] Erro:', error.message)
+    const timeout = setTimeout(() => safeRedirect(next), 10_000)
+
+    const handleAuth = async () => {
+      try {
+        if (code) {
+          const { error } = await supabase.auth.exchangeCodeForSession(code)
+          if (error) console.error('[AuthCallback] Erro:', error.message)
+        }
+
+        await supabase.auth.getSession()
+        safeRedirect(next)
+      } catch (err) {
+        console.error('[AuthCallback] Exception:', err)
+        safeRedirect(next)
+      } finally {
+        clearTimeout(timeout)
       }
-
-      await supabase.auth.getSession()
-      safeRedirect(next)
-    } catch (err) {
-      console.error('[AuthCallback] Exception:', err)
-      safeRedirect(next)
-    } finally {
-      clearTimeout(timeout)
     }
-  }
 
-  handleAuth()
-  return () => clearTimeout(timeout)
-}, [])
+    handleAuth()
+    return () => clearTimeout(timeout)
+  }, [])
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center gap-6">
