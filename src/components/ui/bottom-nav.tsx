@@ -6,7 +6,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { AuthModal } from '@/components/auth/AuthModal'
 import { useCompanyStore } from '@/stores/company-store'
 import { signOut } from '@/services/auth'
-
+import { toast } from 'sonner'
 interface BottomNavProps {
     slug: string
     companyId: string
@@ -33,9 +33,10 @@ export const BottomNav = ({ slug, companyId, onSearchOpen }: BottomNavProps) => 
     }
 
     const handleLogout = async () => {
-        await signOut()
-        setShowPerfilDrawer(false)
-    }
+    await signOut()
+    setShowPerfilDrawer(false)
+    toast.success('Até logo!', { description: 'Você saiu da sua conta.' })
+}
 
     const navItems = [
         { label: 'Início', icon: Home, onClick: () => router.push(`/${slug}`) },
