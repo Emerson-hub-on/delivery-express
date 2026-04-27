@@ -10,7 +10,7 @@ import {
 import { Separator } from "../ui/separator";
 import { useCartStore } from "@/stores/cart-store";
 import { CartItem } from "./item";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CheckoutDialog } from "../checkout/checkout-dialog";
 
 export const CartSidebar = () => {
@@ -20,6 +20,11 @@ export const CartSidebar = () => {
   const subtotal = cart.reduce((s, item) => s + item.totalWithAddons, 0);
   const totalItems = cart.reduce((s, item) => s + item.quantity, 0);
 
+useEffect(() => {
+  const handler = () => setSheetOpen(true)
+  window.addEventListener('open-cart', handler)
+  return () => window.removeEventListener('open-cart', handler)
+}, [])
   return (
     <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
       <SheetTrigger asChild>

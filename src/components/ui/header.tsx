@@ -45,11 +45,17 @@ const SearchResults = ({ query, companyId, onClose }: SearchResultsProps) => {
         p.name.toLowerCase().includes(query.toLowerCase())
     )
 
-    const handleAdd = (product: Product) => {
-        upsertCartItem(product, 1)
-        toast.success('Produto adicionado ao carrinho!', { description: product.name })
-        onClose()
-    }
+const handleAdd = (product: Product) => {
+  upsertCartItem(product, 1)
+  toast.success('Adicionado ao carrinho!', {
+    description: product.name,
+    action: {
+      label: 'Ver carrinho',
+      onClick: () => window.dispatchEvent(new Event('open-cart')),
+    },
+  })
+  onClose()
+}
 
     if (loading) return (
         <div className="px-4 py-3 text-sm text-zinc-400 border-t border-zinc-100">
