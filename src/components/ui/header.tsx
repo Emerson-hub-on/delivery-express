@@ -277,7 +277,7 @@ export const Header = ({ slug, companyId }: HeaderProps) => {
                             value={searchQuery}
                             onChange={e => setSearchQuery(e.target.value)}
                             placeholder="Buscar produtos..."
-                            className="flex-1 bg-zinc-100 dark:bg-zinc-800 text-sm text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 rounded-full px-4 py-2 outline-none border-none"
+                            className="flex-1 min-w-0 bg-zinc-100 dark:bg-zinc-800 text-sm text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 rounded-full px-4 py-2 outline-none border-none"
                         />
                         {searchQuery && (
                             <button onClick={() => setSearchQuery('')}
