@@ -1,19 +1,20 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import Link from 'next/link'
 import { useAuth } from "@/hooks/useAuth";
 import { signOut } from '@/services/auth'
 import { MyOrdersList } from "@/components/orders/MyOrdersList";
 import { AuthModal } from '@/components/auth/AuthModal'
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/lib/supabase'
+import { BottomNav } from '@/components/ui/bottom-nav'  // ← import
 
 export default function MeusPedidosPage() {
   const { user, loading } = useAuth()
   const router = useRouter()
   const params = useParams<{ slug: string }>()
   const [showAuth, setShowAuth] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)  // ← estado busca
   const [companyId, setCompanyId] = useState<string | null>(null)
 
   useEffect(() => {
@@ -34,7 +35,7 @@ export default function MeusPedidosPage() {
 
   const handleLogout = async () => {
     await signOut()
-    router.push(`/${params.slug}`)  // ← redireciona para o cardápio da empresa
+    router.push(`/${params.slug}`)
   }
 
   if (loading) {
@@ -46,15 +47,10 @@ export default function MeusPedidosPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 pb-16">  {/* ← pb-16 para não sobrepor o nav */}
       <div className="max-w-2xl mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-8">
           <div>
-            <Button>
-              <Link href={`/${params.slug}`} className="text-xs text-gray-50 hover:text-gray-600 mb-1 block">
-                ← Voltar ao cardápio
-              </Link>
-            </Button>
             <h1 className="text-xl font-semibold text-gray-900">Meus pedidos</h1>
             {user?.email && (
               <p className="text-xs text-gray-500 mt-0.5">{user.email}</p>
@@ -87,12 +83,19 @@ export default function MeusPedidosPage() {
       </div>
 
       {companyId && (
-        <AuthModal
-          open={showAuth}
-          onClose={() => setShowAuth(false)}
-          onSuccess={() => setShowAuth(false)}
-          companyId={companyId}
-        />
+        <>
+          <AuthModal
+            open={showAuth}
+            onClose={() => setShowAuth(false)}
+            onSuccess={() => setShowAuth(false)}
+            companyId={companyId}
+          />
+          <BottomNav   // ← aqui
+            slug={params.slug}
+            companyId={companyId}
+            onSearchOpen={() => setSearchOpen(true)}
+          />
+        </>
       )}
     </div>
   )
