@@ -20,7 +20,7 @@ export function AuthModal({ open, prefillName = '', onClose, onSuccess, companyI
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
-      <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-xl">
+      <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-xl overflow-y-auto max-h-[90vh]">
         <div className="flex justify-between items-start mb-5">
           <div>
             <h2 className="text-base font-semibold text-gray-900">

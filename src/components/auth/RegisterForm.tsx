@@ -11,6 +11,7 @@ import { useGoogleSignIn } from '@/hooks/useGoogleSignIn'
 
 const schema = z.object({
   name: z.string().min(2, 'Preencha seu nome'),
+  phone: z.string().min(14, 'Telefone inválido'),
   email: z.string().email('E-mail inválido'),
   password: z.string().min(6, 'Mínimo 6 caracteres'),
   confirm: z.string(),
@@ -27,6 +28,14 @@ interface RegisterFormProps {
   companyId: string
 }
 
+function maskPhone(value: string) {
+  return value
+    .replace(/\D/g, '')
+    .slice(0, 11)
+    .replace(/^(\d{2})(\d)/, '($1) $2')
+    .replace(/(\d{5})(\d{1,4})$/, '$1-$2')
+}
+
 export function RegisterForm({ prefillName = '', onSuccess, companyId }: RegisterFormProps) {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -34,7 +43,7 @@ export function RegisterForm({ prefillName = '', onSuccess, companyId }: Registe
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { name: prefillName, email: '', password: '', confirm: '' },
+    defaultValues: { name: prefillName, phone: '', email: '', password: '', confirm: '' },
   })
 
   const handleGoogle = async () => {
@@ -46,7 +55,7 @@ export function RegisterForm({ prefillName = '', onSuccess, companyId }: Registe
     try {
       setLoading(true)
       setError(null)
-      await signUp(values.email, values.password, values.name, companyId)
+      await signUp(values.email, values.password, values.name, values.phone, companyId)
       onSuccess()
     } catch (e: any) {
       setError(e.message ?? 'Erro ao criar conta.')
@@ -57,7 +66,6 @@ export function RegisterForm({ prefillName = '', onSuccess, companyId }: Registe
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Botão Google */}
       <button
         type="button"
         onClick={handleGoogle}
@@ -94,6 +102,20 @@ export function RegisterForm({ prefillName = '', onSuccess, companyId }: Registe
             <FormItem>
               <FormLabel>Nome</FormLabel>
               <Input placeholder="Seu nome" {...field} />
+              <FormMessage />
+            </FormItem>
+          )} />
+
+          {/* ✅ Campo de telefone com máscara */}
+          <FormField control={form.control} name="phone" render={({ field }) => (
+            <FormItem>
+              <FormLabel>Telefone</FormLabel>
+              <Input
+                type="tel"
+                placeholder="(11) 99999-9999"
+                {...field}
+                onChange={e => field.onChange(maskPhone(e.target.value))}
+              />
               <FormMessage />
             </FormItem>
           )} />

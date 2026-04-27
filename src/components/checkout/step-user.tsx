@@ -14,14 +14,13 @@ import { useAuth } from "@/hooks/useAuth"
 import { supabase } from '@/lib/supabase'
 import { RegisterForm } from "@/components/auth/RegisterForm"
 import { LoginForm } from "@/components/auth/LoginForm"
+import { Phone } from "lucide-react"
 
-// ── Schema completo (não logado) ──────────────────────────────
 const fullSchema = z.object({
   name:  z.string().min(2, 'Preencha seu nome'),
   phone: z.string().min(10, 'Preencha o telefone com DDD'),
 })
 
-// ── Schema só telefone (logado) ───────────────────────────────
 const phoneSchema = z.object({
   phone: z.string().min(10, 'Preencha o telefone com DDD'),
 })
@@ -36,22 +35,33 @@ type Props = {
   companyId?: string
 }
 
+function maskPhone(value: string) {
+  return value
+    .replace(/\D/g, '')
+    .slice(0, 11)
+    .replace(/^(\d{2})(\d)/, '($1) $2')
+    .replace(/(\d{5})(\d{1,4})$/, '$1-$2')
+}
+
 export const StepUser = ({ setStep, requireAuth = false, companyId = '' }: Props) => {
   const { name, phone, setName, setPhone } = useCheckoutStore(state => state)
   const { user, loading: authLoading } = useAuth()
   const { signInWithGoogle, loading: googleLoading, error: googleError } = useGoogleSignIn()
   const [authTab, setAuthTab] = useState<AuthTab>('register')
 
-  // Formulário completo (não logado)
+  // ✅ Telefone salvo no banco
+  const [savedPhone, setSavedPhone] = useState<string | null>(null)
+  // ✅ 'saved' = usando o cadastrado | 'new' = digitando outro
+  const [phoneMode, setPhoneMode] = useState<'saved' | 'new'>('saved')
+
   const fullForm = useForm<FullValues>({
     resolver: zodResolver(fullSchema),
     defaultValues: { name, phone },
   })
 
-  // Formulário só telefone (logado)
   const phoneForm = useForm<PhoneValues>({
     resolver: zodResolver(phoneSchema),
-    defaultValues: { phone },
+    defaultValues: { phone: '' },
   })
 
   useEffect(() => {
@@ -67,22 +77,21 @@ export const StepUser = ({ setStep, requireAuth = false, companyId = '' }: Props
         const resolvedPhone = data?.phone ?? ''
 
         setName(resolvedName)
+
         if (resolvedPhone) {
-          setPhone(resolvedPhone)
-          phoneForm.setValue('phone', resolvedPhone, { shouldValidate: true })
+          setSavedPhone(resolvedPhone)
+          setPhone(resolvedPhone)        // já usa o salvo por padrão
+          setPhoneMode('saved')
+        } else {
+          setPhoneMode('new')            // sem cadastro → já cai no formulário
         }
       })
   }, [user?.id])
 
-const handleGoogle = async () => {
-  await signInWithGoogle()
-  // O redirect acontece automaticamente — esse código nunca executa
-}
-
-  // Após login/cadastro no modo requireAuth, volta para finish
+  const handleGoogle = async () => { await signInWithGoogle() }
   const handleAuthSuccess = () => setStep('finish')
 
-  // ── Modo requireAuth: só exibe abas de auth ───────────────
+  // ── requireAuth ───────────────────────────────────────────
   if (requireAuth) {
     return (
       <div className="flex flex-col gap-4">
@@ -95,15 +104,9 @@ const handleGoogle = async () => {
 
         <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
           {(['register', 'login'] as AuthTab[]).map(t => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => setAuthTab(t)}
+            <button key={t} type="button" onClick={() => setAuthTab(t)}
               className={`flex-1 text-sm py-1.5 rounded-md font-medium transition-colors
-                ${authTab === t
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700'}`}
-            >
+                ${authTab === t ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
               {t === 'register' ? 'Cadastro' : 'Já tenho conta'}
             </button>
           ))}
@@ -111,8 +114,7 @@ const handleGoogle = async () => {
 
         {authTab === 'register'
           ? <RegisterForm prefillName={name} onSuccess={handleAuthSuccess} companyId={companyId} />
-          : <LoginForm onSuccess={handleAuthSuccess} companyId={companyId} />
-        }
+          : <LoginForm onSuccess={handleAuthSuccess} companyId={companyId} />}
       </div>
     )
   }
@@ -121,7 +123,7 @@ const handleGoogle = async () => {
     return <div className="py-8 text-center text-sm text-gray-400">Carregando...</div>
   }
 
-  // ── Logado: só pede o telefone ────────────────────────────
+  // ── Logado ────────────────────────────────────────────────
   if (user) {
     const displayName = user.user_metadata?.full_name ?? user.email ?? ''
 
@@ -131,15 +133,21 @@ const handleGoogle = async () => {
       setStep('delivery')
     }
 
+    const handleUseSaved = () => {
+      if (savedPhone) {
+        setName(displayName)
+        setPhone(savedPhone)
+        setStep('delivery')
+      }
+    }
+
     return (
       <div className="flex flex-col gap-4">
+        {/* Card do usuário */}
         <div className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 flex items-center gap-3">
           {user.user_metadata?.avatar_url && (
-            <img
-              src={user.user_metadata.avatar_url}
-              alt={displayName}
-              className="w-8 h-8 rounded-full shrink-0"
-            />
+            <img src={user.user_metadata.avatar_url} alt={displayName}
+              className="w-8 h-8 rounded-full shrink-0" />
           )}
           <div className="min-w-0">
             <p className="text-sm font-medium text-gray-800 truncate">{displayName}</p>
@@ -147,32 +155,89 @@ const handleGoogle = async () => {
           </div>
         </div>
 
-        <Form {...phoneForm}>
-          <form onSubmit={phoneForm.handleSubmit(onSubmitPhone)} className="flex flex-col gap-4">
-            <FormField control={phoneForm.control} name="phone" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Telefone (WhatsApp)</FormLabel>
-                <Input autoFocus placeholder="(83) 99999-9999" {...field} />
-                <FormMessage />
-              </FormItem>
-            )} />
-            <Button type="submit">Próximo</Button>
-          </form>
-        </Form>
+        {/* ✅ Telefone cadastrado — mesmo padrão do StepAddress */}
+        {savedPhone && (
+          <button
+            type="button"
+            onClick={() => setPhoneMode('saved')}
+            className={`w-full flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition-colors
+              ${phoneMode === 'saved'
+                ? 'border-gray-300 bg-gray-50'
+                : 'border-gray-200 bg-white hover:bg-gray-50'}`}
+          >
+            <Phone size={16} className="text-gray-400 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-gray-500 font-medium">Telefone cadastrado</p>
+              <p className="text-sm text-gray-800">{savedPhone}</p>
+            </div>
+            {/* Radio visual */}
+            <div className={`w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center
+              ${phoneMode === 'saved' ? 'border-gray-800' : 'border-gray-300'}`}>
+              {phoneMode === 'saved' && (
+                <div className="w-2 h-2 rounded-full bg-gray-800" />
+              )}
+            </div>
+          </button>
+        )}
+
+        {/* ✅ Opção: usar outro telefone */}
+        <button
+          type="button"
+          onClick={() => {
+            setPhoneMode('new')
+            setTimeout(() => phoneForm.setFocus('phone'), 50)
+          }}
+          className={`w-full flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition-colors
+            ${phoneMode === 'new'
+              ? 'border-gray-300 bg-gray-50'
+              : 'border-gray-200 bg-white hover:bg-gray-50'}`}
+        >
+          <Phone size={16} className="text-gray-400 shrink-0" />
+          <span className="text-sm text-gray-700 flex-1">
+            {savedPhone ? 'Usar outro telefone' : 'Informar telefone'}
+          </span>
+          <div className={`w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center
+            ${phoneMode === 'new' ? 'border-gray-800' : 'border-gray-300'}`}>
+            {phoneMode === 'new' && (
+              <div className="w-2 h-2 rounded-full bg-gray-800" />
+            )}
+          </div>
+        </button>
+
+        {/* ✅ Formulário só aparece no modo 'new' */}
+        {phoneMode === 'new' && (
+          <Form {...phoneForm}>
+            <form onSubmit={phoneForm.handleSubmit(onSubmitPhone)} className="flex flex-col gap-3">
+              <FormField control={phoneForm.control} name="phone" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Telefone (WhatsApp)</FormLabel>
+                  <Input
+                    autoFocus
+                    placeholder="(83) 99999-9999"
+                    {...field}
+                    onChange={e => field.onChange(maskPhone(e.target.value))}
+                  />
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <Button type="submit">Próximo</Button>
+            </form>
+          </Form>
+        )}
+
+        {/* ✅ Botão Próximo quando usa o salvo */}
+        {phoneMode === 'saved' && (
+          <Button onClick={handleUseSaved}>Próximo</Button>
+        )}
       </div>
     )
   }
 
-  // ── Não logado: Google + formulário completo ──────────────
+  // ── Não logado ────────────────────────────────────────────
   return (
     <div className="flex flex-col gap-4">
-
-      <button
-        type="button"
-        onClick={handleGoogle}
-        disabled={googleLoading}
-        className="flex items-center justify-center gap-3 w-full rounded-xl border-2 border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:border-gray-300 hover:bg-gray-50 transition-colors disabled:opacity-60"
-      >
+      <button type="button" onClick={handleGoogle} disabled={googleLoading}
+        className="flex items-center justify-center gap-3 w-full rounded-xl border-2 border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:border-gray-300 hover:bg-gray-50 transition-colors disabled:opacity-60">
         {googleLoading ? (
           <svg className="w-4 h-4 animate-spin text-gray-400" viewBox="0 0 24 24" fill="none">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -189,9 +254,7 @@ const handleGoogle = async () => {
         {googleLoading ? 'Conectando...' : 'Continuar com Google'}
       </button>
 
-      {googleError && (
-        <p className="text-sm text-red-500 text-center">{googleError}</p>
-      )}
+      {googleError && <p className="text-sm text-red-500 text-center">{googleError}</p>}
 
       <div className="flex items-center gap-3">
         <div className="flex-1 h-px bg-gray-200" />
@@ -216,7 +279,11 @@ const handleGoogle = async () => {
           <FormField control={fullForm.control} name="phone" render={({ field }) => (
             <FormItem>
               <FormLabel>Telefone (WhatsApp)</FormLabel>
-              <Input placeholder="(83) 99999-9999" {...field} />
+              <Input
+                placeholder="(83) 99999-9999"
+                {...field}
+                onChange={e => field.onChange(maskPhone(e.target.value))}
+              />
               <FormMessage />
             </FormItem>
           )} />

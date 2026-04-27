@@ -4,6 +4,7 @@ export async function signUp(
   email: string,
   password: string,
   name: string,
+  phone: string,      // ✅ novo parâmetro
   companyId: string
 ) {
   const { data, error } = await supabase.auth.signUp({ email, password })
@@ -14,7 +15,7 @@ export async function signUp(
 
   const { error: profileError } = await supabase
     .from('customers')
-    .insert({ id: user.id, name, email, company_id: companyId })
+    .insert({ id: user.id, name, email, phone, company_id: companyId }) // ✅ phone incluído
 
   if (profileError) throw profileError
 
