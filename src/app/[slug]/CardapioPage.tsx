@@ -21,12 +21,14 @@ const CardapioPage = ({ companyId, slug, companyName, bannerUrl, logoUrl, minOrd
 
   useEffect(() => {
     setCompany({ id: companyId, name: companyName, slug, bannerUrl, logoUrl, minOrder, isOpen })
-}, [companyId]) // dependências completas
+  }, [companyId])
 
   return (
-    <div className="w-full min-h-screen flex flex-col px-4 pb-4"> {/* removido max-w-2xl daqui */}
+    // ✅ Removido px-4 daqui — o banner no Header agora vai de ponta a ponta
+    <div className="w-full min-h-screen flex flex-col">
       <Header slug={slug} companyId={companyId} />
-      <div className="flex-1 w-full max-w-2xl mx-auto"> {/* max-w só no conteúdo */}
+      {/* ✅ px-4 e max-w apenas no conteúdo, não no banner */}
+      <div className="flex-1 w-full max-w-2xl mx-auto px-4 pb-4">
         <Suspense fallback={<TabsSkeleton />}>
           <ProductSelect companyId={companyId} />
         </Suspense>

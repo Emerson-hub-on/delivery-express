@@ -7,7 +7,6 @@ import { AuthSuccessToast } from "@/components/auth/AuthSucessToast";
 import { Suspense } from "react";
 import { Footer } from "@/components/ui/footer";
 
-
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -29,21 +28,18 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body
-  className="min-h-screen flex flex-col"
-  suppressHydrationWarning
->
-
+      <body className="min-h-screen flex flex-col" suppressHydrationWarning>
+        {/* ✅ forcedTheme="light" garante tema branco sempre */}
         <ThemeProvider
           attribute="class"
-          defaultTheme="system"
-          enableSystem
+          defaultTheme="light"
+          forcedTheme="light"
+          enableSystem={false}
           disableTransitionOnChange
         >
           <main className="flex-1">
             {children}
           </main>
-          
           <Footer />
           <Suspense fallback={null}>
             <AuthSuccessToast />

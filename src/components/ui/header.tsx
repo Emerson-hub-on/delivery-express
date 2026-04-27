@@ -217,46 +217,43 @@ export const Header = ({ slug, companyId }: HeaderProps) => {
                 MOBILE LAYOUT (hidden on desktop)
                 Banner + store card — sem botões flutuantes no topo
             ════════════════════════════════════════════════ */}
-            <div className="md:hidden">
-                {/* Banner — sem botões sobrepostos */}
-                <div className="relative w-full h-52 bg-zinc-200 dark:bg-zinc-800 overflow-hidden">
-                    {company?.bannerUrl && (
-                        <img
-                            src={company.bannerUrl}
-                            alt="Banner da loja"
-                            className="w-full h-full object-cover"
-                        />
-                    )}
-                    {/* Status badge — topo esquerdo */}
-                    <div className="absolute top-3 left-3 z-10">
-                        <span className="inline-flex items-center gap-1.5 text-xs font-medium bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm text-zinc-700 dark:text-zinc-200 rounded-full px-2.5 py-1 shadow-sm">
-                            <span className={`w-1.5 h-1.5 rounded-full ${company?.isOpen ? 'bg-green-500' : 'bg-red-400'}`} />
-                            {company?.isOpen ? 'Aberto' : 'Fechado'}
-                        </span>
-                    </div>
+            {/* Banner mobile — remover dark:bg-zinc-800 */}
+            <div className="relative w-full h-52 bg-zinc-200 overflow-hidden">
+                {company?.bannerUrl && (
+                    <img
+                        src={company.bannerUrl}
+                        alt="Banner da loja"
+                        className="w-full h-full object-cover"
+                    />
+                )}
+                <div className="absolute top-3 left-3 z-10">
+                    <span className="inline-flex items-center gap-1.5 text-xs font-medium bg-white/80 backdrop-blur-sm text-zinc-700 rounded-full px-2.5 py-1 shadow-sm">
+                        <span className={`w-1.5 h-1.5 rounded-full ${company?.isOpen ? 'bg-green-500' : 'bg-red-400'}`} />
+                        {company?.isOpen ? 'Aberto' : 'Fechado'}
+                    </span>
                 </div>
+            </div>
 
-                {/* Store card overlapping banner */}
-                <div className="max-w-2xl mx-auto w-full px-4 -mt-6 z-10 relative pb-5">
-                    <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-md px-4 py-3 flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-3 min-w-0">
-                            <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-zinc-200 dark:border-zinc-700 bg-zinc-100 shrink-0 flex items-center justify-center">
-                                <Logo />
-                            </div>
-                            <div className="min-w-0">
-                                <span className="font-bold text-sm text-zinc-800 dark:text-zinc-100 truncate block">
-                                    {company?.name ?? 'Cardápio'}
+            {/* Store card — remover dark: classes */}
+            <div className="max-w-2xl mx-auto w-full px-4 -mt-6 z-10 relative pb-5">
+                <div className="bg-white rounded-2xl shadow-md px-4 py-3 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-zinc-200 bg-zinc-100 shrink-0 flex items-center justify-center">
+                            <Logo />
+                        </div>
+                        <div className="min-w-0">
+                            <span className="font-bold text-sm text-zinc-800 truncate block">
+                                {company?.name ?? 'Cardápio'}
+                            </span>
+                            {company?.minOrder ? (
+                                <span className="text-xs text-zinc-400">
+                                    Pedido mínimo: R$ {company.minOrder.toFixed(2)}
                                 </span>
-                                {company?.minOrder ? (
-                                    <span className="text-xs text-zinc-400 dark:text-zinc-500">
-                                        Pedido mínimo: R$ {company.minOrder.toFixed(2)}
-                                    </span>
-                                ) : null}
-                            </div>
+                            ) : null}
                         </div>
-                        <div className="shrink-0">
-                            <CartSidebar />
-                        </div>
+                    </div>
+                    <div className="shrink-0">
+                        <CartSidebar />
                     </div>
                 </div>
             </div>
