@@ -7,12 +7,13 @@ import { signOut } from '@/services/auth'
 import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import { AuthModal } from '@/components/auth/AuthModal'
-import { Search, Share2, Menu, X } from 'lucide-react'
+import { X, Menu } from 'lucide-react'
 import { useCompanyStore } from '@/stores/company-store'
 import { getProductsByCompany } from '@/services/product'
 import { Product } from '@/types/product'
 import { useCartStore } from '@/stores/cart-store'
 import { toast } from 'sonner'
+import { BottomNav } from './bottom-nav'
 
 interface HeaderProps {
     slug: string
@@ -106,14 +107,6 @@ export const Header = ({ slug, companyId }: HeaderProps) => {
         setMenuOpen(false)
     }
 
-    const handleShare = () => {
-        if (navigator.share) {
-            navigator.share({ title: company?.name, url: window.location.href })
-        } else {
-            navigator.clipboard.writeText(window.location.href)
-        }
-    }
-
     const handleCloseSearch = () => {
         setSearchOpen(false)
         setSearchQuery('')
@@ -123,9 +116,7 @@ export const Header = ({ slug, companyId }: HeaderProps) => {
         <>
             {/* ═══════════════════════════════════════════════
                 DESKTOP NAVBAR (hidden on mobile)
-                Horizontal bar at the top, like image 2
             ════════════════════════════════════════════════ */}
-            {/* Sticky navbar only */}
             <header className="hidden md:flex w-full h-16 items-center border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 sticky top-0 z-40 shadow-sm">
                 <div className="w-full max-w-7xl mx-auto px-6 flex items-center gap-4">
 
@@ -156,7 +147,6 @@ export const Header = ({ slug, companyId }: HeaderProps) => {
                         </div>
                     </div>
 
-                    {/* Spacer */}
                     <div className="flex-1" />
 
                     {/* Status badge */}
@@ -165,23 +155,7 @@ export const Header = ({ slug, companyId }: HeaderProps) => {
                         {company?.isOpen ? 'Aberto' : 'Fechado'}
                     </span>
 
-                    {/* Search button */}
-                    <button
-                        onClick={() => setSearchOpen(true)}
-                        className="p-2 rounded-lg text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-                    >
-                        <Search size={20} />
-                    </button>
-
-                    {/* Share button */}
-                    <button
-                        onClick={handleShare}
-                        className="p-2 rounded-lg text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-                    >
-                        <Share2 size={20} />
-                    </button>
-
-                    {/* Auth / User — "Entrar" só aparece se não logado; se logado, o hambúrguer já abre o menu */}
+                    {/* Auth */}
                     {!loading && !user && (
                         <button
                             onClick={() => setShowAuth(true)}
@@ -196,7 +170,7 @@ export const Header = ({ slug, companyId }: HeaderProps) => {
                 </div>
             </header>
 
-            {/* Static desktop banner (não acompanha o scroll) */}
+            {/* Static desktop banner */}
             <div className="hidden md:block relative w-full h-64 bg-zinc-200 dark:bg-zinc-800 overflow-hidden mb-6">
                 {company?.bannerUrl && (
                     <img
@@ -241,10 +215,10 @@ export const Header = ({ slug, companyId }: HeaderProps) => {
 
             {/* ═══════════════════════════════════════════════
                 MOBILE LAYOUT (hidden on desktop)
-                Banner + floating buttons + store card below
+                Banner + store card — sem botões flutuantes no topo
             ════════════════════════════════════════════════ */}
             <div className="md:hidden">
-                {/* Banner */}
+                {/* Banner — sem botões sobrepostos */}
                 <div className="relative w-full h-52 bg-zinc-200 dark:bg-zinc-800 overflow-hidden">
                     {company?.bannerUrl && (
                         <img
@@ -253,35 +227,12 @@ export const Header = ({ slug, companyId }: HeaderProps) => {
                             className="w-full h-full object-cover"
                         />
                     )}
-
                     {/* Status badge — topo esquerdo */}
                     <div className="absolute top-3 left-3 z-10">
                         <span className="inline-flex items-center gap-1.5 text-xs font-medium bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm text-zinc-700 dark:text-zinc-200 rounded-full px-2.5 py-1 shadow-sm">
                             <span className={`w-1.5 h-1.5 rounded-full ${company?.isOpen ? 'bg-green-500' : 'bg-red-400'}`} />
                             {company?.isOpen ? 'Aberto' : 'Fechado'}
                         </span>
-                    </div>
-
-                    {/* Floating action buttons — topo direito */}
-                    <div className="absolute top-3 right-3 flex items-center gap-2 z-10">
-                        <button
-                            onClick={() => setSearchOpen(true)}
-                            className="w-9 h-9 flex items-center justify-center rounded-full bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm text-zinc-700 dark:text-zinc-200 hover:bg-white dark:hover:bg-zinc-900 transition-colors shadow-sm"
-                        >
-                            <Search size={16} />
-                        </button>
-                        <button
-                            onClick={handleShare}
-                            className="w-9 h-9 flex items-center justify-center rounded-full bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm text-zinc-700 dark:text-zinc-200 hover:bg-white dark:hover:bg-zinc-900 transition-colors shadow-sm"
-                        >
-                            <Share2 size={16} />
-                        </button>
-                        <button
-                            onClick={() => setMenuOpen(v => !v)}
-                            className="w-9 h-9 flex items-center justify-center rounded-full bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm text-zinc-700 dark:text-zinc-200 hover:bg-white dark:hover:bg-zinc-900 transition-colors shadow-sm"
-                        >
-                            {menuOpen ? <X size={18} /> : <Menu size={18} />}
-                        </button>
                     </div>
                 </div>
 
@@ -308,56 +259,6 @@ export const Header = ({ slug, companyId }: HeaderProps) => {
                         </div>
                     </div>
                 </div>
-
-                {/* Mobile menu drawer */}
-                {menuOpen && (
-                    <div className="fixed top-3 right-3 w-64 bg-white dark:bg-zinc-900 shadow-lg border border-zinc-100 dark:border-zinc-700 rounded-2xl z-50 p-4 flex flex-col gap-4">
-                        {/* Header do drawer com botão fechar */}
-                        <div className="flex items-center justify-between">
-                            <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Menu</span>
-                            <button
-                                onClick={() => setMenuOpen(false)}
-                                className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 transition-colors"
-                            >
-                                <X size={16} />
-                            </button>
-                        </div>
-                        <div className="h-px bg-zinc-100 dark:bg-zinc-700" />
-                        <div className="flex items-center justify-between">
-                            <span className="text-sm text-zinc-600 dark:text-zinc-400">Tema</span>
-                            <ThemeToggle />
-                        </div>
-                        <div className="h-px bg-zinc-100 dark:bg-zinc-700" />
-                        {!loading && (
-                            user ? (
-                                <div className="flex flex-col gap-3">
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-2 h-2 rounded-full bg-green-500" />
-                                        <span className="text-sm text-green-600 font-medium truncate">
-                                            {user.user_metadata?.full_name?.split(' ')[0]
-                                                ?? user.user_metadata?.name?.split(' ')[0]
-                                                ?? user.email?.split('@')[0]}
-                                        </span>
-                                    </div>
-                                    <Link href={`/${slug}/meus-pedidos`} onClick={() => setMenuOpen(false)}
-                                        className="text-sm text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors">
-                                        Meus pedidos
-                                    </Link>
-                                    <button onClick={handleLogout}
-                                        className="text-left text-sm text-red-500 hover:text-red-600 transition-colors">
-                                        Sair
-                                    </button>
-                                </div>
-                            ) : (
-                                <button
-                                    onClick={() => { setShowAuth(true); setMenuOpen(false) }}
-                                    className="text-left text-sm text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors">
-                                    Entrar
-                                </button>
-                            )
-                        )}
-                    </div>
-                )}
             </div>
 
             {/* ═══════════════════════════════════════════════
@@ -390,6 +291,15 @@ export const Header = ({ slug, companyId }: HeaderProps) => {
                     )}
                 </div>
             )}
+
+            {/* BottomNav — mobile only */}
+            <div className="md:hidden">
+                <BottomNav
+                    slug={slug}
+                    companyId={companyId}
+                    onSearchOpen={() => setSearchOpen(true)}
+                />
+            </div>
 
             <AuthModal
                 open={showAuth}
