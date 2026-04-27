@@ -38,7 +38,7 @@ export const BottomNav = ({ slug, companyId, onSearchOpen }: BottomNavProps) => 
         {
             label: 'Início',
             icon: Home,
-            onClick: () => router.push('/'),
+            onClick: () => router.push(`/${slug}`),
         },
         {
             label: 'Buscar',
