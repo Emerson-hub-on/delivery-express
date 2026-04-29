@@ -71,7 +71,7 @@ function FiscalBadge({ product }: { product: Product }) {
       </span>
       {/* Tooltip with details */}
       <div className="pointer-events-none absolute bottom-full left-0 mb-2 z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-        <div className="bg-gray-900 text-white text-xs rounded-lg px-3 py-2 min-w-[160px] shadow-xl">
+        <div className="bg-gray-900 text-white text-xs rounded-lg px-3 py-2 min-w-40 shadow-xl">
           <div className="font-semibold mb-1.5 text-gray-300">Dados Fiscais</div>
           <div className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5">
             {[
@@ -321,7 +321,7 @@ export function InventoryTab({ products, categories, loading }: InventoryTabProp
       {/* Filters bar */}
       <div className="bg-white border border-gray-200 rounded-xl p-4 flex flex-wrap gap-3 items-center">
         {/* Search */}
-        <div className="relative flex-1 min-w-[180px] max-w-xs">
+        <div className="relative flex-1 min-w-45 max-w-xs">
           <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
           </svg>
