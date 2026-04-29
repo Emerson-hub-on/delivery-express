@@ -113,14 +113,14 @@ function ExportMenu({ onExcel }: { onExcel: () => void | Promise<void> }) {
       <button onClick={() => setOpen(o => !o)}
         className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm px-4 py-2 rounded-lg transition-colors font-medium">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-          <polyline points="7 10 12 15 17 10"/>
-          <line x1="12" y1="15" x2="12" y2="3"/>
+          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+          <polyline points="7 10 12 15 17 10" />
+          <line x1="12" y1="15" x2="12" y2="3" />
         </svg>
         Exportar
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
           className={`transition-transform ${open ? 'rotate-180' : ''}`}>
-          <polyline points="6 9 12 15 18 9"/>
+          <polyline points="6 9 12 15 18 9" />
         </svg>
       </button>
       {open && (
@@ -319,11 +319,10 @@ export function InventoryTab({ products, categories, loading }: InventoryTabProp
       </div>
 
       {/* Filters bar */}
-      <div className="bg-white border border-gray-200 rounded-xl p-4 flex flex-wrap gap-3 items-center">
-        {/* Search */}
-        <div className="relative flex-1 min-w-45 max-w-xs">
+      <div className="bg-white border border-gray-200 rounded-xl p-4 flex flex-col sm:flex-row flex-wrap gap-3 items-stretch sm:items-center">
+        <div className="relative flex-1 min-w-0">
           <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
           </svg>
           <input
             type="text"
@@ -333,145 +332,143 @@ export function InventoryTab({ products, categories, loading }: InventoryTabProp
             className="w-full pl-8 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-black"
           />
         </div>
-
-        {/* Category */}
-        <select
-          value={filterCategory}
-          onChange={e => setFilterCategory(e.target.value)}
-          className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black text-gray-600"
-        >
-          <option value="all">Todas categorias</option>
-          {uniqueCategories.map(cat => (
-            <option key={cat} value={cat}>{categoryLabel[cat] ?? cat}</option>
-          ))}
-        </select>
-
-        {/* Fiscal filter */}
-        <select
-          value={filterFiscal}
-          onChange={e => setFilterFiscal(e.target.value as any)}
-          className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black text-gray-600"
-        >
-          <option value="all">Fiscal: todos</option>
-          <option value="complete">Fiscal: completo</option>
-          <option value="incomplete">Fiscal: incompleto</option>
-        </select>
-
-        {/* Stock filter */}
-        <select
-          value={filterStock}
-          onChange={e => setFilterStock(e.target.value as any)}
-          className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black text-gray-600"
-        >
-          <option value="all">Estoque: todos</option>
-          <option value="low">Estoque baixo (≤5)</option>
-          <option value="out">Esgotado</option>
-        </select>
-
-        <div className="ml-auto">
+        <div className="flex flex-wrap gap-2 items-center">
+          <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)}
+            className="flex-1 sm:flex-none border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black text-gray-600">
+            <option value="all">Todas categorias</option>
+            {uniqueCategories.map(cat => (
+              <option key={cat} value={cat}>{categoryLabel[cat] ?? cat}</option>
+            ))}
+          </select>
+          <select value={filterFiscal} onChange={e => setFilterFiscal(e.target.value as any)}
+            className="flex-1 sm:flex-none border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black text-gray-600">
+            <option value="all">Fiscal: todos</option>
+            <option value="complete">Fiscal: completo</option>
+            <option value="incomplete">Fiscal: incompleto</option>
+          </select>
+          <select value={filterStock} onChange={e => setFilterStock(e.target.value as any)}
+            className="flex-1 sm:flex-none border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black text-gray-600">
+            <option value="all">Estoque: todos</option>
+            <option value="low">Estoque baixo (≤5)</option>
+            <option value="out">Esgotado</option>
+          </select>
           <ExportMenu onExcel={handleExcel} />
         </div>
       </div>
 
       {/* Table */}
+      {/* Table — desktop */}
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
         {loading ? (
           <div className="py-16 text-center text-gray-400 text-sm">Carregando produtos...</div>
         ) : filtered.length === 0 ? (
           <div className="py-16 text-center text-gray-400 text-sm">Nenhum produto encontrado.</div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-100 bg-gray-50">
-                  <th className="px-4 py-3 text-left">
-                    <SortButton label="Código" sortKey="id" current={sortKey} dir={sortDir} onSort={handleSort} />
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400">Imagem</th>
-                  <th className="px-4 py-3 text-left">
-                    <SortButton label="Descrição" sortKey="name" current={sortKey} dir={sortDir} onSort={handleSort} />
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400">Unid.</th>
-                  <th className="px-4 py-3 text-left">
-                    <SortButton label="Preço Custo" sortKey="cost_price" current={sortKey} dir={sortDir} onSort={handleSort} />
-                  </th>
-                  <th className="px-4 py-3 text-left">
-                    <SortButton label="Preço Venda" sortKey="price" current={sortKey} dir={sortDir} onSort={handleSort} />
-                  </th>
-                  <th className="px-4 py-3 text-left">
-                    <SortButton label="Margem" sortKey="margin" current={sortKey} dir={sortDir} onSort={handleSort} />
-                  </th>
-                  <th className="px-4 py-3 text-left">
-                    <SortButton label="Estoque" sortKey="stock" current={sortKey} dir={sortDir} onSort={handleSort} />
-                  </th>
-                  <th className="px-4 py-3 text-left">
-                    <SortButton label="Fiscal" sortKey="fiscal" current={sortKey} dir={sortDir} onSort={handleSort} />
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((p, i) => (
-                  <tr
-                    key={p.code}
-                    className={`border-b border-gray-50 hover:bg-gray-50 transition-colors ${i % 2 === 0 ? '' : 'bg-gray-50/30'}`}
-                  >
-                    {/* ID */}
-                    <td className="px-4 py-3 text-gray-400 font-mono text-xs">{p.code}</td>
-
-                    {/* Image */}
-                    <td className="px-4 py-3">
-                      {p.image ? (
-                        <img
-                          src={p.image}
-                          alt={p.name}
-                          className="w-10 h-10 rounded-lg object-cover border border-gray-100"
-                          onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
-                        />
-                      ) : (
-                        <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center text-xs text-gray-300 border border-gray-100">
-                          sem foto
-                        </div>
-                      )}
-                    </td>
-
-                    {/* Name + category */}
-                    <td className="px-4 py-3">
-                      <div className="font-medium text-gray-800">{p.name}</div>
-                      <div className="text-xs text-gray-400 mt-0.5">{categoryLabel[p.category] ?? p.category}</div>
-                    </td>
-
-                    {/* Unit */}
-                    <td className="px-4 py-3">
-                      <span className="inline-block px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs font-mono">
-                        {p.unit_com ?? 'UN'}
-                      </span>
-                    </td>
-
-                    {/* Cost price */}
-                    <td className="px-4 py-3 text-gray-600 tabular-nums">{fmtBRL(p.cost_price)}</td>
-
-                    {/* Sale price */}
-                    <td className="px-4 py-3 text-gray-900 font-medium tabular-nums">{fmtBRL(p.price)}</td>
-
-                    {/* Margin */}
-                    <td className={`px-4 py-3 tabular-nums ${marginColor(p.price, p.cost_price)}`}>
-                      {calcMargin(p.price, p.cost_price)}
-                    </td>
-
-                    {/* Stock */}
-                    <td className="px-4 py-3">
-                      <StockBadge stock={p.stock} />
-                    </td>
-
-                    {/* Fiscal */}
-                    <td className="px-4 py-3">
+          <>
+            {/* ── Mobile: cards ── */}
+            <div className="flex flex-col divide-y divide-gray-100 md:hidden">
+              {filtered.map(p => (
+                <div key={p.code} className="px-4 py-3 flex gap-3 items-start">
+                  {p.image ? (
+                    <img
+                      src={p.image}
+                      alt={p.name}
+                      className="w-12 h-12 rounded-lg object-cover border border-gray-100 shrink-0"
+                      onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
+                    />
+                  ) : (
+                    <div className="w-12 h-12 rounded-lg bg-gray-100 flex items-center justify-center text-[10px] text-gray-300 border border-gray-100 shrink-0">
+                      sem foto
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="font-medium text-gray-800 text-sm truncate">{p.name}</p>
+                        <p className="text-xs text-gray-400">{categoryLabel[p.category] ?? p.category}</p>
+                      </div>
                       <FiscalBadge product={p} />
-                    </td>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5">
+                      <span className="text-sm font-semibold text-gray-900">{fmtBRL(p.price)}</span>
+                      {p.cost_price != null && (
+                        <span className={`text-xs ${marginColor(p.price, p.cost_price)}`}>
+                          Margem: {calcMargin(p.price, p.cost_price)}
+                        </span>
+                      )}
+                      <StockBadge stock={p.stock} />
+                      {p.unit_com && (
+                        <span className="inline-block px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded text-xs font-mono">
+                          {p.unit_com}
+                        </span>
+                      )}
+                      <span className="text-xs text-gray-300 font-mono">#{p.code}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* ── Desktop: tabela ── */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-100 bg-gray-50">
+                    <th className="px-4 py-3 text-left">
+                      <SortButton label="Código" sortKey="id" current={sortKey} dir={sortDir} onSort={handleSort} />
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-400">Imagem</th>
+                    <th className="px-4 py-3 text-left">
+                      <SortButton label="Descrição" sortKey="name" current={sortKey} dir={sortDir} onSort={handleSort} />
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-400">Unid.</th>
+                    <th className="px-4 py-3 text-left">
+                      <SortButton label="Preço Custo" sortKey="cost_price" current={sortKey} dir={sortDir} onSort={handleSort} />
+                    </th>
+                    <th className="px-4 py-3 text-left">
+                      <SortButton label="Preço Venda" sortKey="price" current={sortKey} dir={sortDir} onSort={handleSort} />
+                    </th>
+                    <th className="px-4 py-3 text-left">
+                      <SortButton label="Margem" sortKey="margin" current={sortKey} dir={sortDir} onSort={handleSort} />
+                    </th>
+                    <th className="px-4 py-3 text-left">
+                      <SortButton label="Estoque" sortKey="stock" current={sortKey} dir={sortDir} onSort={handleSort} />
+                    </th>
+                    <th className="px-4 py-3 text-left">
+                      <SortButton label="Fiscal" sortKey="fiscal" current={sortKey} dir={sortDir} onSort={handleSort} />
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {filtered.map((p, i) => (
+                    <tr key={p.code} className={`border-b border-gray-50 hover:bg-gray-50 transition-colors ${i % 2 === 0 ? '' : 'bg-gray-50/30'}`}>
+                      <td className="px-4 py-3 text-gray-400 font-mono text-xs">{p.code}</td>
+                      <td className="px-4 py-3">
+                        {p.image ? (
+                          <img src={p.image} alt={p.name} className="w-10 h-10 rounded-lg object-cover border border-gray-100"
+                            onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                        ) : (
+                          <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center text-xs text-gray-300 border border-gray-100">sem foto</div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="font-medium text-gray-800">{p.name}</div>
+                        <div className="text-xs text-gray-400 mt-0.5">{categoryLabel[p.category] ?? p.category}</div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="inline-block px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs font-mono">{p.unit_com ?? 'UN'}</span>
+                      </td>
+                      <td className="px-4 py-3 text-gray-600 tabular-nums">{fmtBRL(p.cost_price)}</td>
+                      <td className="px-4 py-3 text-gray-900 font-medium tabular-nums">{fmtBRL(p.price)}</td>
+                      <td className={`px-4 py-3 tabular-nums ${marginColor(p.price, p.cost_price)}`}>{calcMargin(p.price, p.cost_price)}</td>
+                      <td className="px-4 py-3"><StockBadge stock={p.stock} /></td>
+                      <td className="px-4 py-3"><FiscalBadge product={p} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
 
