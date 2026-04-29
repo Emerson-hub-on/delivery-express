@@ -138,14 +138,14 @@ function ExportMenu({ onPDF, onExcel }: { onPDF: () => void; onExcel: () => void
       <button onClick={() => setOpen(o => !o)}
         className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm px-4 py-2 rounded-lg transition-colors font-medium">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-          <polyline points="7 10 12 15 17 10"/>
-          <line x1="12" y1="15" x2="12" y2="3"/>
+          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+          <polyline points="7 10 12 15 17 10" />
+          <line x1="12" y1="15" x2="12" y2="3" />
         </svg>
         Exportar
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
           className={`transition-transform ${open ? 'rotate-180' : ''}`}>
-          <polyline points="6 9 12 15 18 9"/>
+          <polyline points="6 9 12 15 18 9" />
         </svg>
       </button>
       {open && (
@@ -338,7 +338,21 @@ function OverviewSection({ orders, categories, products, dateFrom, dateTo, loadi
   const normalized = useMemo(() => orders.map(o => ({ ...o, items: parseItems(o.items) })), [orders])
   const totalRevenue = normalized.reduce((s, o) => s + (o.total ?? 0), 0)
   const avgTicket = normalized.length > 0 ? totalRevenue / normalized.length : 0
+  const [searchCode, setSearchCode] = useState('')
+  const [filterStatus, setFilterStatus] = useState<'all' | 'completed' | 'cancelled' | 'ongoing'>('all')
 
+
+    const filteredNormalized = useMemo(() => {
+    let list = normalized
+    if (searchCode.trim()) {
+      const q = searchCode.trim().replace(/^#/, '')
+      list = list.filter(o => String(o.code ?? o.id).includes(q))
+    }
+    if (filterStatus === 'completed') list = list.filter(o => o.status === 'completed')
+    if (filterStatus === 'cancelled') list = list.filter(o => o.status === 'cancelled')
+    if (filterStatus === 'ongoing') list = list.filter(o => !['completed', 'cancelled'].includes(o.status))
+    return list
+  }, [normalized, searchCode, filterStatus])
   // Mapa produto → categoria (mesmo fix de tipo)
   const productCategoryMap = useMemo(() => {
     const map: Record<string, string> = {}
@@ -372,73 +386,72 @@ function OverviewSection({ orders, categories, products, dateFrom, dateTo, loadi
     return { pieSlices, uncatQty, uncatRevenue }
   }, [normalized, productCategoryMap])
 
+  // Dentro de OverviewSection, substitua o handlePDF existente por este:
   const handlePDF = () => {
+    const tz = { timeZone: 'America/Recife' }
     const dateLabel = dateFrom && dateTo
       ? `${new Date(dateFrom + 'T00:00:00').toLocaleDateString('pt-BR')} a ${new Date(dateTo + 'T00:00:00').toLocaleDateString('pt-BR')}`
       : 'Todos os períodos'
 
-    const catRows = pieSlices.map(s => `
+    const rows = normalized.map(o => {
+      const created = o.created_at ? new Date(o.created_at) : null
+      const dispatched = o.dispatched_at ? new Date(o.dispatched_at) : null
+      const completed = o.completed_at ? new Date(o.completed_at) : null
+      return `
       <tr>
-        <td>${s.label}</td>
-        <td>${fmtBRL(s.value)}</td>
-        <td>${s.pct.toFixed(1)}%</td>
-      </tr>`).join('')
-
-    const uncatRow = uncatQty > 0 ? `
-      <tr style="color:#d97706">
-        <td>Sem categoria (ignorados)</td>
-        <td>${fmtBRL(uncatRevenue)}</td>
-        <td>—</td>
-      </tr>` : ''
+        <td>#${o.code ?? o.id}</td>
+        <td>${fmtBRL(o.total ?? 0)}</td>
+        <td>${created?.toLocaleDateString('pt-BR', tz) ?? '—'}</td>
+        <td>${created?.toLocaleTimeString('pt-BR', tz) ?? '—'}</td>
+        <td>${dispatched?.toLocaleTimeString('pt-BR', tz) ?? '—'}</td>
+        <td>${completed?.toLocaleTimeString('pt-BR', tz) ?? '—'}</td>
+        
+      </tr>`
+    }).join('')
 
     const win = window.open('', '_blank')!
     win.document.write(`
-      <html><head><title>Visão Geral</title>
-      <style>
-        body { font-family: sans-serif; padding: 32px; color: #111; }
-        h2 { font-size: 18px; margin: 0 0 4px; }
-        p.sub { font-size: 12px; color: #6b7280; margin: 0 0 24px; }
-        .cards { display: flex; gap: 16px; margin-bottom: 32px; flex-wrap: wrap; }
-        .card { border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px 24px; min-width: 160px; }
-        .card-label { font-size: 11px; color: #9ca3af; margin-bottom: 4px; }
-        .card-value { font-size: 22px; font-weight: 700; color: #111; }
-        h3 { font-size: 14px; margin: 0 0 12px; color: #374151; }
-        table { width: 100%; border-collapse: collapse; }
-        th { background: #f3f4f6; text-align: left; padding: 10px 14px; font-size: 12px; color: #6b7280; border-bottom: 2px solid #e5e7eb; }
-        td { padding: 10px 14px; border-bottom: 1px solid #e5e7eb; font-size: 13px; }
-        tr:last-child td { border-bottom: none; }
-      </style></head><body>
-      <h2>Visão Geral</h2>
-      <p class="sub">Período: ${dateLabel}</p>
-
-      <div class="cards">
-        <div class="card">
-          <div class="card-label">Total de Pedidos</div>
-          <div class="card-value">${normalized.length.toLocaleString('pt-BR')}</div>
-        </div>
-        <div class="card">
-          <div class="card-label">Receita Total</div>
-          <div class="card-value">${fmtBRL(totalRevenue)}</div>
-        </div>
-        <div class="card">
-          <div class="card-label">Ticket Médio</div>
-          <div class="card-value">${fmtBRL(avgTicket)}</div>
-        </div>
+    <html><head><title>Visão Geral</title>
+    <style>
+      body { font-family: sans-serif; padding: 32px; color: #111; }
+      h2 { font-size: 18px; margin: 0 0 4px; }
+      p.sub { font-size: 12px; color: #6b7280; margin: 0 0 24px; }
+      .cards { display: flex; gap: 16px; margin-bottom: 32px; flex-wrap: wrap; }
+      .card { border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px 24px; min-width: 140px; }
+      .card-label { font-size: 11px; color: #9ca3af; margin-bottom: 4px; }
+      .card-value { font-size: 22px; font-weight: 700; color: #111; }
+      table { width: 100%; border-collapse: collapse; }
+      th { background: #f3f4f6; text-align: left; padding: 10px 14px; font-size: 12px; color: #6b7280; border-bottom: 2px solid #e5e7eb; }
+      td { padding: 10px 14px; border-bottom: 1px solid #e5e7eb; font-size: 13px; }
+      tr:last-child td { border-bottom: none; }
+    </style></head><body>
+    <h2>Visão Geral</h2>
+    <p class="sub">Período: ${dateLabel}</p>
+    <div class="cards">
+      <div class="card">
+        <div class="card-label">Total de Pedidos</div>
+        <div class="card-value">${normalized.length.toLocaleString('pt-BR')}</div>
       </div>
-
-      ${pieSlices.length > 0 ? `
-        <h3>Receita por Categoria</h3>
-        <table>
-          <thead>
-            <tr><th>Categoria</th><th>Receita</th><th>% do Total</th></tr>
-          </thead>
-          <tbody>
-            ${catRows}
-            ${uncatRow}
-          </tbody>
-        </table>
-      ` : ''}
-      </body></html>`)
+      <div class="card">
+        <div class="card-label">Receita Total</div>
+        <div class="card-value">${fmtBRL(totalRevenue)}</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Ticket Médio</div>
+        <div class="card-value">${fmtBRL(avgTicket)}</div>
+      </div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Pedido</th><th>Valor</th><th>Data</th>
+          <th>Horário do Pedido</th><th>Horário do Despacho</th><th>Horário da Conclusão</th><th>Status</th>
+          
+          </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+    </body></html>`)
     win.document.close()
     win.focus()
     setTimeout(() => { win.print(); win.close() }, 400)
@@ -465,6 +478,7 @@ function OverviewSection({ orders, categories, products, dateFrom, dateTo, loadi
         <ExportMenu onPDF={handlePDF} onExcel={handleExcel} />
       </div>
       <div id="overview-content" className="flex flex-col gap-4">
+        {/* StatCards — grid separado */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <StatCard label="Total de Pedidos" value={normalized.length.toLocaleString('pt-BR')} icon="🛒" color="bg-blue-50" />
           <StatCard label="Receita Total" value={fmtBRL(totalRevenue)} icon="💵" color="bg-green-50" />
@@ -472,6 +486,132 @@ function OverviewSection({ orders, categories, products, dateFrom, dateTo, loadi
         </div>
 
         <UncategorizedBanner qty={uncatQty} revenue={uncatRevenue} />
+        {/* Barra de filtros da tabela */}
+        {normalized.length > 0 && (
+          <div className="bg-white border border-gray-200 rounded-xl p-4 flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+            <div className="relative flex-1 min-w-0">
+              <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              </svg>
+              <input
+                type="text"
+                placeholder="Buscar por código do pedido..."
+                value={searchCode}
+                onChange={e => setSearchCode(e.target.value)}
+                className="w-full pl-8 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-black"
+              />
+            </div>
+            <select
+              value={filterStatus}
+              onChange={e => setFilterStatus(e.target.value as any)}
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black text-gray-600"
+            >
+              <option value="all">Todos os status</option>
+              <option value="completed">Finalizado</option>
+              <option value="cancelled">Cancelado</option>
+              <option value="ongoing">Em andamento</option>
+            </select>
+            {(searchCode || filterStatus !== 'all') && (
+              <span className="text-xs text-gray-400 self-center whitespace-nowrap">
+                {filteredNormalized.length} de {normalized.length} pedidos
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Tabela de pedidos — fora do grid, largura total */}
+        {filteredNormalized.length > 0 && (
+          <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+            <div className="px-5 py-3 border-b border-gray-100">
+              <h4 className="text-sm font-medium text-gray-900">Pedidos do período</h4>
+            </div>
+
+            {/* Mobile: cards */}
+            <div className="flex flex-col divide-y divide-gray-100 md:hidden">
+              {filteredNormalized.map((o, i) => (
+                <div key={i} className="px-4 py-3 flex flex-col gap-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-semibold text-gray-900">#{o.code ?? o.id}</span>
+                    <span className="text-sm font-medium text-green-600">{fmtBRL(o.total ?? 0)}</span>
+                  </div>
+                  <span className="text-xs text-gray-400">
+                    🕐 {new Date(o.created_at ?? '').toLocaleString('pt-BR', { timeZone: 'America/Recife' })}
+                  </span>
+                  {o.dispatched_at && (
+                    <span className="text-xs text-blue-400">
+                      🛵 {new Date(o.dispatched_at).toLocaleString('pt-BR', { timeZone: 'America/Recife' })}
+                    </span>
+                  )}
+                  {o.completed_at && (
+                    <span className="text-xs text-green-500">
+                      ✅ {new Date(o.completed_at).toLocaleString('pt-BR', { timeZone: 'America/Recife' })}
+                    </span>
+                  )}
+                  <span className={`text-xs font-medium ${
+                    o.status === 'cancelled' ? 'text-red-500' :
+                    o.status === 'completed' ? 'text-green-600' : 'text-gray-400'
+                  }`}>
+                    {o.status === 'cancelled' ? '❌ Cancelado' : o.status === 'completed' ? '✅ Finalizado' : '🔄 Em andamento'}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop: tabela */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-100">
+                    <th className="text-left px-5 py-3 text-xs font-medium text-gray-400 whitespace-nowrap">Pedido</th>
+                    <th className="text-left px-5 py-3 text-xs font-medium text-gray-400 whitespace-nowrap">Valor</th>
+                    <th className="text-left px-5 py-3 text-xs font-medium text-gray-400 whitespace-nowrap">Data</th>
+                    <th className="text-left px-5 py-3 text-xs font-medium text-gray-400 whitespace-nowrap">Horário do pedido</th>
+                    <th className="text-left px-5 py-3 text-xs font-medium text-gray-400 whitespace-nowrap">Horário do despacho</th>
+                    <th className="text-left px-5 py-3 text-xs font-medium text-gray-400 whitespace-nowrap">Horário da conclusão</th>
+                    <th className="text-left px-5 py-3 text-xs font-medium text-gray-400 whitespace-nowrap">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredNormalized.map((o, i) => {
+                    const created = o.created_at ? new Date(o.created_at) : null
+                    const dispatched = o.dispatched_at ? new Date(o.dispatched_at) : null
+                    const completed = o.completed_at ? new Date(o.completed_at) : null
+                    const locale = 'pt-BR'
+                    const tz = { timeZone: 'America/Recife' }
+                    return (
+                      <tr key={i} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+                        <td className="px-5 py-3 font-medium text-gray-900 whitespace-nowrap">#{o.code ?? o.id}</td>
+                        <td className="px-5 py-3 text-green-600 font-medium whitespace-nowrap">{fmtBRL(o.total ?? 0)}</td>
+                        <td className="px-5 py-3 text-gray-600 whitespace-nowrap">{created?.toLocaleDateString(locale, tz) ?? '—'}</td>
+                        <td className="px-5 py-3 text-gray-600 whitespace-nowrap">{created?.toLocaleTimeString(locale, tz) ?? '—'}</td>
+                        <td className="px-5 py-3 text-blue-500 whitespace-nowrap">{dispatched?.toLocaleTimeString(locale, tz) ?? '—'}</td>
+                        <td className="px-5 py-3 text-green-500 whitespace-nowrap">{completed?.toLocaleTimeString(locale, tz) ?? '—'}</td>
+                        <td className="px-5 py-3 whitespace-nowrap">
+                        {o.status === 'cancelled' ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-600 border border-red-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
+                            Cancelado
+                          </span>
+                        ) : o.status === 'completed' ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
+                            Finalizado
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-50 text-gray-500 border border-gray-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-gray-300" />
+                            Em andamento
+                          </span>
+                        )}
+                      </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
         {pieSlices.length > 0 && (
           <div className="bg-white border border-gray-200 rounded-xl p-5">
@@ -534,18 +674,18 @@ function ProductsSection({ orders: _orders, allOrders, dateFrom, dateTo, loading
     const from = new Date(dateFrom + 'T00:00:00')
     const to = new Date(dateTo + 'T23:59:59')
     const diffDays = (to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24)
-    if (diffDays <= 1)   return 'hours'
-    if (diffDays <= 31)  return 'days'
+    if (diffDays <= 1) return 'hours'
+    if (diffDays <= 31) return 'days'
     if (diffDays <= 180) return 'weeks'
     if (diffDays <= 730) return 'months'
     return 'biannual'
   }, [useCustomRange, period, dateFrom, dateTo])
 
   const chartGranularityLabel: Record<typeof chartGranularity, string> = {
-    hours:    'por hora',
-    days:     'por dia',
-    weeks:    'por semana',
-    months:   'por mês',
+    hours: 'por hora',
+    days: 'por dia',
+    weeks: 'por semana',
+    months: 'por mês',
     biannual: 'por semestre',
   }
 
@@ -582,7 +722,7 @@ function ProductsSection({ orders: _orders, allOrders, dateFrom, dateTo, loading
     // ── Período customizado ───────────────────────────────────
     if (!dateFrom || !dateTo) return []
     const from = new Date(dateFrom + 'T00:00:00')
-    const to   = new Date(dateTo   + 'T23:59:59')
+    const to = new Date(dateTo + 'T23:59:59')
 
     if (chartGranularity === 'hours') {
       const hours = Array.from({ length: 24 }, (_, i) => ({ label: `${i}h`, value: 0 }))
@@ -621,7 +761,7 @@ function ProductsSection({ orders: _orders, allOrders, dateFrom, dateTo, loading
         const monday = new Date(d)
         monday.setDate(d.getDate() - dow)
         const key = monday.toISOString().slice(0, 10)
-        const label = `${String(monday.getDate()).padStart(2,'0')}/${String(monday.getMonth()+1).padStart(2,'0')}`
+        const label = `${String(monday.getDate()).padStart(2, '0')}/${String(monday.getMonth() + 1).padStart(2, '0')}`
         if (!map[key]) map[key] = { label, value: 0 }
         map[key].value++
       })
@@ -635,7 +775,7 @@ function ProductsSection({ orders: _orders, allOrders, dateFrom, dateTo, loading
       const cur = new Date(from.getFullYear(), from.getMonth(), 1)
       const end = new Date(to.getFullYear(), to.getMonth(), 1)
       while (cur <= end) {
-        const key = `${cur.getFullYear()}-${String(cur.getMonth()+1).padStart(2,'0')}`
+        const key = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}`
         map[key] = 0
         cur.setMonth(cur.getMonth() + 1)
       }
@@ -643,9 +783,9 @@ function ProductsSection({ orders: _orders, allOrders, dateFrom, dateTo, loading
         const key = (o.created_at ?? '').slice(0, 7)
         if (key in map) map[key]++
       })
-      const MONTH_LABELS = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
+      const MONTH_LABELS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
       return Object.entries(map).map(([key, value]) => ({
-        label: MONTH_LABELS[parseInt(key.slice(5,7)) - 1],
+        label: MONTH_LABELS[parseInt(key.slice(5, 7)) - 1],
         value,
       }))
     }
@@ -673,42 +813,61 @@ function ProductsSection({ orders: _orders, allOrders, dateFrom, dateTo, loading
 
   const PERIOD_LABELS: Record<ProductPeriod, string> = { day: 'Hoje', week: 'Última semana', month: 'Este mês' }
 
+  // Dentro de ProductsSection, substitua o handlePDF por este:
   const handlePDF = () => {
     const PERIOD_LABEL_MAP: Record<ProductPeriod, string> = { day: 'Hoje', week: 'Última semana', month: 'Este mês' }
+    const dateLabel = useCustomRange && dateFrom && dateTo
+      ? `${new Date(dateFrom + 'T00:00:00').toLocaleDateString('pt-BR')} a ${new Date(dateTo + 'T00:00:00').toLocaleDateString('pt-BR')}`
+      : PERIOD_LABEL_MAP[period]
+
     const rows = topProducts.map((p, i) => `
-      <tr>
-        <td class="pos">${i + 1}</td>
-        <td>${p.name}</td>
-        <td>${p.qty}</td>
-        <td>${fmtBRL(p.revenue)}</td>
-      </tr>`).join('')
+    <tr>
+      <td class="pos">${i + 1}</td>
+      <td>${p.name}</td>
+      <td>${p.qty}</td>
+      <td>${fmtBRL(p.revenue)}</td>
+    </tr>`).join('')
+
     const win = window.open('', '_blank')!
     win.document.write(`
-      <html><head><title>Produtos mais vendidos</title>
-      <style>
-        body { font-family: sans-serif; padding: 32px; color: #111; }
-        h2 { font-size: 18px; margin: 0 0 4px; }
-        p.sub { font-size: 12px; color: #6b7280; margin: 0 0 24px; }
-        table { width: 100%; border-collapse: collapse; }
-        th { background: #f3f4f6; text-align: left; padding: 10px 14px; font-size: 12px; color: #6b7280; border-bottom: 2px solid #e5e7eb; }
-        td { padding: 10px 14px; border-bottom: 1px solid #e5e7eb; font-size: 13px; }
-        tr:last-child td { border-bottom: none; }
-        td.pos { color: #9ca3af; font-weight: 700; width: 32px; }
-      </style></head><body>
-      <h2>Produtos mais vendidos</h2>
-      <p class="sub">Período: ${PERIOD_LABEL_MAP[period]}</p>
-      <table>
-        <thead><tr><th>#</th><th>Produto</th><th>Quantidade</th><th>Receita</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-      </body></html>`)
+    <html><head><title>Produtos mais vendidos</title>
+    <style>
+      body { font-family: sans-serif; padding: 32px; color: #111; }
+      h2 { font-size: 18px; margin: 0 0 4px; }
+      p.sub { font-size: 12px; color: #6b7280; margin: 0 0 24px; }
+      table { width: 100%; border-collapse: collapse; }
+      th { background: #f3f4f6; text-align: left; padding: 10px 14px; font-size: 12px; color: #6b7280; border-bottom: 2px solid #e5e7eb; }
+      td { padding: 10px 14px; border-bottom: 1px solid #e5e7eb; font-size: 13px; }
+      tr:last-child td { border-bottom: none; }
+      td.pos { color: #9ca3af; font-weight: 700; width: 32px; }
+    </style></head><body>
+    <h2>Produtos mais vendidos</h2>
+    <p class="sub">Período: ${dateLabel}</p>
+    <table>
+      <thead><tr><th>#</th><th>Produto</th><th>Quantidade</th><th>Receita</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    </body></html>`)
     win.document.close()
     win.focus()
     setTimeout(() => { win.print(); win.close() }, 400)
   }
-  const handleExcel = () => exportXLSX('produtos-mais-vendidos',
-    ['Posição', 'Produto', 'Quantidade', 'Receita'],
-    topProducts.map((p, i) => [i + 1, p.name, p.qty, fmtBRL(p.revenue)])
+  const handleExcel = () => exportXLSX('visao-geral',
+    ['Pedido', 'Valor', 'Data', 'Horário Pedido', 'Horário Despacho', 'Horário Conclusão'],
+    normalized.map(o => {
+      const tz = { timeZone: 'America/Recife' }
+      const created = o.created_at ? new Date(o.created_at) : null
+      const dispatched = o.dispatched_at ? new Date(o.dispatched_at) : null
+      const completed = o.completed_at ? new Date(o.completed_at) : null
+      return [
+        `#${o.code ?? o.id}`,
+        fmtBRL(o.total ?? 0),
+        created?.toLocaleDateString('pt-BR', tz) ?? '—',
+        created?.toLocaleTimeString('pt-BR', tz) ?? '—',
+        dispatched?.toLocaleTimeString('pt-BR', tz) ?? '—',
+        completed?.toLocaleTimeString('pt-BR', tz) ?? '—',
+      ]
+    })
   )
 
   return (
@@ -947,11 +1106,11 @@ export function ReportsTab(props: ReportsTabProps) {
 
   return (
     <div className="mt-6">
-      {subTab === 'overview'   && <OverviewSection   {...props} />}
-      {subTab === 'products'   && <ProductsSection   {...props} />}
+      {subTab === 'overview' && <OverviewSection   {...props} />}
+      {subTab === 'products' && <ProductsSection   {...props} />}
       {subTab === 'categories' && <CategoriesSection {...props} />}
-      {subTab === 'inventory'  && <InventoryTab     {...props} />}
-      
+      {subTab === 'inventory' && <InventoryTab     {...props} />}
+
     </div>
   )
 }
