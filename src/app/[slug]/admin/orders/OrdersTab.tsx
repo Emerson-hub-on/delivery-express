@@ -579,32 +579,39 @@ function OrderCard({
           )}
 
           <div className="bg-white border border-gray-100 rounded-lg px-3 py-2.5">
-            <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-1">Pagamento</p>
-            <div className="flex items-center justify-between">
-              <div className="flex flex-col gap-1">
-                <p className="text-sm font-medium text-gray-800">{getPaymentLabel(order.payment_method)}</p>
-                {order.payment_method === 'dinheiro' && (
-                  <span className="text-xs text-gray-500">
-                    {order.change === null || order.change === undefined
-                      ? '💵 Pagamento na entrega (dinheiro)'
-                      : order.change === 0
-                        ? '💵 Sem troco (valor exato)'
-                        : `💵 Troco para: R$ ${fmt((order.change ?? 0) + (order.total ?? 0))} — Troco: R$ ${fmt(order.change)}`}
-                  </span>
-                )}
-                {order.payment_method === 'pix' && order.status === 'confirmed' && (
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border bg-green-50 text-green-700 border-green-200 w-fit">
-                    <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
-                    ✓ Pagamento confirmado
-                  </span>
-                )}
-              </div>
-              <div className="text-right">
-                <p className="text-xs text-gray-500">Total do pedido:</p>
-                <span className="text-sm font-medium text-green-600">R$ {fmt(order.total)}</span>
-              </div>
+          <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-1">Pagamento</p>
+          <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-1">
+              <p className="text-sm font-medium text-gray-800">{getPaymentLabel(order.payment_method)}</p>
+
+              {order.status === 'confirmed' && order.payment_method === 'pix' ? (
+                <span className="inline-flex items-center gap-1.5 text-xs font-medium text-green-600 mt-0.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                  Pago online
+                </span>
+              ) : !['completed', 'cancelled'].includes(order.status) ? (
+                <span className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-400 mt-0.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-gray-300" />
+                  Cobrar do cliente
+                </span>
+              ) : null}
+
+              {order.payment_method === 'dinheiro' && (
+                <span className="text-xs text-gray-500">
+                  {order.change === null || order.change === undefined
+                    ? '💵 Pagamento na entrega (dinheiro)'
+                    : order.change === 0
+                      ? '💵 Sem troco (valor exato)'
+                      : `💵 Troco para: R$ ${fmt((order.change ?? 0) + (order.total ?? 0))} — Troco: R$ ${fmt(order.change)}`}
+                </span>
+              )}
+            </div>
+            <div className="text-right">
+              <p className="text-xs text-gray-500">Total do pedido:</p>
+              <span className="text-sm font-medium text-green-600">R$ {fmt(order.total)}</span>
             </div>
           </div>
+        </div>
         </div>
       )}
     </div>

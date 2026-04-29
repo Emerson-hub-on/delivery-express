@@ -44,7 +44,7 @@ export const getProductsByCategory = async (category: string): Promise<Product[]
 }
 
 export const createProduct = async (
-  product: Omit<Product, 'id'>
+  product: Omit<Product, 'id' | 'code'>
 ): Promise<Product> => {
   const company_id = await getCompanyId()
 
@@ -60,7 +60,7 @@ export const createProduct = async (
 
 export const updateProduct = async (
   id: number,
-  product: Partial<Omit<Product, 'id'>>
+  product: Partial<Omit<Product, 'id' | 'code'>>
 ): Promise<Product> => {
   const { data, error } = await supabase
     .from('products')
@@ -101,6 +101,20 @@ export const checkProductHasOrders = async (productId: number): Promise<number> 
  * Arquiva o produto: marca como inativo em vez de deletar.
  * O produto some do cardápio mas o histórico de pedidos fica intacto.
  */
+export const getProductByCode = async (
+  companyId: string,
+  code: number
+): Promise<Product | null> => {
+  const { data, error } = await supabase
+    .from('products')
+    .select('*')
+    .eq('company_id', companyId)
+    .eq('code', code)
+    .single()
+
+  if (error) throw new Error(error.message)
+  return data
+}
 export const archiveProduct = async (id: number): Promise<Product> => {
   const { data, error } = await supabase
     .from('products')

@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { ProductForm } from './ProductForm'
 import { ProductList } from './ProductList'
 
-const EMPTY_PRODUCT: Omit<Product, 'id'> = {
+const EMPTY_PRODUCT: Omit<Product, 'id' | 'code'> = {
   name: '',
   category: '',
   image: '',
@@ -50,7 +50,7 @@ export function ProductsTab({
   onError,
   onGoToCategories,
 }: ProductsTabProps) {
-  const [form, setForm] = useState<Omit<Product, 'id'>>({
+  const [form, setForm] = useState<Omit<Product, 'id' | 'code'>>({
     ...EMPTY_PRODUCT,
     category: categories[0]?.name ?? '',
   })
@@ -68,7 +68,7 @@ export function ProductsTab({
   const [deleteChecking, setDeleteChecking] = useState(false)
 
   const handleFieldChange = (
-    field: keyof Omit<Product, 'id'>,
+    field: keyof Omit<Product, 'id' | 'code'>,
     value: string | number | boolean | null
   ) => {
     setForm(f => ({ ...f, [field]: value }))
@@ -108,7 +108,7 @@ export function ProductsTab({
     if (form.cest && !/^\d{7}$/.test(form.cest))
       return onError('CEST deve ter exatamente 7 dígitos numéricos.')
 
-    const payload: Omit<Product, 'id'> = {
+    const payload: Omit<Product, 'id' | 'code'> = {
       ...form,
       ncm: form.ncm || undefined,
       cest: form.cest || undefined,
@@ -135,7 +135,7 @@ export function ProductsTab({
   }
 
   const handleEdit = (product: Product) => {
-    const { id, ...rest } = product
+    const { id, code, ...rest } = product
     setForm({ ...EMPTY_PRODUCT, ...rest })
     setEditingId(id)
     setShowForm(true)

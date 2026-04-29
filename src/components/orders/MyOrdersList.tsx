@@ -1,5 +1,5 @@
 'use client'
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useMyOrders } from '@/hooks/Usemyorders'
 import { useCustomerAddress, Address } from '@/hooks/useCustomerAddress'
 import { Order } from '@/types/product'
@@ -406,8 +406,9 @@ function OrderCard({ order, onCancel, cancelling }: OrderCardProps) {
   const isPaid        = order.payment_method === 'pix' && order.status === 'confirmed'
 
   const handleCancelClick    = (e: React.MouseEvent) => { e.stopPropagation(); setConfirmingCancel(true)  }
-  const handleConfirmCancel  = (e: React.MouseEvent) => { e.stopPropagation(); onCancel(order.id)        }
+  const handleConfirmCancel  = (e: React.MouseEvent) => { e.stopPropagation(); setConfirmingCancel(false); onCancel(order.id) }
   const handleDismissCancel  = (e: React.MouseEvent) => { e.stopPropagation(); setConfirmingCancel(false) }
+
 
   return (
     <div
@@ -418,7 +419,7 @@ function OrderCard({ order, onCancel, cancelling }: OrderCardProps) {
       <div className="flex items-start justify-between gap-3 mb-4">
         <div>
           <p className="text-xs text-gray-400 mb-0.5">{formatDate(order.created_at)}</p>
-          <p className="text-sm font-semibold text-gray-900">#{order.id}</p>
+          <p className="text-sm font-semibold text-gray-900">#{order.code ?? order.id}</p>
           <div className="flex items-center gap-2 flex-wrap">
                   {order.delivery_type === 'delivery' && order.delivery_pin && (
               <div
@@ -495,15 +496,26 @@ function OrderCard({ order, onCancel, cancelling }: OrderCardProps) {
 
       {/* Status de pagamento */}
       {order.payment_method && (
-        <div className="flex items-center gap-2">
-          {isPaid ? (
+        <div className="flex flex-col gap-1">
+          {order.payment_status === 'paid' || (order.payment_method === 'pix' && order.status === 'confirmed') ? (
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border bg-green-50 text-green-700 border-green-200">
               <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
-              ✓ Pagamento confirmado
+              ✓ Pago · {getPaymentLabel(order.payment_method)}
             </span>
           ) : (
-            <span className={`text-xs font-medium ${isPaymentPending(order.payment_method) ? 'text-red-500' : 'text-gray-500'}`}>
-              {getPaymentLabel(order.payment_method)}
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-gray-300" />
+              {order.delivery_type === 'pickup' ? 'Pagar na retirada' : 'Pagar na entrega'} · {getPaymentLabel(order.payment_method)}
+            </span>
+          )}
+
+          {order.payment_method === 'dinheiro' && (
+            <span className="text-xs text-gray-500 pl-1">
+              {order.change === null || order.change === undefined
+                ? '💵 Pagamento em dinheiro'
+                : order.change === 0
+                  ? '💵 Sem troco (valor exato)'
+                  : `💵 Troco para: ${((order.change ?? 0) + (order.total ?? 0)).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} — Troco: ${(order.change ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`}
             </span>
           )}
         </div>

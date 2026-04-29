@@ -4,14 +4,14 @@ import { Product, CategoryItem, ICMS_CSOSN, PIS_COFINS_CST, UnitCom } from '@/ty
 import { AddonSection } from '@/components/products/AddonSection'
 
 interface ProductFormProps {
-  form: Omit<Product, 'id'>
+  form: Omit<Product, 'id' | 'code'>
   editingId: number | null
   categories: CategoryItem[]
   loadingCats: boolean
   saving: boolean
   uploading: boolean
   imagePreview: string | null
-  onFieldChange: (field: keyof Omit<Product, 'id'>, value: string | number | boolean | null) => void
+  onFieldChange: (field: keyof Omit<Product, 'id' | 'code'>, value: string | number | boolean | null) => void
   onImageChange: (e: React.ChangeEvent<HTMLInputElement>) => void
   onSubmit: () => void
   onCancel: () => void

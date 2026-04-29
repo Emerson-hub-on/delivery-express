@@ -212,7 +212,7 @@ export function InventoryTab({ products, categories, loading }: InventoryTabProp
       const q = search.toLowerCase()
       list = list.filter(p =>
         p.name.toLowerCase().includes(q) ||
-        String(p.id).includes(q) ||
+        String(p.code).includes(q) ||
         (p.ncm ?? '').includes(q) ||
         (p.ean ?? '').includes(q)
       )
@@ -230,7 +230,7 @@ export function InventoryTab({ products, categories, loading }: InventoryTabProp
 
     list.sort((a, b) => {
       let va: any, vb: any
-      if (sortKey === 'id') { va = a.id; vb = b.id }
+      if (sortKey === 'id') { va = a.code; vb = b.code }
       else if (sortKey === 'name') { va = a.name.toLowerCase(); vb = b.name.toLowerCase() }
       else if (sortKey === 'price') { va = a.price; vb = b.price }
       else if (sortKey === 'cost_price') { va = a.cost_price ?? -1; vb = b.cost_price ?? -1 }
@@ -385,7 +385,7 @@ export function InventoryTab({ products, categories, loading }: InventoryTabProp
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50">
                   <th className="px-4 py-3 text-left">
-                    <SortButton label="#" sortKey="id" current={sortKey} dir={sortDir} onSort={handleSort} />
+                    <SortButton label="Código" sortKey="id" current={sortKey} dir={sortDir} onSort={handleSort} />
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-400">Imagem</th>
                   <th className="px-4 py-3 text-left">
@@ -412,11 +412,11 @@ export function InventoryTab({ products, categories, loading }: InventoryTabProp
               <tbody>
                 {filtered.map((p, i) => (
                   <tr
-                    key={p.id}
+                    key={p.code}
                     className={`border-b border-gray-50 hover:bg-gray-50 transition-colors ${i % 2 === 0 ? '' : 'bg-gray-50/30'}`}
                   >
                     {/* ID */}
-                    <td className="px-4 py-3 text-gray-400 font-mono text-xs">{p.id}</td>
+                    <td className="px-4 py-3 text-gray-400 font-mono text-xs">{p.code}</td>
 
                     {/* Image */}
                     <td className="px-4 py-3">

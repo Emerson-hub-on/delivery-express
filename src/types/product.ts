@@ -30,6 +30,7 @@ export type PIS_COFINS_CST =
 
 export type Product = {
   id: number
+  code: number
   category: Category
   name: string
   image: string
@@ -129,6 +130,7 @@ export type Order = {
   address?: OrderAddress | null
   delivery_type?: 'delivery' | 'pickup' | null
   payment_method?: string | null
+  payment_status?: string | null
   motoboy_id?: string | null
   dispatched_at?: string | null
   completed_at?: string | null

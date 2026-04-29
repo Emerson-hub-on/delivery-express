@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Order } from '@/types/product'
 import { useAuth } from '@/hooks/useAuth'
+import { toast } from 'sonner'
 
 export function useMyOrders() {
   const { user } = useAuth()
@@ -103,9 +104,6 @@ export function useMyOrders() {
           })
 
           const refundData = await refundRes.json()
-
-          // Se erro de comunicação temporária, cancela mesmo assim
-          // O MP processa o estorno de forma assíncrona nesses casos
           if (!refundRes.ok) {
             const isCommunicationError =
               refundData.error?.includes('communication_error') ||
@@ -126,16 +124,17 @@ export function useMyOrders() {
           .update({ status: 'cancelled' })
           .eq('id', orderId)
           .eq('customer_id', user?.id)
-          .eq('status', isPaidOnline ? 'confirmed' : 'pending')
+          .in('status', ['pending', 'confirmed'])
           .select()
-          .single()
+          .maybeSingle()
 
         if (updateError) throw new Error(updateError.message)
-        if (!data) throw new Error('Pedido não encontrado ou não pode ser cancelado.')
-
-        setOrders(prev =>
-          prev.map(o => (o.id === orderId ? (data as Order) : o))
-        )
+        if (data) {
+          setOrders(prev =>
+            prev.map(o => (o.id === orderId ? (data as Order) : o))
+          )
+        }
+        toast.success('Pedido cancelado com sucesso')
       } catch (e: any) {
         setError(e.message)
       } finally {
