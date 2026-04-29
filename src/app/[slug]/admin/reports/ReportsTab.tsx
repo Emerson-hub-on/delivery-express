@@ -520,6 +520,8 @@ function OverviewSection({ orders, categories, products, dateFrom, dateTo, loadi
         )}
 
         {/* Tabela de pedidos — fora do grid, largura total */}
+        {!filteredNormalized.length && 
+            <p className='text-center'>Nenhum pedido encontrado!</p>}
         {filteredNormalized.length > 0 && (
           <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
             <div className="px-5 py-3 border-b border-gray-100">
