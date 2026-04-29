@@ -36,6 +36,9 @@ export type Product = {
   price: number
   description?: string
   active?: boolean
+  stock?: number | null
+  cost_price?: number | null  // Preço de custo
+  ean?: string | null 
 
   // ── Campos fiscais (NFC-e / NF-e) ─────────────────────────
 

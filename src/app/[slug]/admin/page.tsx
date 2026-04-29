@@ -71,7 +71,7 @@ export default function AdminPage() {
   const [loadingOrders, setLoadingOrders] = useState(false)
   const [dateFrom, setDateFrom] = useState(todayLocalISO)
   const [dateTo, setDateTo] = useState(todayLocalISO)
-  const [reportSubTab, setReportSubTab] = useState<'overview' | 'products' | 'categories'>('overview')
+  const [reportSubTab, setReportSubTab] = useState<'overview' | 'products' | 'categories' | 'inventory'>('overview')
 
   const [motoboys, setMotoboys] = useState<Motoboy[]>([])
   const [loadingMotoboys, setLoadingMotoboys] = useState(false)

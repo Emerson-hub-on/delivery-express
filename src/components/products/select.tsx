@@ -167,7 +167,7 @@ export const ProductSelect = ({ companyId }: Props) => {
         </div>
       )}
 
-      {loading && <p>Carregando...</p>}
+      {loading && <p>Carregando informações...</p>}
 
       {!loading && (
         <>

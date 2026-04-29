@@ -30,12 +30,10 @@ export function AddonSection({ productId }: Props) {
   const [groups, setGroups] = useState<AddonGroup[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-
   const [showGroupForm, setShowGroupForm] = useState(false)
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null)
   const [groupForm, setGroupForm] = useState({ name: '', min_select: 0, max_select: '' as string | number })
   const [savingGroup, setSavingGroup] = useState(false)
-
   const [editingItemGroupId, setEditingItemGroupId] = useState<string | null>(null)
   const [editingItemId, setEditingItemId] = useState<string | null>(null)
   const [itemForm, setItemForm] = useState(EMPTY_ITEM)

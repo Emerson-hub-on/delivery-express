@@ -24,10 +24,8 @@ const CardapioPage = ({ companyId, slug, companyName, bannerUrl, logoUrl, minOrd
   }, [companyId])
 
   return (
-    // ✅ Removido px-4 daqui — o banner no Header agora vai de ponta a ponta
     <div className="w-full min-h-screen flex flex-col">
       <Header slug={slug} companyId={companyId} />
-      {/* ✅ px-4 e max-w apenas no conteúdo, não no banner */}
       <div className="flex-1 w-full max-w-2xl mx-auto px-4 pb-4">
         <Suspense fallback={<TabsSkeleton />}>
           <ProductSelect companyId={companyId} />

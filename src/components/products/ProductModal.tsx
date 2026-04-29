@@ -19,8 +19,6 @@ export function ProductModal({ product, onClose }: Props) {
   const { addToCart } = useCartStore()
   const [groups, setGroups] = useState<AddonGroup[]>([])
   const [loading, setLoading] = useState(true)
-
-  // qty por addon item: { [itemId]: number }
   const [addonQtys, setAddonQtys] = useState<Record<string, number>>({})
   const [observation, setObservation] = useState('')
   const [qty, setQty] = useState(1)
@@ -90,7 +88,13 @@ export function ProductModal({ product, onClose }: Props) {
   const handleAdd = () => {
     if (!canAdd) return
     addToCart(product, qty, selectedAddons, observation)
-    toast.success('Adicionado ao carrinho!', { description: product.name })
+    toast.success('Adicionado ao carrinho!', {
+      description: product.name,
+      action: {
+        label: 'Ver carrinho',
+        onClick: () => window.dispatchEvent(new Event('open-cart')),
+      },
+    })
     onClose()
   }
 

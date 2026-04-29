@@ -11,7 +11,7 @@ interface ProductFormProps {
   saving: boolean
   uploading: boolean
   imagePreview: string | null
-  onFieldChange: (field: keyof Omit<Product, 'id'>, value: string | number | boolean) => void
+  onFieldChange: (field: keyof Omit<Product, 'id'>, value: string | number | boolean | null) => void
   onImageChange: (e: React.ChangeEvent<HTMLInputElement>) => void
   onSubmit: () => void
   onCancel: () => void
@@ -174,8 +174,36 @@ export function ProductForm({
             <button onClick={onGoToCategories} className="underline hover:text-gray-600">Categorias</button>
           </p>
         </div>
+        {/* EAN */}
+        <div>
+          <FieldLabel>EAN / Código de barras</FieldLabel>
+          <input
+            type="text"
+            placeholder="Ex: 7891234567890"
+            maxLength={14}
+            value={form.ean ?? ''}
+            onChange={e => onFieldChange('ean', e.target.value.replace(/\D/g, '').slice(0, 14) || null)}
+            className={inputCls}
+          />
+          <p className="text-xs text-gray-400 mt-1">Opcional — EAN-8, EAN-13 ou EAN-14</p>
+        </div>
 
-        {/* Preço */}
+        {/* Preço de custo */}
+        <div>
+          <FieldLabel>Preço de custo (R$)</FieldLabel>
+          <input
+            type="number"
+            min={0}
+            step="0.01"
+            placeholder="Ex: 12.50"
+            value={form.cost_price ?? ''}
+            onChange={e => onFieldChange('cost_price', e.target.value === '' ? null : Number(e.target.value))}
+            className={inputCls}
+          />
+          <p className="text-xs text-gray-400 mt-1">Opcional — usado para calcular margem</p>
+        </div>
+
+        {/* Preço de venda */}
         <div>
           <FieldLabel required>Preço (R$)</FieldLabel>
           <input
@@ -199,23 +227,24 @@ export function ProductForm({
             onChange={e => onFieldChange('description', e.target.value)}
             className={inputCls}
           />
-        </div>
-
-        {/* Ativo */}
-        <div className="sm:col-span-2 flex items-center gap-2">
-          <input
-            id="active-toggle"
-            type="checkbox"
-            checked={form.active ?? true}
-            onChange={e => onFieldChange('active', e.target.checked)}
-            className="w-4 h-4 rounded border-gray-300 accent-black"
-          />
-          <label htmlFor="active-toggle" className="text-sm text-gray-600 select-none cursor-pointer">
-            Produto ativo (visível no cardápio)
-          </label>
-        </div>
+        </div>    
       </div>
       {editingId !== null && <AddonSection productId={editingId} />}
+
+      {/* Estoque */}
+      <div>
+        <FieldLabel>Estoque</FieldLabel>
+        <input
+          type="number"
+          min={0}
+          step="1"
+          placeholder="Deixe vazio para não controlar"
+          value={form.stock ?? ''}
+          onChange={e => onFieldChange('stock', e.target.value === '' ? null : Number(e.target.value))}
+          className={inputCls}
+        />
+        <p className="text-xs text-gray-400 mt-1">Deixe vazio para não controlar estoque</p>
+      </div>
 
       {/* ── Seção Fiscal (colapsável) ────────────────────────── */}
       <div className="mt-6 border border-gray-100 rounded-xl overflow-hidden">

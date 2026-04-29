@@ -69,7 +69,7 @@ export function ProductsTab({
 
   const handleFieldChange = (
     field: keyof Omit<Product, 'id'>,
-    value: string | number | boolean
+    value: string | number | boolean | null
   ) => {
     setForm(f => ({ ...f, [field]: value }))
   }
@@ -208,6 +208,15 @@ export function ProductsTab({
     setShowForm(false)
     setImagePreview(null)
   }
+  const handleToggleActive = async (id: number, active: boolean) => {
+  try {
+    onError(null)
+    const updated = await updateProduct(id, { active })
+    setProducts(prev => prev.map(p => p.id === id ? updated : p))
+  } catch (e: any) {
+    onError(e.message)
+  }
+}
 
   if (loading) {
     return <div className="text-center py-16 text-gray-400 text-sm">Carregando produtos...</div>
@@ -237,8 +246,8 @@ export function ProductsTab({
         categories={categories}
         onEdit={handleEdit}
         onDelete={handleDeleteRequest}
-        onActivate={handleActivate}
         deletingId={deleteChecking ? -1 : null}
+        onToggleActive={handleToggleActive}
       />
 
       {/* ── Modal de confirmação ─────────────────────────────── */}

@@ -1,6 +1,8 @@
 'use client'
 import { useState, useMemo } from 'react'
 import { Order, CategoryItem, Product } from '@/types/product'
+import { InventoryTab } from './InventoryTab'
+
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -35,7 +37,7 @@ function startOfMonthISO() {
 
 // ─── types ───────────────────────────────────────────────────────────────────
 
-export type ReportSubTab = 'overview' | 'products' | 'categories'
+export type ReportSubTab = 'overview' | 'products' | 'categories' | 'inventory'
 type ProductPeriod = 'day' | 'week' | 'month'
 
 export interface ReportsTabProps {
@@ -948,6 +950,8 @@ export function ReportsTab(props: ReportsTabProps) {
       {subTab === 'overview'   && <OverviewSection   {...props} />}
       {subTab === 'products'   && <ProductsSection   {...props} />}
       {subTab === 'categories' && <CategoriesSection {...props} />}
+      {subTab === 'inventory'  && <InventoryTab     {...props} />}
+      
     </div>
   )
 }

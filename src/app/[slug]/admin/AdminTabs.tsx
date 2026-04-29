@@ -2,7 +2,7 @@
 import { useState } from 'react'
 import { Tab } from './types'
 
-type ReportSubTab = 'overview' | 'products' | 'categories'
+type ReportSubTab = 'overview' | 'products' | 'categories' | 'inventory'
 
 interface AdminTabsProps {
   tab: Tab
@@ -41,6 +41,7 @@ const REPORT_SUB_TABS: { id: ReportSubTab; label: string; icon: string }[] = [
   { id: 'overview',   label: 'Visão Geral',           icon: '📈' },
   { id: 'products',   label: 'Produtos mais vendidos', icon: '📦' },
   { id: 'categories', label: 'Por Categoria',          icon: '🗂️' },
+  { id: 'inventory',  label: 'Inventário',             icon: '🏷️' },
 ]
 
 const SIDEBAR_BG      = 'bg-[#0f2137]'
