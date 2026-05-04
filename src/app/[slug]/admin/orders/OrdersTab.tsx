@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { Order } from "@/types/product";
 import { updateOrderStatus, assignMotoboy } from '@/services/orders'
 import { getPaymentLabel } from '@/lib/payment-labels'
@@ -52,6 +52,13 @@ const COLUMN_CONFIG: Record<Exclude<KanbanColumn, 'all'>, { title: string; color
   completed: { title: 'Concluído',          color: 'border-t-green-500',  dot: 'bg-green-500'  },
 }
 
+const STATUS_FILTER_MAP: Record<string, string[]> = {
+  preparing: ['pending', 'confirmed'],
+  ready:     ['delivering', 'Pronto p/ retirada'],
+  completed: ['completed'],
+  cancelled: ['cancelled'],
+}
+
 function fmt(value: unknown): string {
   const n = Number(value)
   return isNaN(n) ? '0,00' : n.toFixed(2).replace('.', ',')
@@ -92,14 +99,17 @@ interface OrdersTabProps {
 export function OrdersTab({
   orders, setOrders, loading, onError,
   dateFrom, dateTo, onDateFromChange, onDateToChange,
-  onFilter, onClearFilter, orderSearch,
-  searchedOrder, searchingOrder, onClearSearch,
+  onFilter, onClearFilter,
 }: OrdersTabProps) {
   const [expandedOrder, setExpandedOrder]               = useState<number | null>(null)
   const [mobileTab, setMobileTab]                       = useState<KanbanColumn>('all')
   const [motoboys, setMotoboys]                         = useState<Motoboy[]>([])
   const [motoboyDialogOrderId, setMotoboyDialogOrderId] = useState<number | null>(null)
   const [acceptingId, setAcceptingId]                   = useState<number | null>(null)
+
+  // ── Filtros locais ──────────────────────────────────────────
+  const [orderSearchInput, setOrderSearchInput] = useState('')
+  const [filterStatus, setFilterStatus]         = useState('all')
 
   useEffect(() => { getAllMotoboys().then(setMotoboys).catch(() => {}) }, [])
 
@@ -110,6 +120,19 @@ export function OrdersTab({
   const getStatusOrder   = (order: Order) => isPickup(order) ? STATUS_ORDER_PICKUP  : STATUS_ORDER_DELIVERY
   const getStatusOptions = (order: Order) => isPickup(order) ? STATUS_OPTIONS_PICKUP : STATUS_OPTIONS_DELIVERY
   const isIfoodOrder     = (order: Order) => !!order.ifood_id
+
+  // ── Filtragem local (busca + status) ───────────────────────
+  const filteredOrders = useMemo(() => {
+    let list = [...orders]
+    if (orderSearchInput.trim()) {
+      const q = orderSearchInput.trim()
+      list = list.filter(o => String(o.code ?? o.id).includes(q))
+    }
+    if (filterStatus !== 'all') {
+      list = list.filter(o => STATUS_FILTER_MAP[filterStatus]?.includes(o.status))
+    }
+    return list
+  }, [orders, orderSearchInput, filterStatus])
 
   const handleAcceptIfood = async (order: Order) => {
     if (!order.ifood_id) return
@@ -151,7 +174,7 @@ export function OrdersTab({
   }
 
   const handleUpdateStatus = async (id: number, status: string) => {
-    const order = orders.find(o => o.id === id) ?? searchedOrder ?? null
+    const order = orders.find(o => o.id === id) ?? null
     if (!order) return
     const statusOrder  = getStatusOrder(order)
     const currentIndex = statusOrder.indexOf(order.status as any)
@@ -181,91 +204,100 @@ export function OrdersTab({
   }
 
   const getOrdersForColumn = (column: Exclude<KanbanColumn, 'all'>) =>
-    orders.filter(o => COLUMN_STATUSES[column].includes(o.status))
+    filteredOrders.filter(o => COLUMN_STATUSES[column].includes(o.status))
 
   const getOrdersForMobile = () =>
-    mobileTab === 'all' ? orders : getOrdersForColumn(mobileTab)
+    mobileTab === 'all' ? filteredOrders : getOrdersForColumn(mobileTab)
 
-  const dialogOrder               = motoboyDialogOrderId !== null ? (orders.find(o => o.id === motoboyDialogOrderId) ?? (searchedOrder?.id === motoboyDialogOrderId ? searchedOrder : null)) : null
+  const dialogOrder               = motoboyDialogOrderId !== null ? orders.find(o => o.id === motoboyDialogOrderId) ?? null : null
   const dialogIsAlreadyDispatched = dialogOrder?.status === 'delivering'
+
+  const hasActiveFilters = orderSearchInput.trim() !== '' || filterStatus !== 'all'
 
   return (
     <div className="mt-6 flex flex-col" style={{ height: 'calc(100vh - 120px)' }}>
       <h3 className="text-sm font-medium text-gray-900 mb-4 shrink-0">Pedidos</h3>
 
-      {/* ── Filtro de data ── */}
-      <div className="bg-white border border-gray-200 rounded-xl px-4 py-3 mb-4 flex flex-wrap items-end gap-3 shrink-0">
-        <div className="flex flex-col gap-1">
-          <label className="text-[10px] text-gray-400 uppercase tracking-wide">De</label>
-          <input type="date" value={dateFrom} onChange={e => onDateFromChange(e.target.value)}
-            className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-200" />
+      {/* ── Barra de filtros unificada ── */}
+      <div className="bg-white border border-gray-200 rounded-xl p-4 mb-4 flex flex-col sm:flex-row flex-wrap gap-3 items-stretch sm:items-center shrink-0">
+
+        {/* Busca por número */}
+        <div className="relative flex-1 min-w-0">
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <input
+            type="text"
+            placeholder="Buscar pedido #..."
+            value={orderSearchInput}
+            onChange={e => setOrderSearchInput(e.target.value)}
+            className="w-full pl-8 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-black"
+          />
         </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-[10px] text-gray-400 uppercase tracking-wide">Até</label>
-          <input type="date" value={dateTo} onChange={e => onDateToChange(e.target.value)}
-            className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-200" />
-        </div>
-        <div className="flex gap-2 pb-0.5">
-          <button onClick={onFilter}
-            className="text-sm px-4 py-1.5 bg-gray-900 text-white rounded-lg font-medium hover:bg-gray-700 transition-colors">
+
+        <div className="flex flex-wrap gap-2 items-center">
+          {/* Filtro de status */}
+          <select
+            value={filterStatus}
+            onChange={e => setFilterStatus(e.target.value)}
+            className="flex-1 sm:flex-none border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black text-gray-600"
+          >
+            <option value="all">Todos os status</option>
+            <option value="preparing">Em preparo</option>
+            <option value="ready">Pronto / A caminho</option>
+            <option value="completed">Concluído</option>
+            <option value="cancelled">Cancelado</option>
+          </select>
+
+          {/* De */}
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={e => onDateFromChange(e.target.value)}
+            className="flex-1 sm:flex-none text-sm border border-gray-200 rounded-lg px-3 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-black"
+          />
+
+          {/* Até */}
+          <input
+            type="date"
+            value={dateTo}
+            onChange={e => onDateToChange(e.target.value)}
+            className="flex-1 sm:flex-none text-sm border border-gray-200 rounded-lg px-3 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-black"
+          />
+
+          <button
+            onClick={onFilter}
+            className="text-sm px-4 py-2 bg-gray-900 text-white rounded-lg font-medium hover:bg-gray-700 transition-colors"
+          >
             Filtrar
           </button>
+
           {!isFilteredToday && (
-            <button onClick={onClearFilter}
-              className="text-sm px-4 py-1.5 bg-gray-100 text-gray-600 rounded-lg font-medium hover:bg-gray-200 transition-colors">
+            <button
+              onClick={onClearFilter}
+              className="text-sm px-4 py-2 bg-gray-100 text-gray-600 rounded-lg font-medium hover:bg-gray-200 transition-colors"
+            >
               Hoje
             </button>
           )}
         </div>
-        {(dateFrom || dateTo) && (
-          <span className="text-xs text-gray-400 ml-auto self-center">
-            📅 {dateFrom === dateTo ? formatDisplayDate(dateFrom) : `${formatDisplayDate(dateFrom)} → ${formatDisplayDate(dateTo)}`}
+
+        {/* Contador de resultados */}
+        {hasActiveFilters && (
+          <span className="text-xs text-gray-400 self-center">
+            {filteredOrders.length} de {orders.length} {orders.length === 1 ? 'pedido' : 'pedidos'}
+          </span>
+        )}
+
+        {/* Label de data ativa */}
+        {(dateFrom || dateTo) && !hasActiveFilters && (
+          <span className="text-xs text-gray-400 self-center ml-auto">
+            📅 {dateFrom === dateTo
+              ? formatDisplayDate(dateFrom)
+              : `${formatDisplayDate(dateFrom)} → ${formatDisplayDate(dateTo)}`}
           </span>
         )}
       </div>
-
-      {/* ── Resultado de busca por número ── */}
-      {orderSearch.length > 0 && (
-        <div className="mb-4 shrink-0 max-h-[60vh] overflow-y-auto">
-          {searchingOrder ? (
-            <div className="bg-white border border-gray-200 rounded-xl px-4 py-5 flex items-center gap-3">
-              <div className="w-4 h-4 border-2 border-gray-300 border-t-gray-700 rounded-full animate-spin shrink-0" />
-              <p className="text-sm text-gray-400">Buscando pedido <span className="font-medium text-gray-600">#{orderSearch}</span>…</p>
-            </div>
-          ) : searchedOrder ? (
-            <div className="bg-white border-2 border-gray-900 rounded-xl overflow-hidden shadow-lg">
-            <div className="flex items-center justify-between px-4 py-2.5 bg-gray-900 sticky top-0 z-10">  {/* ← sticky no header */}
-              <span className="text-xs font-semibold text-white">🔍 Pedido #{searchedOrder.code ?? searchedOrder.id} encontrado</span>
-              <button onClick={onClearSearch} className="text-gray-400 hover:text-white text-xs transition-colors">✕ Fechar busca</button>
-            </div>
-              <div className="p-3">
-                <OrderCard
-                  order={searchedOrder}
-                  expanded={true}
-                  onToggle={() => {}}
-                  onUpdateStatus={handleUpdateStatus}
-                  onChangeMotoboy={id => setMotoboyDialogOrderId(id)}
-                  onAcceptIfood={handleAcceptIfood}
-                  isPickup={isPickup(searchedOrder)}
-                  isIfood={isIfoodOrder(searchedOrder)}
-                  isAccepting={acceptingId === searchedOrder.id}
-                  statusOptions={getStatusOptions(searchedOrder)}
-                  statusOrder={getStatusOrder(searchedOrder)}
-                  motoboys={motoboys}
-                  highlighted={false}
-                />
-              </div>
-            </div>
-          ) : (
-            <div className="bg-white border border-gray-200 rounded-xl px-4 py-5 flex items-center justify-between">
-              <p className="text-sm text-gray-400">
-                Nenhum pedido encontrado com o número <span className="font-medium text-gray-600">#{orderSearch}</span>.
-              </p>
-              <button onClick={onClearSearch} className="text-xs text-gray-400 hover:text-gray-600 transition-colors ml-4 shrink-0">✕</button>
-            </div>
-          )}
-        </div>
-      )}
 
       {loading ? (
         <div className="bg-white border border-gray-200 rounded-xl p-5 shrink-0">
@@ -286,7 +318,7 @@ export function OrdersTab({
                   ${mobileTab === t.value ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
                 {t.label}
                 <span className="ml-1 text-[10px] text-gray-400">
-                  ({t.value === 'all' ? orders.length : getOrdersForColumn(t.value).length})
+                  ({t.value === 'all' ? filteredOrders.length : getOrdersForColumn(t.value).length})
                 </span>
               </button>
             ))}
@@ -541,77 +573,77 @@ function OrderCard({
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-  {(order.items ?? []).map((item, i) => {
-    console.log(`[OrderCard] item[${i}]:`, item)
-    return (
-      <React.Fragment key={i}>
-        <tr>
-          <td className="py-1.5 text-gray-700">{item.product_name}</td>
-          <td className="py-1.5 text-center text-gray-500">{item.quantity}</td>
-          <td className="py-1.5 text-right text-gray-500">R$ {fmt(item.unit_price)}</td>
-          <td className="py-1.5 text-right text-gray-700 font-medium">R$ {fmt(item.quantity * item.unit_price)}</td>
-        </tr>
+                {(order.items ?? []).map((item, i) => {
+                  console.log(`[OrderCard] item[${i}]:`, item)
+                  return (
+                    <React.Fragment key={i}>
+                      <tr>
+                        <td className="py-1.5 text-gray-700">{item.product_name}</td>
+                        <td className="py-1.5 text-center text-gray-500">{item.quantity}</td>
+                        <td className="py-1.5 text-right text-gray-500">R$ {fmt(item.unit_price)}</td>
+                        <td className="py-1.5 text-right text-gray-700 font-medium">R$ {fmt(item.quantity * item.unit_price)}</td>
+                      </tr>
 
-        {(item.addons ?? []).map((addon, j) => (
-          <tr key={`addon-${i}-${j}`}>
-            <td className="pb-1 pl-3 text-gray-400 text-[10px]" colSpan={2}>
-              ↳ {addon.qty}× {addon.itemName}
-            </td>
-            <td className="pb-1 text-right text-gray-400 text-[10px]">
-              {addon.subtotal > 0 ? `+R$ ${fmt(addon.subtotal)}` : ''}
-            </td>
-            <td />
-          </tr>
-        ))}
+                      {(item.addons ?? []).map((addon, j) => (
+                        <tr key={`addon-${i}-${j}`}>
+                          <td className="pb-1 pl-3 text-gray-400 text-[10px]" colSpan={2}>
+                            ↳ {addon.qty}× {addon.itemName}
+                          </td>
+                          <td className="pb-1 text-right text-gray-400 text-[10px]">
+                            {addon.subtotal > 0 ? `+R$ ${fmt(addon.subtotal)}` : ''}
+                          </td>
+                          <td />
+                        </tr>
+                      ))}
 
-        {item.observation && (
-          <tr>
-            <td className="pb-1.5 pl-1 text-[10px] text-amber-600 italic" colSpan={4}>
-              OBS: "{item.observation}"
-            </td>
-          </tr>
-        )}
-      </React.Fragment>
-    )
-  })}
-</tbody>
+                      {item.observation && (
+                        <tr>
+                          <td className="pb-1.5 pl-1 text-[10px] text-amber-600 italic" colSpan={4}>
+                            OBS: "{item.observation}"
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  )
+                })}
+              </tbody>
             </table>
           )}
 
           <div className="bg-white border border-gray-100 rounded-lg px-3 py-2.5">
-          <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-1">Pagamento</p>
-          <div className="flex items-center justify-between">
-            <div className="flex flex-col gap-1">
-              <p className="text-sm font-medium text-gray-800">{getPaymentLabel(order.payment_method)}</p>
+            <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-1">Pagamento</p>
+            <div className="flex items-center justify-between">
+              <div className="flex flex-col gap-1">
+                <p className="text-sm font-medium text-gray-800">{getPaymentLabel(order.payment_method)}</p>
 
-              {order.status === 'confirmed' && order.payment_method === 'pix' ? (
-                <span className="inline-flex items-center gap-1.5 text-xs font-medium text-green-600 mt-0.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                  Pago online
-                </span>
-              ) : !['completed', 'cancelled'].includes(order.status) ? (
-                <span className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-400 mt-0.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-gray-300" />
-                  Cobrar do cliente
-                </span>
-              ) : null}
+                {order.status === 'confirmed' && order.payment_method === 'pix' ? (
+                  <span className="inline-flex items-center gap-1.5 text-xs font-medium text-green-600 mt-0.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                    Pago online
+                  </span>
+                ) : !['completed', 'cancelled'].includes(order.status) ? (
+                  <span className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-400 mt-0.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-gray-300" />
+                    Cobrar do cliente
+                  </span>
+                ) : null}
 
-              {order.payment_method === 'dinheiro' && (
-                <span className="text-xs text-gray-500">
-                  {order.change === null || order.change === undefined
-                    ? '💵 Pagamento na entrega (dinheiro)'
-                    : order.change === 0
-                      ? '💵 Sem troco (valor exato)'
-                      : `💵 Troco para: R$ ${fmt((order.change ?? 0) + (order.total ?? 0))} — Troco: R$ ${fmt(order.change)}`}
-                </span>
-              )}
-            </div>
-            <div className="text-right">
-              <p className="text-xs text-gray-500">Total do pedido:</p>
-              <span className="text-sm font-medium text-green-600">R$ {fmt(order.total)}</span>
+                {order.payment_method === 'dinheiro' && (
+                  <span className="text-xs text-gray-500">
+                    {order.change === null || order.change === undefined
+                      ? '💵 Pagamento na entrega (dinheiro)'
+                      : order.change === 0
+                        ? '💵 Sem troco (valor exato)'
+                        : `💵 Troco para: R$ ${fmt((order.change ?? 0) + (order.total ?? 0))} — Troco: R$ ${fmt(order.change)}`}
+                  </span>
+                )}
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-gray-500">Total do pedido:</p>
+                <span className="text-sm font-medium text-green-600">R$ {fmt(order.total)}</span>
+              </div>
             </div>
           </div>
-        </div>
         </div>
       )}
     </div>

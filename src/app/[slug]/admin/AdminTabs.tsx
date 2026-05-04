@@ -75,140 +75,148 @@ export function AdminTabs({ tab, onChange, reportSubTab, onReportSubTabChange }:
   }
 
   const sidebarContent = (
-    <>
-      {/* Logo / marca */}
-      <div className="px-3 mb-6">
-        <div className="flex items-center gap-2">
-          <span className="text-xl">🚀</span>
-          <span className="text-white font-bold text-base tracking-tight">deliveryExpress</span>
+    <div className="flex flex-col h-full overflow-hidden py-6 px-3">
+
+      {/* Área scrollável */}
+      <div className="flex-1 overflow-y-auto flex flex-col gap-1 pr-1 scrollbar-thin scrollbar-thumb-[#1a3a5c] scrollbar-track-transparent">
+
+        {/* Logo / marca */}
+        <div className="px-3 mb-6">
+          <div className="flex items-center gap-2">
+            <span className="text-xl">🚀</span>
+            <span className="text-white font-bold text-base tracking-tight">deliveryExpress</span>
+          </div>
+          <p className="text-[#8faec9] text-[10px] mt-0.5 ml-7">Painel administrativo</p>
         </div>
-        <p className="text-[#8faec9] text-[10px] mt-0.5 ml-7">Painel administrativo</p>
-      </div>
 
-      <div className={`border-t ${DIVIDER} mb-3`} />
+        <div className={`border-t ${DIVIDER} mb-3`} />
 
-      {/* Cadastros */}
-      <div>
-        <button
-          onClick={() => setCadastroOpen(o => !o)}
-          className={`flex items-center justify-between w-full px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
-            ${CADASTRO_TABS.includes(tab)
-              ? `${GROUP_ACTIVE_BG} ${GROUP_ACTIVE_TEXT}`
-              : `${TEXT_DEFAULT} ${TEXT_HOVER} ${BG_HOVER}`}`}
-        >
-          <div className="flex items-center gap-3">
-            <span className="text-base">🗃️</span>
-            Cadastros
-          </div>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-            className={`transition-transform duration-200 ${cadastroOpen ? 'rotate-180' : ''}`}>
-            <polyline points="6 9 12 15 18 9" />
-          </svg>
-        </button>
+        {/* Cadastros */}
+        <div>
+          <button
+            onClick={() => setCadastroOpen(o => !o)}
+            className={`flex items-center justify-between w-full px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
+              ${CADASTRO_TABS.includes(tab)
+                ? `${GROUP_ACTIVE_BG} ${GROUP_ACTIVE_TEXT}`
+                : `${TEXT_DEFAULT} ${TEXT_HOVER} ${BG_HOVER}`}`}
+          >
+            <div className="flex items-center gap-3">
+              <span className="text-base">🗃️</span>
+              Cadastros
+            </div>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+              className={`transition-transform duration-200 ${cadastroOpen ? 'rotate-180' : ''}`}>
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </button>
 
-        {cadastroOpen && (
-          <div className={`mt-1 ml-3 flex flex-col gap-1 border-l ${DIVIDER} pl-3`}>
-            {CADASTRO_TABS.map(t => (
-              <button key={t} onClick={() => handleChange(t)}
-                className={`flex items-center gap-3 text-sm px-3 py-2 rounded-lg transition-colors font-medium w-full text-left
-                  ${tab === t
-                    ? `${ACTIVE_BG} ${ACTIVE_TEXT}`
-                    : `${TEXT_DEFAULT} ${TEXT_HOVER} ${BG_HOVER}`}`}>
-                <span className="text-base">{TAB_ICONS[t]}</span>
-                {TAB_LABELS[t]}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
+          {cadastroOpen && (
+            <div className={`mt-1 ml-3 flex flex-col gap-1 border-l ${DIVIDER} pl-3`}>
+              {CADASTRO_TABS.map(t => (
+                <button key={t} onClick={() => handleChange(t)}
+                  className={`flex items-center gap-3 text-sm px-3 py-2 rounded-lg transition-colors font-medium w-full text-left
+                    ${tab === t
+                      ? `${ACTIVE_BG} ${ACTIVE_TEXT}`
+                      : `${TEXT_DEFAULT} ${TEXT_HOVER} ${BG_HOVER}`}`}>
+                  <span className="text-base">{TAB_ICONS[t]}</span>
+                  {TAB_LABELS[t]}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
 
-      {/* Pedidos */}
-      <button onClick={() => handleChange('orders')}
-        className={`flex items-center gap-3 text-sm px-3 py-2.5 rounded-lg transition-colors font-medium w-full text-left
-          ${tab === 'orders'
-            ? `${ACTIVE_BG} ${ACTIVE_TEXT}`
-            : `${TEXT_DEFAULT} ${TEXT_HOVER} ${BG_HOVER}`}`}>
-        <span className="text-base">{TAB_ICONS.orders}</span>
-        {TAB_LABELS.orders}
-      </button>
-
-      {/* Caixa */}
-      <button onClick={() => handleChange('cash')}
-        className={`flex items-center gap-3 text-sm px-3 py-2.5 rounded-lg transition-colors font-medium w-full text-left
-          ${tab === 'cash'
-            ? `${ACTIVE_BG} ${ACTIVE_TEXT}`
-            : `${TEXT_DEFAULT} ${TEXT_HOVER} ${BG_HOVER}`}`}>
-        <span className="text-base">{TAB_ICONS.cash}</span>
-        {TAB_LABELS.cash}
-      </button>
-
-      {/* Relatórios */}
-      <div>
-        <button
-          onClick={handleReportsClick}
-          className={`flex items-center justify-between w-full px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
-            ${tab === 'reports'
-              ? `${GROUP_ACTIVE_BG} ${GROUP_ACTIVE_TEXT}`
-              : `${TEXT_DEFAULT} ${TEXT_HOVER} ${BG_HOVER}`}`}
-        >
-          <div className="flex items-center gap-3">
-            <span className="text-base">📊</span>
-            Relatórios
-          </div>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-            className={`transition-transform duration-200 ${reportsOpen ? 'rotate-180' : ''}`}>
-            <polyline points="6 9 12 15 18 9" />
-          </svg>
-        </button>
-
-        {reportsOpen && tab === 'reports' && (
-          <div className={`mt-1 ml-3 flex flex-col gap-1 border-l ${DIVIDER} pl-3`}>
-            {REPORT_SUB_TABS.map(s => (
-              <button key={s.id} onClick={() => { onReportSubTabChange(s.id); setMobileOpen(false) }}
-                className={`flex items-center gap-3 text-sm px-3 py-2 rounded-lg transition-colors font-medium w-full text-left
-                  ${reportSubTab === s.id
-                    ? `${ACTIVE_BG} ${ACTIVE_TEXT}`
-                    : `${TEXT_DEFAULT} ${TEXT_HOVER} ${BG_HOVER}`}`}>
-                <span className="text-base">{s.icon}</span>
-                {s.label}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div className={`border-t ${DIVIDER} my-2`} />
-
-      {/* iFood Sync */}
-      <button onClick={() => handleChange('ifood')}
-        className={`flex items-center gap-3 text-sm px-3 py-2.5 rounded-lg transition-colors font-medium w-full text-left
-          ${tab === 'ifood'
-            ? `${ACTIVE_BG} ${ACTIVE_TEXT}`
-            : `${TEXT_DEFAULT} ${TEXT_HOVER} ${BG_HOVER}`}`}>
-        <span className="text-base">🟠</span>
-        {TAB_LABELS.ifood}
-      </button>
-
-      <div className={`border-t ${DIVIDER} my-2`} />
-
-      {/* Fiscal + Configurações */}
-      {(['fiscal', 'settings'] as Tab[]).map(t => (
-        <button key={t} onClick={() => handleChange(t)}
+        {/* Pedidos */}
+        <button onClick={() => handleChange('orders')}
           className={`flex items-center gap-3 text-sm px-3 py-2.5 rounded-lg transition-colors font-medium w-full text-left
-            ${tab === t
+            ${tab === 'orders'
               ? `${ACTIVE_BG} ${ACTIVE_TEXT}`
               : `${TEXT_DEFAULT} ${TEXT_HOVER} ${BG_HOVER}`}`}>
-          <span className="text-base">{TAB_ICONS[t]}</span>
-          {TAB_LABELS[t]}
+          <span className="text-base">{TAB_ICONS.orders}</span>
+          {TAB_LABELS.orders}
         </button>
-      ))}
 
-      <div className={`mt-auto border-t ${DIVIDER} pt-4 px-1`}>
+        {/* Caixa */}
+        <button onClick={() => handleChange('cash')}
+          className={`flex items-center gap-3 text-sm px-3 py-2.5 rounded-lg transition-colors font-medium w-full text-left
+            ${tab === 'cash'
+              ? `${ACTIVE_BG} ${ACTIVE_TEXT}`
+              : `${TEXT_DEFAULT} ${TEXT_HOVER} ${BG_HOVER}`}`}>
+          <span className="text-base">{TAB_ICONS.cash}</span>
+          {TAB_LABELS.cash}
+        </button>
+
+        {/* Relatórios */}
+        <div>
+          <button
+            onClick={handleReportsClick}
+            className={`flex items-center justify-between w-full px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
+              ${tab === 'reports'
+                ? `${GROUP_ACTIVE_BG} ${GROUP_ACTIVE_TEXT}`
+                : `${TEXT_DEFAULT} ${TEXT_HOVER} ${BG_HOVER}`}`}
+          >
+            <div className="flex items-center gap-3">
+              <span className="text-base">📊</span>
+              Relatórios
+            </div>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+              className={`transition-transform duration-200 ${reportsOpen ? 'rotate-180' : ''}`}>
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </button>
+
+          {reportsOpen && tab === 'reports' && (
+            <div className={`mt-1 ml-3 flex flex-col gap-1 border-l ${DIVIDER} pl-3`}>
+              {REPORT_SUB_TABS.map(s => (
+                <button key={s.id} onClick={() => { onReportSubTabChange(s.id); setMobileOpen(false) }}
+                  className={`flex items-center gap-3 text-sm px-3 py-2 rounded-lg transition-colors font-medium w-full text-left
+                    ${reportSubTab === s.id
+                      ? `${ACTIVE_BG} ${ACTIVE_TEXT}`
+                      : `${TEXT_DEFAULT} ${TEXT_HOVER} ${BG_HOVER}`}`}>
+                  <span className="text-base">{s.icon}</span>
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className={`border-t ${DIVIDER} my-2`} />
+
+        {/* iFood Sync */}
+        <button onClick={() => handleChange('ifood')}
+          className={`flex items-center gap-3 text-sm px-3 py-2.5 rounded-lg transition-colors font-medium w-full text-left
+            ${tab === 'ifood'
+              ? `${ACTIVE_BG} ${ACTIVE_TEXT}`
+              : `${TEXT_DEFAULT} ${TEXT_HOVER} ${BG_HOVER}`}`}>
+          <span className="text-base">🟠</span>
+          {TAB_LABELS.ifood}
+        </button>
+
+        <div className={`border-t ${DIVIDER} my-2`} />
+
+        {/* Fiscal + Configurações */}
+        {(['fiscal', 'settings'] as Tab[]).map(t => (
+          <button key={t} onClick={() => handleChange(t)}
+            className={`flex items-center gap-3 text-sm px-3 py-2.5 rounded-lg transition-colors font-medium w-full text-left
+              ${tab === t
+                ? `${ACTIVE_BG} ${ACTIVE_TEXT}`
+                : `${TEXT_DEFAULT} ${TEXT_HOVER} ${BG_HOVER}`}`}>
+            <span className="text-base">{TAB_ICONS[t]}</span>
+            {TAB_LABELS[t]}
+          </button>
+        ))}
+
+      </div>
+
+      {/* Footer fixo no rodapé — fora da área scrollável */}
+      <div className={`shrink-0 border-t ${DIVIDER} pt-4 px-1 mt-2`}>
         <p className="text-[10px] text-[#4a6a8a] text-center">
           © 2026 deliveryExpress
         </p>
       </div>
-    </>
+
+    </div>
   )
 
   return (
@@ -227,13 +235,14 @@ export function AdminTabs({ tab, onChange, reportSubTab, onReportSubTabChange }:
         <div className="md:hidden fixed inset-0 bg-black/50 z-40" onClick={() => setMobileOpen(false)} />
       )}
 
+      {/* Mobile sidebar */}
       <aside className={`
-        fixed top-0 left-0 h-full w-64 ${SIDEBAR_BG} border-r ${SIDEBAR_BORDER}
-        flex flex-col py-6 px-3 gap-1 z-50
+        fixed top-0 left-0 h-screen w-64 ${SIDEBAR_BG} border-r ${SIDEBAR_BORDER}
+        flex flex-col z-50 overflow-hidden
         transition-transform duration-300 ease-in-out md:hidden
         ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}
       `}>
-        <div className="flex items-center justify-between mb-2 px-2">
+        <div className="flex items-center justify-between px-5 pt-5 pb-2 shrink-0">
           <span className="font-semibold text-white">Menu</span>
           <button onClick={() => setMobileOpen(false)} className="text-[#8faec9] hover:text-white">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -244,7 +253,8 @@ export function AdminTabs({ tab, onChange, reportSubTab, onReportSubTabChange }:
         {sidebarContent}
       </aside>
 
-      <aside className={`hidden md:flex w-56 self-stretch ${SIDEBAR_BG} border-r ${SIDEBAR_BORDER} flex-col py-6 px-3 gap-1 shrink-0`}>
+      {/* Desktop sidebar */}
+      <aside className={`hidden md:flex w-56 h-screen sticky top-0 ${SIDEBAR_BG} border-r ${SIDEBAR_BORDER} flex-col shrink-0 overflow-hidden`}>
         {sidebarContent}
       </aside>
     </>
