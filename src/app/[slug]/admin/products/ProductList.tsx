@@ -39,6 +39,7 @@ export function ProductList({ products, categories, onEdit, onDelete, onToggleAc
     if (filterCategory !== 'all') list = list.filter(p => p.category === filterCategory)
     if (filterStock === 'low') list = list.filter(p => p.stock != null && p.stock > 0 && p.stock <= 5)
     if (filterStock === 'out') list = list.filter(p => p.stock === 0)
+    list.sort((a, b) => Number(b.active) - Number(a.active))
     return list
   }, [products, search, filterCategory, filterStock])
 
