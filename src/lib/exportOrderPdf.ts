@@ -58,15 +58,19 @@ export async function exportOrderPdf(order: Order): Promise<void> {
     y += 6
   }
 
-  const dottedLine = () => {
-    y += 4
-    doc.setDrawColor(180, 180, 180)
-    doc.setLineWidth(0.4)
-    doc.setLineDashPattern([2, 2], 0)
-    doc.line(MARGIN, y, PAGE_W - MARGIN, y)
-    doc.setLineDashPattern([], 0)
-    y += 6
+const dottedLine = () => {
+  y += 4
+  doc.setDrawColor(180, 180, 180)
+  doc.setLineWidth(0.4)
+  const dash = 2
+  const gap  = 2
+  let x = MARGIN
+  while (x < PAGE_W - MARGIN) {
+    doc.line(x, y, Math.min(x + dash, PAGE_W - MARGIN), y)
+    x += dash + gap
   }
+  y += 6
+}
 
   const text = (
     str: string,
