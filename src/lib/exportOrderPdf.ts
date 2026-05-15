@@ -30,7 +30,8 @@ function getStatusLabel(order: Order): string {
 
 export async function exportOrderPdf(order: Order): Promise<void> {
   // Importa jsPDF dinamicamente (não quebra SSR)
-  const { jsPDF } = await import('jspdf')
+  const jsPDFModule = await import('jspdf')
+  const jsPDF = jsPDFModule.default
 
   const isPickup = order.delivery_type === 'pickup'
 
