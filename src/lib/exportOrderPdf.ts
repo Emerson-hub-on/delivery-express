@@ -29,7 +29,6 @@ function getStatusLabel(order: Order): string {
 // ── main export function ──────────────────────────────────────
 
 export async function exportOrderPdf(order: Order): Promise<void> {
-  // Importa jsPDF dinamicamente (não quebra SSR)
   const jsPDFModule = await import('jspdf')
   const jsPDF = jsPDFModule.default
 
@@ -87,7 +86,7 @@ const dottedLine = () => {
     // Quebra automaticamente se necessário
     const lines = doc.splitTextToSize(str, maxWidth)
     doc.text(lines, xPos, y, { align })
-    y += (size + 3) * lines.length
+    y += (size + 5) * lines.length
   }
 
   const row = (left: string, right: string, opts: { bold?: boolean; size?: number } = {}) => {
@@ -97,7 +96,7 @@ const dottedLine = () => {
     doc.setTextColor(30, 30, 30)
     doc.text(left, MARGIN, y)
     doc.text(right, PAGE_W - MARGIN, y, { align: 'right' })
-    y += size + 4
+    y += size + 7
   }
 
   // ── Cabeçalho ────────────────────────────────────────────────
@@ -106,8 +105,9 @@ const dottedLine = () => {
   text('deliveryExpress', { size: 13, bold: true, align: 'center' })
   y += 2
   text('Cupom de Pedido', { size: 8, color: [100, 100, 100], align: 'center' })
-  y += 8
+  y += 5
   line()
+  y += 9
 
   // Número + data
   text(`Pedido #${order.code ?? order.id}`, { size: 11, bold: true, align: 'center' })
@@ -116,7 +116,7 @@ const dottedLine = () => {
   y += 4
 
   // Tipo de entrega
-  const typeLabel = isPickup ? '🏪 Retirada no local' : '🛵 Entrega'
+  const typeLabel = isPickup ? 'Retirada no local' : 'Entrega'
   text(typeLabel, { size: 8, bold: true, align: 'center', color: isPickup ? [100, 40, 160] : [30, 80, 200] })
   y += 2
 
@@ -126,7 +126,7 @@ const dottedLine = () => {
   text('LINHA DO TEMPO', { size: 7, bold: true, color: [120, 120, 120] })
   y += 4
 
-  row('🕐 Pedido recebido:', formatDateTime(order.created_at))
+  row('Pedido recebido:', formatDateTime(order.created_at))
 
   if (order.dispatched_at) {
     const dispatchLabel = isPickup ? '🏪 Pronto p/ retirada:' : '🛵 Despachado:'
@@ -159,8 +159,6 @@ const dottedLine = () => {
 
   // ── Endereço / Retirada ──────────────────────────────────────
   if (isPickup) {
-    y += 2
-    text('🏪 Retirada no estabelecimento', { size: 8, bold: true, color: [100, 40, 160] })
     y += 2
   } else if (order.address) {
     const addr = order.address
@@ -279,19 +277,5 @@ const dottedLine = () => {
   text('deliveryExpress © 2026', { size: 7, color: [160, 160, 160], align: 'center' })
   y += 12
 
-  // Recorta a página na altura real do conteúdo
-  const finalHeight = y
-  const docFinal = new jsPDF({
-    orientation: 'portrait',
-    unit: 'pt',
-    format: [PAGE_W, finalHeight],
-  })
-
-  // Copia tudo recriando com a altura certa
-  // (jsPDF não permite redimensionar após criação — então geramos duas vezes
-  //  com um helper de re-render, ou simplesmente usamos o tamanho estimado fixo)
-  // Para evitar complexidade, exportamos o doc original com a altura ajustada via internal:
-  ;(doc as any).internal.pageSize.height = finalHeight
-
-  doc.save(`pedido-${order.code ?? order.id}.pdf`)
+doc.save(`pedido-${order.code ?? order.id}.pdf`)
 }
