@@ -14,15 +14,31 @@ export async function getAllCustomers(companyId?: string): Promise<Customer[]> {
   return data as Customer[]
 }
 
-function parseSupabaseError(error: any): string {
+async function parseSupabaseError(error: any, cpf?: string | null, cnpj?: string | null): Promise<string> {
   if (error?.code === '23505') {
-    if (error.message?.includes('cpf'))  return 'Este CPF já está cadastrado.'
-    if (error.message?.includes('cnpj')) return 'Este CNPJ já está cadastrado.'
+    if (error.message?.includes('cpf') && cpf) {
+      const { data } = await supabase
+        .from('customers')
+        .select('name')
+        .eq('cpf', cpf)
+        .single()
+      const nome = data?.name ? ` (${data.name})` : ''
+      return `CPF já cadastrado${nome}.`
+    }
+    if (error.message?.includes('cnpj') && cnpj) {
+      const { data } = await supabase
+        .from('customers')
+        .select('name, razao_social')
+        .eq('cnpj', cnpj)
+        .single()
+      const nome = data?.razao_social ?? data?.name
+      return `CNPJ já cadastrado${nome ? ` (${nome})` : ''}.`
+    }
     return 'Registro duplicado.'
   }
   return error.message ?? 'Erro desconhecido.'
 }
-// INSERT para clientes novos (ID gerado pelo banco)
+
 export async function createCustomer(
   customer: Omit<Customer, 'id' | 'created_at'>
 ): Promise<Customer> {
@@ -31,11 +47,10 @@ export async function createCustomer(
     .insert(customer)
     .select()
     .single()
-  if (error) throw new Error(parseSupabaseError(error))
+  if (error) throw new Error(await parseSupabaseError(error, customer.cpf, customer.cnpj))
   return data as Customer
 }
 
-// UPDATE para clientes existentes
 export async function updateCustomer(
   id: string,
   customer: Partial<Omit<Customer, 'id' | 'created_at'>>
@@ -46,7 +61,7 @@ export async function updateCustomer(
     .eq('id', id)
     .select()
     .single()
-  if (error) throw new Error(parseSupabaseError(error))
+  if (error) throw new Error(await parseSupabaseError(error, customer.cpf, customer.cnpj))
   return data as Customer
 }
 

@@ -6,6 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { Customer, CustomerAddress, PessoaTipo } from '@/types/customer'
 import { createCustomer, updateCustomer } from '@/services/customers'
 import { maskPhone, maskCpf, maskCnpj } from './customer.helpers'
+import { toast } from 'sonner'
 
 // ── Schemas ───────────────────────────────────────────────────────────────────
 
@@ -140,7 +141,7 @@ export function CustomerForm({ initial, companyId, onSaved, onCancel, onError }:
         : await createCustomer(common)
       onSaved(saved)
     } catch (e: any) {
-      onError(e.message)
+      toast.error(e.message)
     } finally {
       setSaving(false)
     }
