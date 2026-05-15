@@ -5,6 +5,7 @@ import { updateOrderStatus, assignMotoboy } from '@/services/orders'
 import { getPaymentLabel } from '@/lib/payment-labels'
 import { getAllMotoboys } from '@/services/motoboys'
 import { Motoboy } from '@/types/motoboy'
+import { exportOrderPdf } from '@/lib/exportOrderPdf'
 import React from 'react';
 
 const STATUS_ORDER_DELIVERY = ['pending', 'confirmed', 'delivering', 'completed', 'cancelled'] as const
@@ -107,7 +108,6 @@ export function OrdersTab({
   const [motoboyDialogOrderId, setMotoboyDialogOrderId] = useState<number | null>(null)
   const [acceptingId, setAcceptingId]                   = useState<number | null>(null)
 
-  // ── Filtros locais ──────────────────────────────────────────
   const [orderSearchInput, setOrderSearchInput] = useState('')
   const [filterStatus, setFilterStatus]         = useState('all')
 
@@ -121,7 +121,6 @@ export function OrdersTab({
   const getStatusOptions = (order: Order) => isPickup(order) ? STATUS_OPTIONS_PICKUP : STATUS_OPTIONS_DELIVERY
   const isIfoodOrder     = (order: Order) => !!order.ifood_id
 
-  // ── Filtragem local (busca + status) ───────────────────────
   const filteredOrders = useMemo(() => {
     let list = [...orders]
     if (orderSearchInput.trim()) {
@@ -218,10 +217,8 @@ export function OrdersTab({
     <div className="mt-6 flex flex-col" style={{ height: 'calc(100vh - 120px)' }}>
       <h3 className="text-sm font-medium text-gray-900 mb-4 shrink-0">Pedidos</h3>
 
-      {/* ── Barra de filtros unificada ── */}
+      {/* ── Barra de filtros ── */}
       <div className="bg-white border border-gray-200 rounded-xl p-4 mb-4 flex flex-col sm:flex-row flex-wrap gap-3 items-stretch sm:items-center shrink-0">
-
-        {/* Busca por número */}
         <div className="relative flex-1 min-w-0">
           <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
@@ -236,7 +233,6 @@ export function OrdersTab({
         </div>
 
         <div className="flex flex-wrap gap-2 items-center">
-          {/* Filtro de status */}
           <select
             value={filterStatus}
             onChange={e => setFilterStatus(e.target.value)}
@@ -249,15 +245,12 @@ export function OrdersTab({
             <option value="cancelled">Cancelado</option>
           </select>
 
-          {/* De */}
           <input
             type="date"
             value={dateFrom}
             onChange={e => onDateFromChange(e.target.value)}
             className="flex-1 sm:flex-none text-sm border border-gray-200 rounded-lg px-3 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-black"
           />
-
-          {/* Até */}
           <input
             type="date"
             value={dateTo}
@@ -282,14 +275,12 @@ export function OrdersTab({
           )}
         </div>
 
-        {/* Contador de resultados */}
         {hasActiveFilters && (
           <span className="text-xs text-gray-400 self-center">
             {filteredOrders.length} de {orders.length} {orders.length === 1 ? 'pedido' : 'pedidos'}
           </span>
         )}
 
-        {/* Label de data ativa */}
         {(dateFrom || dateTo) && !hasActiveFilters && (
           <span className="text-xs text-gray-400 self-center ml-auto">
             📅 {dateFrom === dateTo
@@ -435,8 +426,22 @@ function OrderCard({
   statusOptions, statusOrder, motoboys, highlighted,
 }: OrderCardProps) {
 
+  const [exportingPdf, setExportingPdf] = useState(false)
+
   const isPending      = order.status === 'pending'
   const isNotFinished  = !['completed', 'cancelled'].includes(order.status)
+
+  const handleExportPdf = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setExportingPdf(true)
+    try {
+      await exportOrderPdf(order)
+    } catch (err) {
+      console.error('[PDF Export]', err)
+    } finally {
+      setExportingPdf(false)
+    }
+  }
 
   return (
     <div className={[
@@ -472,12 +477,39 @@ function OrderCard({
               <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-100 text-orange-600 font-medium">iFood</span>
             )}
           </div>
-          {order.delivery_type && (
-            <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium
-              ${isPickup ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
-              {DELIVERY_TYPE_BADGE[order.delivery_type] ?? order.delivery_type}
-            </span>
-          )}
+          <div className="flex items-center gap-2">
+            {/* ── Botão PDF ── */}
+            <button
+              onClick={handleExportPdf}
+              disabled={exportingPdf}
+              title="Exportar cupom em PDF"
+              className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-md border border-gray-200 text-gray-500 hover:bg-red-50 hover:border-red-300 hover:text-red-600 transition-colors disabled:opacity-40 shrink-0"
+            >
+              {exportingPdf ? (
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                  className="animate-spin">
+                  <path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" opacity=".25"/>
+                  <path d="M21 12a9 9 0 01-9-9" />
+                </svg>
+              ) : (
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                  <line x1="16" y1="13" x2="8" y2="13"/>
+                  <line x1="16" y1="17" x2="8" y2="17"/>
+                  <polyline points="10 9 9 9 8 9"/>
+                </svg>
+              )}
+              PDF
+            </button>
+
+            {order.delivery_type && (
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium
+                ${isPickup ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
+                {DELIVERY_TYPE_BADGE[order.delivery_type] ?? order.delivery_type}
+              </span>
+            )}
+          </div>
         </div>
 
         <div className="flex flex-col gap-0.5 mt-0.5">
@@ -573,39 +605,34 @@ function OrderCard({
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {(order.items ?? []).map((item, i) => {
-                  console.log(`[OrderCard] item[${i}]:`, item)
-                  return (
-                    <React.Fragment key={i}>
-                      <tr>
-                        <td className="py-1.5 text-gray-700">{item.product_name}</td>
-                        <td className="py-1.5 text-center text-gray-500">{item.quantity}</td>
-                        <td className="py-1.5 text-right text-gray-500">R$ {fmt(item.unit_price)}</td>
-                        <td className="py-1.5 text-right text-gray-700 font-medium">R$ {fmt(item.quantity * item.unit_price)}</td>
+                {(order.items ?? []).map((item, i) => (
+                  <React.Fragment key={i}>
+                    <tr>
+                      <td className="py-1.5 text-gray-700">{item.product_name}</td>
+                      <td className="py-1.5 text-center text-gray-500">{item.quantity}</td>
+                      <td className="py-1.5 text-right text-gray-500">R$ {fmt(item.unit_price)}</td>
+                      <td className="py-1.5 text-right text-gray-700 font-medium">R$ {fmt(item.quantity * item.unit_price)}</td>
+                    </tr>
+                    {(item.addons ?? []).map((addon, j) => (
+                      <tr key={`addon-${i}-${j}`}>
+                        <td className="pb-1 pl-3 text-gray-400 text-[10px]" colSpan={2}>
+                          ↳ {addon.qty}× {addon.itemName}
+                        </td>
+                        <td className="pb-1 text-right text-gray-400 text-[10px]">
+                          {addon.subtotal > 0 ? `+R$ ${fmt(addon.subtotal)}` : ''}
+                        </td>
+                        <td />
                       </tr>
-
-                      {(item.addons ?? []).map((addon, j) => (
-                        <tr key={`addon-${i}-${j}`}>
-                          <td className="pb-1 pl-3 text-gray-400 text-[10px]" colSpan={2}>
-                            ↳ {addon.qty}× {addon.itemName}
-                          </td>
-                          <td className="pb-1 text-right text-gray-400 text-[10px]">
-                            {addon.subtotal > 0 ? `+R$ ${fmt(addon.subtotal)}` : ''}
-                          </td>
-                          <td />
-                        </tr>
-                      ))}
-
-                      {item.observation && (
-                        <tr>
-                          <td className="pb-1.5 pl-1 text-[10px] text-amber-600 italic" colSpan={4}>
-                            OBS: "{item.observation}"
-                          </td>
-                        </tr>
-                      )}
-                    </React.Fragment>
-                  )
-                })}
+                    ))}
+                    {item.observation && (
+                      <tr>
+                        <td className="pb-1.5 pl-1 text-[10px] text-amber-600 italic" colSpan={4}>
+                          OBS: "{item.observation}"
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                ))}
               </tbody>
             </table>
           )}
@@ -644,6 +671,32 @@ function OrderCard({
               </div>
             </div>
           </div>
+
+          {/* ── Botão PDF expandido ── */}
+          <div className="flex justify-end pt-1">
+            <button
+              onClick={handleExportPdf}
+              disabled={exportingPdf}
+              className="flex items-center gap-2 text-xs px-3 py-2 rounded-lg border border-red-200 text-red-600 bg-red-50 hover:bg-red-100 transition-colors disabled:opacity-40 font-medium"
+            >
+              {exportingPdf ? (
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="animate-spin">
+                  <path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" opacity=".25"/>
+                  <path d="M21 12a9 9 0 01-9-9" />
+                </svg>
+              ) : (
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                  <line x1="16" y1="13" x2="8" y2="13"/>
+                  <line x1="16" y1="17" x2="8" y2="17"/>
+                  <polyline points="10 9 9 9 8 9"/>
+                </svg>
+              )}
+              {exportingPdf ? 'Gerando PDF…' : '📄 Exportar cupom PDF'}
+            </button>
+          </div>
+
         </div>
       )}
     </div>
