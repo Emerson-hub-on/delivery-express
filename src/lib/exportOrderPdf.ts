@@ -180,12 +180,9 @@ const dottedLine = () => {
   y += 5
 
   // Cabeçalho da tabela
-  doc.setFontSize(7.5)
-  doc.setFont('helvetica', 'bold')
-  doc.setTextColor(120, 120, 120)
-  doc.text('Produto', MARGIN, y)
-  doc.text('Qtd', MARGIN + 95, y, { align: 'center' })
-  doc.text('Unit.', MARGIN + 128, y, { align: 'right' })
+  doc.text('Produto',  MARGIN,       y)
+  doc.text('Qtd',      MARGIN + 80,  y, { align: 'center' })
+  doc.text('Unit.',    MARGIN + 130, y, { align: 'right' })
   doc.text('Subtotal', PAGE_W - MARGIN, y, { align: 'right' })
   y += 3
   dottedLine()
@@ -201,8 +198,8 @@ const dottedLine = () => {
 
     // Qtd, preço e subtotal na primeira linha
     doc.setFont('helvetica', 'normal')
-    doc.text(String(item.quantity), MARGIN + 95, y, { align: 'center' })
-    doc.text(`R$ ${fmt(item.unit_price)}`, MARGIN + 128, y, { align: 'right' })
+    doc.text(String(item.quantity) + 'x', MARGIN + 80,  y, { align: 'center' })
+    doc.text(`R$ ${fmt(item.unit_price)}`, MARGIN + 130, y, { align: 'right' })
     doc.setFont('helvetica', 'bold')
     doc.text(`R$ ${fmt(item.quantity * item.unit_price)}`, PAGE_W - MARGIN, y, { align: 'right' })
 
