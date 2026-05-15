@@ -11,7 +11,7 @@ interface AdminTabsProps {
   onReportSubTabChange: (sub: ReportSubTab) => void
 }
 
-const CADASTRO_TABS: Tab[] = ['products', 'categories', 'motoboys']
+const CADASTRO_TABS: Tab[] = ['products', 'categories', 'motoboys', 'customers']
 
 const TAB_LABELS: Record<Tab, string> = {
   products:   'Produtos',
@@ -23,6 +23,7 @@ const TAB_LABELS: Record<Tab, string> = {
   settings:   'Configurações',
   cash:       'Caixa',
   ifood:      'iFood Sync',
+  customers:  'Clientes',        // ← novo
 }
 
 const TAB_ICONS: Record<Tab, string> = {
@@ -35,6 +36,7 @@ const TAB_ICONS: Record<Tab, string> = {
   settings:   '⚙️',
   cash:       '🏪',
   ifood:      '🟠',
+  customers:  '👥',             // ← novo
 }
 
 const REPORT_SUB_TABS: { id: ReportSubTab; label: string; icon: string }[] = [
@@ -42,6 +44,7 @@ const REPORT_SUB_TABS: { id: ReportSubTab; label: string; icon: string }[] = [
   { id: 'products',   label: 'Produtos mais vendidos', icon: '📦' },
   { id: 'categories', label: 'Por Categoria',          icon: '🗂️' },
   { id: 'inventory',  label: 'Inventário',             icon: '🏷️' },
+  
 ]
 
 const SIDEBAR_BG      = 'bg-[#0f2137]'

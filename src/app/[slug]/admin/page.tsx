@@ -2,15 +2,15 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-
 import { Product, CategoryItem, Order } from '@/types/product'
+import { Customer } from '@/types/customer'
 import { getAllProducts } from '@/services/product'
 import { getAllCategories } from '@/services/category'
 import { getAllOrders, getOrderByCode, getOrdersByDateRange } from '@/services/orders'
 import { getAllMotoboys } from '@/services/motoboys'
+import { getAllCustomers } from '@/services/customers'
 import { Motoboy } from '@/types/motoboy'
 import { IfoodSync } from '@/components/ifood/ifood-sync'
-
 import { Tab } from './types'
 import { AdminHeader } from './AdminHeader'
 import { AdminTabs } from './AdminTabs'
@@ -22,116 +22,132 @@ import { MotoboyTab } from '@/components/motoboy/motoboy-tab'
 import { FiscalTab } from './fiscal/FiscalTab'
 import { SettingsTab } from '@/settings/SettingsTab'
 import { CashTab } from './cash/CashTab'
+import { CustomersTab } from './customers/CustomersTab'
 
 function todayLocalISO() {
   const d = new Date()
-  const yyyy = d.getFullYear()
-  const mm = String(d.getMonth() + 1).padStart(2, '0')
-  const dd = String(d.getDate()).padStart(2, '0')
-  return `${yyyy}-${mm}-${dd}`
+  return [
+    d.getFullYear(),
+    String(d.getMonth() + 1).padStart(2, '0'),
+    String(d.getDate()).padStart(2, '0'),
+  ].join('-')
 }
 
 export default function AdminPage() {
   const params = useParams<{ slug: string }>()
   const router = useRouter()
 
-  // ── Auth guard ──────────────────────────────────────────────
-  const [authReady, setAuthReady] = useState(false)
+  // ── Auth guard ──────────────────────────────────────────────────────────────
+  const [authReady,  setAuthReady]  = useState(false)
+  const [companyId,  setCompanyId]  = useState<string>('')   // ← UUID real da empresa
 
   useEffect(() => {
-    // Aguarda a sessão estar disponível antes de carregar qualquer dado
-    supabase.auth.getSession().then(({ data, error }) => {
+    supabase.auth.getSession().then(async ({ data, error }) => {
       if (error || !data.session) {
-        // Sem sessão — redireciona para o login
         router.replace(`/${params?.slug}/admin/login`)
         return
       }
+
+      // Busca o UUID real da empresa pelo slug
+      const { data: company } = await supabase
+        .from('companies')
+        .select('id')
+        .eq('slug', params.slug)
+        .single()
+
+      if (company) setCompanyId(company.id)
+
       setAuthReady(true)
     })
   }, [])
 
-  // ── Tabs & data state ───────────────────────────────────────
-  const [tab, setTab] = useState<Tab>('products')
+  // ── Tabs & UI state ─────────────────────────────────────────────────────────
+  const [tab,   setTab]   = useState<Tab>('products')
   const [error, setError] = useState<string | null>(null)
-  const [orderSearch, setOrderSearch] = useState('')
-  const [searchedOrder, setSearchedOrder] = useState<Order | null>(null)
+
+  // Pedidos — busca por código
+  const [orderSearch,    setOrderSearch]    = useState('')
+  const [searchedOrder,  setSearchedOrder]  = useState<Order | null>(null)
   const [searchingOrder, setSearchingOrder] = useState(false)
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const [products, setProducts] = useState<Product[]>([])
+  // Produtos
+  const [products,        setProducts]        = useState<Product[]>([])
   const [loadingProducts, setLoadingProducts] = useState(true)
   const [showProductForm, setShowProductForm] = useState(false)
 
-  const [categories, setCategories] = useState<CategoryItem[]>([])
-  const [loadingCats, setLoadingCats] = useState(true)
-  const [showCatForm, setShowCatForm] = useState(false)
+  // Categorias
+  const [categories,   setCategories]   = useState<CategoryItem[]>([])
+  const [loadingCats,  setLoadingCats]  = useState(true)
+  const [showCatForm,  setShowCatForm]  = useState(false)
 
-  const [orders, setOrders] = useState<Order[]>([])
-  const [allOrders, setAllOrders] = useState<Order[]>([])
-  const [loadingOrders, setLoadingOrders] = useState(false)
-  const [dateFrom, setDateFrom] = useState(todayLocalISO)
-  const [dateTo, setDateTo] = useState(todayLocalISO)
-  const [reportSubTab, setReportSubTab] = useState<'overview' | 'products' | 'categories' | 'inventory'>('overview')
+  // Pedidos
+  const [orders,         setOrders]         = useState<Order[]>([])
+  const [allOrders,      setAllOrders]      = useState<Order[]>([])
+  const [loadingOrders,  setLoadingOrders]  = useState(false)
+  const [dateFrom,       setDateFrom]       = useState(todayLocalISO)
+  const [dateTo,         setDateTo]         = useState(todayLocalISO)
+  const [reportSubTab,   setReportSubTab]   = useState<'overview' | 'products' | 'categories' | 'inventory'>('overview')
 
-  const [motoboys, setMotoboys] = useState<Motoboy[]>([])
+  // Motoboys
+  const [motoboys,        setMotoboys]        = useState<Motoboy[]>([])
   const [loadingMotoboys, setLoadingMotoboys] = useState(false)
   const [showMotoboyForm, setShowMotoboyForm] = useState(false)
 
-  // Só busca dados depois que a sessão foi confirmada
+  // Clientes
+  const [customers,        setCustomers]        = useState<Customer[]>([])
+  const [loadingCustomers, setLoadingCustomers] = useState(false)
+  const [showCustomerForm, setShowCustomerForm] = useState(false)
+
+  // ── Fetch inicial (após auth) ───────────────────────────────────────────────
   useEffect(() => {
     if (!authReady) return
 
-    const fetchProducts = async () => {
+    const run = async <T,>(
+      setLoading: (v: boolean) => void,
+      setter: (v: T) => void,
+      fetcher: () => Promise<T>
+    ) => {
       try {
-        setLoadingProducts(true)
-        setProducts(await getAllProducts())
+        setLoading(true)
+        setter(await fetcher())
       } catch (e: any) {
         setError(e.message)
       } finally {
-        setLoadingProducts(false)
+        setLoading(false)
       }
     }
 
-    const fetchCategories = async () => {
-      try {
-        setLoadingCats(true)
-        setCategories(await getAllCategories())
-      } catch (e: any) {
-        setError(e.message)
-      } finally {
-        setLoadingCats(false)
-      }
-    }
-
-    fetchProducts()
-    fetchCategories()
+    run(setLoadingProducts, setProducts, getAllProducts)
+    run(setLoadingCats,     setCategories, getAllCategories)
+    run(setLoadingMotoboys, setMotoboys, getAllMotoboys)
+    run(setLoadingCustomers, setCustomers, () => getAllCustomers(companyId))  // ← filtra por empresa
   }, [authReady])
 
+  // ── Busca de pedido por código ──────────────────────────────────────────────
   useEffect(() => {
-  if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current)
-  if (!orderSearch) { setSearchedOrder(null); return }
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current)
+    if (!orderSearch) { setSearchedOrder(null); return }
 
-  searchTimeoutRef.current = setTimeout(async () => {
-    setSearchingOrder(true)
-    try {
-      const found = await getOrderByCode(Number(orderSearch))
-      setSearchedOrder(found)
-    } finally {
-      setSearchingOrder(false)
-    }
-  }, 400)
-}, [orderSearch])
+    searchTimeoutRef.current = setTimeout(async () => {
+      setSearchingOrder(true)
+      try {
+        setSearchedOrder(await getOrderByCode(Number(orderSearch)))
+      } finally {
+        setSearchingOrder(false)
+      }
+    }, 400)
+  }, [orderSearch])
 
+  // ── Fetch de pedidos (filtrado por data) ────────────────────────────────────
   const fetchOrders = useCallback(async () => {
     try {
       setLoadingOrders(true)
-      if (dateFrom && dateTo) {
-        const filtered = await getOrdersByDateRange(dateFrom, dateTo)
-        setOrders(filtered)
-      } else {
-        const all = await getAllOrders()
-        setOrders(all)
-      }
+      setOrders(
+        dateFrom && dateTo
+          ? await getOrdersByDateRange(dateFrom, dateTo)
+          : await getAllOrders()
+      )
     } catch (e: any) {
       setError(e.message)
     } finally {
@@ -140,12 +156,8 @@ export default function AdminPage() {
   }, [dateFrom, dateTo])
 
   const fetchAllOrders = useCallback(async () => {
-    try {
-      const all = await getAllOrders()
-      setAllOrders(all)
-    } catch (e: any) {
-      setError(e.message)
-    }
+    try { setAllOrders(await getAllOrders()) }
+    catch (e: any) { setError(e.message) }
   }, [])
 
   const fetchOrdersRef = useRef(fetchOrders)
@@ -159,85 +171,56 @@ export default function AdminPage() {
     }
   }, [tab, authReady])
 
-useEffect(() => {
-  if (!authReady) return   // ← remove a condição de tab
-  const fetch = async () => {
-    try {
-      setLoadingMotoboys(true)
-      setMotoboys(await getAllMotoboys())
-    } catch (e: any) {
-      setError(e.message)
-    } finally {
-      setLoadingMotoboys(false)
-    }
-  }
-  fetch()
-}, [authReady]) 
+  // ── Realtime orders ─────────────────────────────────────────────────────────
+  const dateFromRef = useRef(dateFrom)
+  const dateToRef   = useRef(dateTo)
+  useEffect(() => { dateFromRef.current = dateFrom }, [dateFrom])
+  useEffect(() => { dateToRef.current   = dateTo   }, [dateTo])
 
+  useEffect(() => {
+    if (!authReady) return
+    const channel = supabase
+      .channel('admin-orders-realtime')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' },
+        (payload) => {
+          const newOrder  = payload.new as Order
+          const orderDate = newOrder.created_at
+            ? new Date(newOrder.created_at).toLocaleDateString('en-CA', { timeZone: 'America/Recife' })
+            : null
+          const from = dateFromRef.current
+          const to   = dateToRef.current
+          const inRange = !orderDate || ((!from || orderDate >= from) && (!to || orderDate <= to))
 
-// Refs para acessar os valores atuais dentro do canal sem recriá-lo
-const dateFromRef = useRef(dateFrom)
-const dateToRef   = useRef(dateTo)
-useEffect(() => { dateFromRef.current = dateFrom }, [dateFrom])
-useEffect(() => { dateToRef.current   = dateTo   }, [dateTo])
-
-useEffect(() => {
-  if (!authReady) return
-  const channel = supabase
-    .channel('admin-orders-realtime')
-    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' },
-      (payload) => {
-        const newOrder = payload.new as Order
-
-        const orderDate = newOrder.created_at
-          ? new Date(newOrder.created_at).toLocaleDateString('en-CA', { timeZone: 'America/Recife' })
-          : null
-
-        // Lê via ref — sem recriar o canal quando o filtro muda
-        const from = dateFromRef.current
-        const to   = dateToRef.current
-
-        const dentroDoFiltro = !orderDate || (
-          (!from || orderDate >= from) &&
-          (!to   || orderDate <= to)
-        )
-
-        if (dentroDoFiltro) {
-          setOrders(prev => {
-            if (prev.some(o => o.id === newOrder.id)) return prev
-            return [newOrder, ...prev]
-          })
+          if (inRange) {
+            setOrders(prev => prev.some(o => o.id === newOrder.id) ? prev : [newOrder, ...prev])
+          }
+          setAllOrders(prev => prev.some(o => o.id === newOrder.id) ? prev : [newOrder, ...prev])
         }
+      )
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders' },
+        (payload) => {
+          const incoming = payload.new as Order
+          const patch    = (prev: Order[]) => prev.map(o => o.id !== incoming.id ? o : { ...o, ...incoming })
+          setOrders(patch)
+          setAllOrders(patch)
+        }
+      )
+      .subscribe()
 
-        setAllOrders(prev => {
-          if (prev.some(o => o.id === newOrder.id)) return prev
-          return [newOrder, ...prev]
-        })
-      }
-    )
-    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders' },
-      (payload) => {
-        const incoming = payload.new as Order
-        const patch = (prev: Order[]) =>
-          prev.map(o => o.id !== incoming.id ? o : { ...o, ...incoming })
-        setOrders(patch)
-        setAllOrders(patch)
-      }
-    )
-    .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [authReady])
 
-  return () => { supabase.removeChannel(channel) }
-}, [authReady]) // ← canal criado uma única vez
-
-const handleTabChange = (newTab: Tab) => {
-  setTab(newTab)
-  setError(null)
-  setOrderSearch('')
-  setSearchedOrder(null)
-  setShowProductForm(false)
-  setShowCatForm(false)
-  setShowMotoboyForm(false)
-}
+  // ── Tab change ──────────────────────────────────────────────────────────────
+  const handleTabChange = (newTab: Tab) => {
+    setTab(newTab)
+    setError(null)
+    setOrderSearch('')
+    setSearchedOrder(null)
+    setShowProductForm(false)
+    setShowCatForm(false)
+    setShowMotoboyForm(false)
+    setShowCustomerForm(false)
+  }
 
   const handleClearFilter = () => {
     const today = todayLocalISO()
@@ -245,7 +228,7 @@ const handleTabChange = (newTab: Tab) => {
     setDateTo(today)
   }
 
-  // ── Auth loading screen ─────────────────────────────────────
+  // ── Auth loading ────────────────────────────────────────────────────────────
   if (!authReady) {
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center gap-4">
@@ -258,7 +241,7 @@ const handleTabChange = (newTab: Tab) => {
     )
   }
 
-  // ── Main render ─────────────────────────────────────────────
+  // ── Main render ─────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gray-50 text-black flex items-stretch">
       <AdminTabs
@@ -274,20 +257,25 @@ const handleTabChange = (newTab: Tab) => {
           productCount={products.length}
           categoryCount={categories.length}
           motoboyCount={motoboys.length}
+          customerCount={customers.length}
           onNewProduct={() => setShowProductForm(true)}
           onNewCategory={() => setShowCatForm(true)}
           onNewMotoboy={() => setShowMotoboyForm(true)}
+          onNewCustomer={() => setShowCustomerForm(true)}
           showProductForm={showProductForm}
           showCategoryForm={showCatForm}
           showMotoboyForm={showMotoboyForm}
+          showCustomerForm={showCustomerForm}
           orderSearch={orderSearch}
-          onOrderSearchChange={(v) => { setOrderSearch(v); if (!v) setSearchedOrder(null) }}
-/>
+          onOrderSearchChange={v => { setOrderSearch(v); if (!v) setSearchedOrder(null) }}
+        />
 
         {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm flex items-start justify-between gap-3">
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm
+            flex items-start justify-between gap-3">
             <span>{error}</span>
-            <button onClick={() => setError(null)} className="text-red-400 hover:text-red-600 shrink-0 text-xs">✕</button>
+            <button onClick={() => setError(null)}
+              className="text-red-400 hover:text-red-600 shrink-0 text-xs">✕</button>
           </div>
         )}
 
@@ -304,7 +292,6 @@ const handleTabChange = (newTab: Tab) => {
             onGoToCategories={() => handleTabChange('categories')}
           />
         )}
-
         {tab === 'categories' && (
           <CategoriesTab
             categories={categories}
@@ -317,7 +304,6 @@ const handleTabChange = (newTab: Tab) => {
             onError={setError}
           />
         )}
-
         {tab === 'orders' && (
           <OrdersTab
             orders={orders}
@@ -333,11 +319,9 @@ const handleTabChange = (newTab: Tab) => {
             orderSearch={orderSearch}
             searchedOrder={searchedOrder}
             searchingOrder={searchingOrder}
-            onClearSearch={() => { setOrderSearch(''); setSearchedOrder(null) } }
-            
+            onClearSearch={() => { setOrderSearch(''); setSearchedOrder(null) }}
           />
         )}
-
         {tab === 'reports' && (
           <ReportsTab
             orders={orders}
@@ -355,7 +339,6 @@ const handleTabChange = (newTab: Tab) => {
             products={products}
           />
         )}
-
         {tab === 'motoboys' && (
           <MotoboyTab
             motoboys={motoboys}
@@ -366,20 +349,21 @@ const handleTabChange = (newTab: Tab) => {
             onError={setError}
           />
         )}
-
-        {tab === 'fiscal' && (
-          <FiscalTab onError={setError} />
+        {tab === 'customers' && (
+          <CustomersTab
+            customers={customers}
+            setCustomers={setCustomers}
+            loading={loadingCustomers}
+            showForm={showCustomerForm}
+            setShowForm={setShowCustomerForm}
+            companyId={companyId}          
+            onError={setError}
+          />
         )}
-
-        {tab === 'settings' && (
-          <SettingsTab onError={setError} />
-        )}
-
-        {tab === 'cash' && <CashTab />}
-
-        {tab === 'ifood' && (
-          <IfoodSync />
-        )}
+        {tab === 'fiscal'   && <FiscalTab   onError={setError} />}
+        {tab === 'settings' && <SettingsTab onError={setError} />}
+        {tab === 'cash'     && <CashTab />}
+        {tab === 'ifood'    && <IfoodSync />}
       </div>
     </div>
   )
