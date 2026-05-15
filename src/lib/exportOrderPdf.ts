@@ -121,7 +121,7 @@ const dottedLine = () => {
   y += 2
 
   line()
-
+  y += 5
   // ── Status timeline ──────────────────────────────────────────
   text('LINHA DO TEMPO', { size: 7, bold: true, color: [120, 120, 120] })
   y += 4
@@ -142,9 +142,10 @@ const dottedLine = () => {
   y += 2
   const statusLabel = getStatusLabel(order)
   text(`Status atual: ${statusLabel}`, { size: 8, bold: true })
-  y += 2
+  y += 1
 
   line()
+  y += 5
 
   // ── Cliente ──────────────────────────────────────────────────
   text('CLIENTE', { size: 7, bold: true, color: [120, 120, 120] })
@@ -172,6 +173,8 @@ const dottedLine = () => {
 
   line()
 
+  y += 5
+
   // ── Itens ────────────────────────────────────────────────────
   text('ITENS DO PEDIDO', { size: 7, bold: true, color: [120, 120, 120] })
   y += 5
@@ -186,6 +189,7 @@ const dottedLine = () => {
   doc.text('Subtotal', PAGE_W - MARGIN, y, { align: 'right' })
   y += 3
   dottedLine()
+  y += 5
 
   for (const item of order.items ?? []) {
     // Nome do produto (pode quebrar linha)
@@ -209,7 +213,7 @@ const dottedLine = () => {
       doc.setFontSize(7.5)
       doc.setFont('helvetica', 'normal')
       doc.setTextColor(100, 100, 100)
-      doc.text(`  ↳ ${addon.qty}× ${addon.itemName}`, MARGIN, y)
+      doc.text(`  ${addon.qty}× ${addon.itemName}`, MARGIN, y)
       if (addon.subtotal > 0) {
         doc.text(`+R$ ${fmt(addon.subtotal)}`, PAGE_W - MARGIN, y, { align: 'right' })
       }
@@ -230,12 +234,13 @@ const dottedLine = () => {
   }
 
   dottedLine()
+  y += 7
 
   // Total
   row('TOTAL', `R$ ${fmt(order.total)}`, { bold: true, size: 10 })
-  y += 2
 
   line()
+  y += 3
 
   // ── Pagamento ────────────────────────────────────────────────
   text('PAGAMENTO', { size: 7, bold: true, color: [120, 120, 120] })
@@ -246,9 +251,9 @@ const dottedLine = () => {
 
   // Status do pagamento
   if (order.status === 'confirmed' && order.payment_method === 'pix') {
-    text('✅ Pago online (Pix)', { size: 8, color: [20, 160, 80] })
+    text('Pago online (Pix)', { size: 8, color: [20, 160, 80] })
   } else if (!['completed', 'cancelled'].includes(order.status)) {
-    text('⏳ Cobrar do cliente', { size: 8, color: [120, 120, 120] })
+    text('Cobrar do cliente', { size: 8, color: [120, 120, 120] })
   } else {
     text('Pago na entrega / retirada', { size: 8 })
   }
@@ -257,12 +262,12 @@ const dottedLine = () => {
   if (order.payment_method === 'dinheiro') {
     y += 2
     if (order.change === null || order.change === undefined) {
-      text('💵 Pagamento em dinheiro na entrega', { size: 8 })
+      text('Pagamento em dinheiro na entrega', { size: 8 })
     } else if (order.change === 0) {
-      text('💵 Sem troco (valor exato)', { size: 8 })
+      text('Sem troco (valor exato)', { size: 8 })
     } else {
       const trocoBase = (order.change ?? 0) + (order.total ?? 0)
-      text(`💵 Troco para: R$ ${fmt(trocoBase)}`, { size: 8 })
+      text(`Troco para: R$ ${fmt(trocoBase)}`, { size: 8 })
       text(`   Troco: R$ ${fmt(order.change)}`, { size: 8 })
     }
   }
