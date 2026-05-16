@@ -38,7 +38,6 @@ export default function AuthCallbackPage() {
 
         await supabase.auth.getSession()
 
-        // ✅ Troca para tela de sucesso
         setSuccess(true)
         await new Promise(r => setTimeout(r, 1500))
         safeRedirect(next)
