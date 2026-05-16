@@ -199,7 +199,6 @@ export function CategoriesTab({
                 </div>
               </>
             ) : (
-              // ── Com produtos: oferece arquivar ────────────
               <>
                 <div className="flex items-start gap-3">
                   <span className="text-2xl">⚠️</span>
