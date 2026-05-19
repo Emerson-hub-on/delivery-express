@@ -268,7 +268,7 @@ export function PDVTab({ companyId, onError }: PDVProps) {
           <button
             key={key}
             onClick={fn}
-            className={`flex flex-col items-center min-w-[58px] px-2 py-1.5 rounded-lg border text-[10px] transition-colors relative
+            className={`flex flex-col items-center min-w-14.5 px-2 py-1.5 rounded-lg border text-[10px] transition-colors relative
               ${danger
                 ? 'border-red-900/60 hover:bg-red-950/60 text-red-400'
                 : highlight
