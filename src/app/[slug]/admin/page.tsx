@@ -23,6 +23,7 @@ import { FiscalTab } from './fiscal/FiscalTab'
 import { SettingsTab } from '@/settings/SettingsTab'
 import { CashTab } from './cash/CashTab'
 import { CustomersTab } from './customers/CustomersTab'
+import { PDVTab } from './caixa/PDVTab'
 
 function todayLocalISO() {
   const d = new Date()
@@ -39,7 +40,7 @@ export default function AdminPage() {
 
   // ── Auth guard ──────────────────────────────────────────────────────────────
   const [authReady,  setAuthReady]  = useState(false)
-  const [companyId,  setCompanyId]  = useState<string>('')   // ← UUID real da empresa
+  const [companyId,  setCompanyId]  = useState<string>('')
 
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data, error }) => {
@@ -47,16 +48,12 @@ export default function AdminPage() {
         router.replace(`/${params?.slug}/admin/login`)
         return
       }
-
-      // Busca o UUID real da empresa pelo slug
       const { data: company } = await supabase
         .from('companies')
         .select('id')
         .eq('slug', params.slug)
         .single()
-
       if (company) setCompanyId(company.id)
-
       setAuthReady(true)
     })
   }, [])
@@ -65,23 +62,19 @@ export default function AdminPage() {
   const [tab,   setTab]   = useState<Tab>('products')
   const [error, setError] = useState<string | null>(null)
 
-  // Pedidos — busca por código
   const [orderSearch,    setOrderSearch]    = useState('')
   const [searchedOrder,  setSearchedOrder]  = useState<Order | null>(null)
   const [searchingOrder, setSearchingOrder] = useState(false)
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Produtos
   const [products,        setProducts]        = useState<Product[]>([])
   const [loadingProducts, setLoadingProducts] = useState(true)
   const [showProductForm, setShowProductForm] = useState(false)
 
-  // Categorias
   const [categories,   setCategories]   = useState<CategoryItem[]>([])
   const [loadingCats,  setLoadingCats]  = useState(true)
   const [showCatForm,  setShowCatForm]  = useState(false)
 
-  // Pedidos
   const [orders,         setOrders]         = useState<Order[]>([])
   const [allOrders,      setAllOrders]      = useState<Order[]>([])
   const [loadingOrders,  setLoadingOrders]  = useState(false)
@@ -89,12 +82,10 @@ export default function AdminPage() {
   const [dateTo,         setDateTo]         = useState(todayLocalISO)
   const [reportSubTab,   setReportSubTab]   = useState<'overview' | 'products' | 'categories' | 'inventory'>('overview')
 
-  // Motoboys
   const [motoboys,        setMotoboys]        = useState<Motoboy[]>([])
   const [loadingMotoboys, setLoadingMotoboys] = useState(false)
   const [showMotoboyForm, setShowMotoboyForm] = useState(false)
 
-  // Clientes
   const [customers,        setCustomers]        = useState<Customer[]>([])
   const [loadingCustomers, setLoadingCustomers] = useState(false)
   const [showCustomerForm, setShowCustomerForm] = useState(false)
@@ -102,7 +93,6 @@ export default function AdminPage() {
   // ── Fetch inicial (após auth) ───────────────────────────────────────────────
   useEffect(() => {
     if (!authReady) return
-
     const run = async <T,>(
       setLoading: (v: boolean) => void,
       setter: (v: T) => void,
@@ -117,29 +107,24 @@ export default function AdminPage() {
         setLoading(false)
       }
     }
-
     run(setLoadingProducts, setProducts, getAllProducts)
     run(setLoadingCats,     setCategories, getAllCategories)
     run(setLoadingMotoboys, setMotoboys, getAllMotoboys)
-    run(setLoadingCustomers, setCustomers, () => getAllCustomers(companyId))  // ← filtra por empresa
+    run(setLoadingCustomers, setCustomers, () => getAllCustomers(companyId))
   }, [authReady])
 
   // ── Busca de pedido por código ──────────────────────────────────────────────
   useEffect(() => {
     if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current)
     if (!orderSearch) { setSearchedOrder(null); return }
-
     searchTimeoutRef.current = setTimeout(async () => {
       setSearchingOrder(true)
-      try {
-        setSearchedOrder(await getOrderByCode(Number(orderSearch)))
-      } finally {
-        setSearchingOrder(false)
-      }
+      try { setSearchedOrder(await getOrderByCode(Number(orderSearch))) }
+      finally { setSearchingOrder(false) }
     }, 400)
   }, [orderSearch])
 
-  // ── Fetch de pedidos (filtrado por data) ────────────────────────────────────
+  // ── Fetch de pedidos ────────────────────────────────────────────────────────
   const fetchOrders = useCallback(async () => {
     try {
       setLoadingOrders(true)
@@ -190,10 +175,7 @@ export default function AdminPage() {
           const from = dateFromRef.current
           const to   = dateToRef.current
           const inRange = !orderDate || ((!from || orderDate >= from) && (!to || orderDate <= to))
-
-          if (inRange) {
-            setOrders(prev => prev.some(o => o.id === newOrder.id) ? prev : [newOrder, ...prev])
-          }
+          if (inRange) setOrders(prev => prev.some(o => o.id === newOrder.id) ? prev : [newOrder, ...prev])
           setAllOrders(prev => prev.some(o => o.id === newOrder.id) ? prev : [newOrder, ...prev])
         }
       )
@@ -206,7 +188,6 @@ export default function AdminPage() {
         }
       )
       .subscribe()
-
     return () => { supabase.removeChannel(channel) }
   }, [authReady])
 
@@ -241,7 +222,30 @@ export default function AdminPage() {
     )
   }
 
-  // ── Main render ─────────────────────────────────────────────────────────────
+  // ── PDV: layout especial — sem padding, sem fundo branco ────────────────────
+  // O PDV precisa ocupar toda a área ao lado da sidebar, sem o px-8 py-8
+  // e sem o bg-gray-50 do container pai.
+  if (tab === 'pdv') {
+    return (
+      <div className="min-h-screen text-black flex items-stretch" style={{ background: '#0a1520' }}>
+        <AdminTabs
+          tab={tab}
+          onChange={handleTabChange}
+          reportSubTab={reportSubTab}
+          onReportSubTabChange={setReportSubTab}
+        />
+        {/* PDV ocupa todo o restante da altura sem padding */}
+        <div className="flex-1 flex flex-col overflow-hidden" style={{ background: '#0a1520' }}>
+          <PDVTab
+            companyId={companyId}
+            onError={setError}
+          />
+        </div>
+      </div>
+    )
+  }
+
+  // ── Main render (demais abas) ───────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gray-50 text-black flex items-stretch">
       <AdminTabs
@@ -356,7 +360,7 @@ export default function AdminPage() {
             loading={loadingCustomers}
             showForm={showCustomerForm}
             setShowForm={setShowCustomerForm}
-            companyId={companyId}          
+            companyId={companyId}
             onError={setError}
           />
         )}

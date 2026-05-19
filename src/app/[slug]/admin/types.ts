@@ -1,1 +1,12 @@
-export type Tab = 'products' | 'categories' | 'orders' | 'reports' | 'motoboys' | 'fiscal' | 'settings' | 'cash' | 'ifood'  | 'customers'
+export type Tab =
+  | 'products'
+  | 'categories'
+  | 'orders'
+  | 'reports'
+  | 'motoboys'
+  | 'fiscal'
+  | 'settings'
+  | 'cash'
+  | 'pdv'
+  | 'ifood'
+  | 'customers'

@@ -22,8 +22,9 @@ const TAB_LABELS: Record<Tab, string> = {
   fiscal:     'Fiscal',
   settings:   'Configurações',
   cash:       'Caixa',
+  pdv:        'PDV',
   ifood:      'iFood Sync',
-  customers:  'Clientes',        // ← novo
+  customers:  'Clientes',
 }
 
 const TAB_ICONS: Record<Tab, string> = {
@@ -35,8 +36,9 @@ const TAB_ICONS: Record<Tab, string> = {
   fiscal:     '🧾',
   settings:   '⚙️',
   cash:       '🏪',
+  pdv:        '💳',
   ifood:      '🟠',
-  customers:  '👥',             // ← novo
+  customers:  '👥',
 }
 
 const REPORT_SUB_TABS: { id: ReportSubTab; label: string; icon: string }[] = [
@@ -147,6 +149,18 @@ export function AdminTabs({ tab, onChange, reportSubTab, onReportSubTabChange }:
               : `${TEXT_DEFAULT} ${TEXT_HOVER} ${BG_HOVER}`}`}>
           <span className="text-base">{TAB_ICONS.cash}</span>
           {TAB_LABELS.cash}
+        </button>
+
+        {/* PDV */}
+        <button
+          onClick={() => handleChange('pdv')}
+          className={`flex items-center gap-3 text-sm px-3 py-2.5 rounded-lg transition-colors font-medium w-full text-left
+            ${tab === 'pdv'
+              ? `${ACTIVE_BG} ${ACTIVE_TEXT}`
+              : `${TEXT_DEFAULT} ${TEXT_HOVER} ${BG_HOVER}`}`}
+        >
+          <span className="text-base">{TAB_ICONS.pdv}</span>
+          {TAB_LABELS.pdv}
         </button>
 
         {/* Relatórios */}
