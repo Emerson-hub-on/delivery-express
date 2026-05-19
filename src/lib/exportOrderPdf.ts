@@ -129,12 +129,12 @@ const dottedLine = () => {
   row('Pedido recebido:', formatDateTime(order.created_at))
 
   if (order.dispatched_at) {
-    const dispatchLabel = isPickup ? '🏪 Pronto p/ retirada:' : '🛵 Despachado:'
+    const dispatchLabel = isPickup ? '  Pronto p/ retirada:' : '  Despachado:'
     row(dispatchLabel, formatDateTime(order.dispatched_at))
   }
 
   if (order.completed_at) {
-    const completedLabel = order.status === 'cancelled' ? '❌ Cancelado:' : '✅ Concluído:'
+    const completedLabel = order.status === 'cancelled' ? '  Cancelado:' : '  Concluído:'
     row(completedLabel, formatDateTime(order.completed_at))
   }
 
