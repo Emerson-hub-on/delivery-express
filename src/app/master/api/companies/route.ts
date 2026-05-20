@@ -47,12 +47,25 @@ export async function POST(req: NextRequest) {
     user_metadata: { name, slug, is_company: true },
   })
 
-  if (authError) return NextResponse.json({ error: authError.message }, { status: 400 })
+  if (authError) {
+    return NextResponse.json({ error: authError.message }, { status: 400 })
+  }
 
-  await supabase
+  // Confirma que o trigger criou a linha em companies
+  const { data: company, error: checkError } = await supabase
     .from('companies')
-    .update({ slug })
+    .select('id')
     .eq('id', authData.user.id)
+    .maybeSingle()
+
+  if (checkError || !company) {
+    // Trigger falhou — rollback do usuário no Auth
+    await supabase.auth.admin.deleteUser(authData.user.id)
+    return NextResponse.json(
+      { error: 'Erro ao criar empresa no banco. Verifique o trigger.' },
+      { status: 500 }
+    )
+  }
 
   return NextResponse.json({ ok: true, id: authData.user.id, slug })
 }
