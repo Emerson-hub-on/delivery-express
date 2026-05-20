@@ -103,7 +103,7 @@ export function FiscalOrderCard({ order, emitting, configOk, onEmitir }: FiscalO
 
       {/* ── Rodapé: CPF/CNPJ + Emitir ───────────────────── */}
       <div className="px-5 py-3 bg-gray-50 border-t border-gray-100 flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+        <div className="flex items-center gap-2 flex-1 min-w-50">
           <label className="text-xs text-gray-500 shrink-0">CPF/CNPJ</label>
           <input
             type="text"
