@@ -59,11 +59,10 @@ export function ProductsTab({
   const [uploading, setUploading] = useState(false)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
 
-  // ── Estado do modal de confirmação de exclusão ───────────────
   const [deleteModal, setDeleteModal] = useState<{
     productId: number
     productName: string
-    orderCount: number  // 0 = sem pedidos → pode deletar; >0 → oferece arquivar
+    orderCount: number
   } | null>(null)
   const [deleteChecking, setDeleteChecking] = useState(false)
 
@@ -99,8 +98,21 @@ export function ProductsTab({
   }
 
   const handleSubmit = async () => {
-    if (!form.name || !form.image || form.price <= 0 || !form.category)
-      return onError('Preencha nome, categoria, imagem e preço.')
+    // Validações individuais para mensagens claras
+    if (!form.name.trim())
+      return onError('Informe o nome do produto.')
+
+    if (!form.category)
+      return onError('Selecione uma categoria.')
+
+    if (form.price <= 0)
+      return onError('Informe um preço válido.')
+
+    if (uploading)
+      return onError('Aguarde o upload da imagem terminar antes de salvar.')
+
+    if (!form.image)
+      return onError('Adicione uma imagem ao produto antes de salvar.')
 
     if (form.ncm && !/^\d{8}$/.test(form.ncm))
       return onError('NCM deve ter exatamente 8 dígitos numéricos.')
@@ -142,8 +154,15 @@ export function ProductsTab({
     setImagePreview(product.image)
   }
 
-  // ── Clique inicial no botão de excluir ───────────────────────
-  // Verifica pedidos vinculados antes de mostrar o modal
+  // Ao abrir o form para novo produto, garante que category já vem preenchida
+  const handleShowForm = () => {
+    setForm({ ...EMPTY_PRODUCT, category: categories[0]?.name ?? '' })
+    setEditingId(null)
+    setImagePreview(null)
+    setShowForm(true)
+    onError(null)
+  }
+
   const handleDeleteRequest = async (id: number) => {
     const product = products.find(p => p.id === id)
     if (!product) return
@@ -160,7 +179,6 @@ export function ProductsTab({
     }
   }
 
-  // ── Confirma exclusão definitiva (sem pedidos) ───────────────
   const handleConfirmDelete = async () => {
     if (!deleteModal) return
     try {
@@ -173,7 +191,6 @@ export function ProductsTab({
     }
   }
 
-  // ── Confirma arquivamento (com pedidos vinculados) ───────────
   const handleConfirmArchive = async () => {
     if (!deleteModal) return
     try {
@@ -186,12 +203,11 @@ export function ProductsTab({
     }
   }
 
-  // ── Reativa produto arquivado ────────────────────────────────
-  const handleActivate = async (id: number) => {
+  const handleToggleActive = async (id: number, active: boolean) => {
     try {
       onError(null)
-      const reactivated = await updateProduct(id, { active: true })
-      setProducts(prev => prev.map(p => p.id === id ? reactivated : p))
+      const updated = await updateProduct(id, { active })
+      setProducts(prev => prev.map(p => p.id === id ? updated : p))
     } catch (e: any) {
       onError(e.message)
     }
@@ -208,15 +224,6 @@ export function ProductsTab({
     setShowForm(false)
     setImagePreview(null)
   }
-  const handleToggleActive = async (id: number, active: boolean) => {
-  try {
-    onError(null)
-    const updated = await updateProduct(id, { active })
-    setProducts(prev => prev.map(p => p.id === id ? updated : p))
-  } catch (e: any) {
-    onError(e.message)
-  }
-}
 
   if (loading) {
     return <div className="text-center py-16 text-gray-400 text-sm">Carregando produtos...</div>
@@ -248,22 +255,18 @@ export function ProductsTab({
         onDelete={handleDeleteRequest}
         deletingId={deleteChecking ? -1 : null}
         onToggleActive={handleToggleActive}
+
       />
 
-      {/* ── Modal de confirmação ─────────────────────────────── */}
+      {/* Modal de confirmação */}
       {deleteModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          {/* Backdrop */}
           <div
             className="absolute inset-0 bg-black/40 backdrop-blur-sm"
             onClick={() => setDeleteModal(null)}
           />
-
-          {/* Card */}
           <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 flex flex-col gap-4">
-
             {deleteModal.orderCount === 0 ? (
-              // ── Sem pedidos: pode deletar ──────────────────
               <>
                 <div className="flex items-start gap-3">
                   <span className="text-2xl">🗑️</span>
@@ -291,7 +294,6 @@ export function ProductsTab({
                 </div>
               </>
             ) : (
-              // ── Com pedidos: oferece arquivar ──────────────
               <>
                 <div className="flex items-start gap-3">
                   <span className="text-2xl">⚠️</span>

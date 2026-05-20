@@ -59,8 +59,12 @@ export function CategoriesTab({
         setCategories(prev => [...prev, created])
       }
       resetForm()
-    } catch (e: any) {
-      onError(e.message)
+    }  catch (e: any) {
+        if (e.message?.includes('categories_name_key')) {
+          onError('Já existe uma categoria com esse slug. Escolha outro identificador.')
+        } else {
+          onError(e.message)
+        }
     } finally {
       setSaving(false)
     }
