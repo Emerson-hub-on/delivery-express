@@ -61,7 +61,6 @@ export async function createPdvSale(payload: PdvSalePayload): Promise<PdvSaleRes
       total,
       items:                itemsJson,          // jsonb legado
       payment_method:       payload.paymentMethod,
-      payment_status:       'paid',
       customer:             payload.consumerName ?? null,
       cpf_cnpj_consumidor:  payload.consumerCpf  ?? null,
       change:               payload.changeAmount  ?? null,

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
-
+import { createPdvSale } from '@/services/pdv'
 // ─── tipos locais ────────────────────────────────────────────────────────────
 
 type CartItem = {
@@ -22,6 +22,8 @@ type Consumer = {
 
 type PDVProps = {
   companyId: string
+  cashRegisterId: string
+  serie: string
   onError: (msg: string) => void
 }
 
@@ -98,7 +100,7 @@ const css = {
   txtMuted:     '#9aa0ae',
 
   // marca / destaque
-  accent:    '#f97316',   // laranja (igual ao original)
+  accent:    '#f97316',
   accentBg:  'rgba(249,115,22,0.08)',
   green:     '#16a34a',
   greenBg:   'rgba(22,163,74,0.08)',
@@ -112,8 +114,29 @@ const css = {
 
 // ─── componente principal ────────────────────────────────────────────────────
 
-export function PDVTab({ companyId, onError }: PDVProps) {
+export function PDVTab({ companyId, cashRegisterId, serie, onError }: PDVProps) {
   const { products, loading, getByCode } = useProducts(companyId, onError)
+
+  // ── ALTERAÇÃO 1: estados e busca do operador ──────────────────────────────
+  const [operatorId,   setOperatorId]   = useState<string | undefined>()
+  const [operatorName, setOperatorName] = useState<string | undefined>()
+
+  useEffect(() => {
+    if (!companyId) return
+    supabase
+      .from('operators')
+      .select('id, name')
+      .eq('company_id', companyId)
+      .eq('active', true)
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!data) return
+        setOperatorId(data.id)
+        setOperatorName(data.name)
+      })
+  }, [companyId])
+  // ─────────────────────────────────────────────────────────────────────────
 
   const [cart, setCart]                     = useState<CartItem[]>([])
   const [qty, setQty]                       = useState(1)
@@ -220,9 +243,48 @@ export function PDVTab({ companyId, onError }: PDVProps) {
     setFinalModal(true); setChange('')
   }
 
-  const confirmVenda = () => {
-    showToast(`Venda finalizada — ${fmt(cartTotal)}`)
-    setCart([]); setSelectedCartId(null); setConsumer(null); setFinalModal(false)
+  // ── ALTERAÇÃO 2: operatorId e operatorName passados ao createPdvSale ──────
+  const confirmVenda = async () => {
+    try {
+      console.log('🛒 Iniciando venda...', { companyId, cashRegisterId, serie, cart })
+
+      const result = await createPdvSale({
+        companyId,
+        cashRegisterId,
+        serie,
+        operatorId,    // ← adicionado
+        operatorName,  // ← adicionado
+        items: cart.map(i => ({
+          product_id:   i.id,
+          product_name: i.name,
+          quantity:     i.qty,
+          unit_price:   i.price,
+          discount:     i.discount,
+        })),
+        paymentMethod:   payMethod,
+        amountReceived:  payMethod === 'dinheiro' && change
+                           ? parseFloat(change.replace(',', '.'))
+                           : undefined,
+        changeAmount:    payMethod === 'dinheiro' && change
+                           ? Math.max(0, parseFloat(change.replace(',', '.')) - cartTotal)
+                           : undefined,
+        consumerName:    consumer?.name,
+        consumerCpf:     consumer?.cpf?.replace(/\D/g, ''),
+      })
+      // ────────────────────────────────────────────────────────────────────
+
+      console.log('✅ Venda criada:', result)
+      showToast(`Venda finalizada — ${fmt(cartTotal)}`)
+      setCart([])
+      setSelectedCartId(null)
+      setConsumer(null)
+      setFinalModal(false)
+    } catch (e: any) {
+      console.error('❌ Erro na venda:', e)
+      showToast(e.message, 'err')
+      onError(e.message)
+      setFinalModal(false)
+    }
   }
 
   const handleAddByCode = async () => {
