@@ -1,6 +1,6 @@
 'use client'
 import { useState } from 'react'
-import { Product, CategoryItem } from '@/types/product'
+import { Product, CategoryItem, ProductSize } from '@/types/product'
 import { createProduct, updateProduct, deleteProduct, archiveProduct, checkProductHasOrders } from '@/services/product'
 import { supabase } from '@/lib/supabase'
 import { ProductForm } from './ProductForm'
@@ -66,12 +66,9 @@ export function ProductsTab({
   } | null>(null)
   const [deleteChecking, setDeleteChecking] = useState(false)
 
-  const handleFieldChange = (
-    field: keyof Omit<Product, 'id' | 'code'>,
-    value: string | number | boolean | null
-  ) => {
-    setForm(f => ({ ...f, [field]: value }))
-  }
+const handleFieldChange = (field: keyof Omit<Product, 'id' | 'code'>, value: string | number | boolean | null | ProductSize[]) => {
+  setForm(f => ({ ...f, [field]: value }))
+}
 
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]

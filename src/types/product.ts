@@ -27,6 +27,10 @@ export type PIS_COFINS_CST =
   | '49'   // Outras saídas
 
 // ── Produto ───────────────────────────────────────────────────
+export type ProductSize = {
+  value: string        // "P", "M", "42" …
+  stock: number | null // null = não controla estoque
+}
 
 export type Product = {
   id: number
@@ -40,7 +44,8 @@ export type Product = {
   stock?: number | null
   cost_price?: number | null  // Preço de custo
   ean?: string | null 
-  sizes?: string[] 
+  sizes?: ProductSize[] | null
+
 
   // ── Campos fiscais (NFC-e / NF-e) ─────────────────────────
 

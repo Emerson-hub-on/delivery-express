@@ -1,7 +1,8 @@
 'use client'
 import { useRef, useState } from 'react'
-import { Product, CategoryItem, ICMS_CSOSN, PIS_COFINS_CST, UnitCom } from '@/types/product'
+import { Product, CategoryItem, ICMS_CSOSN, PIS_COFINS_CST, UnitCom, ProductSize } from '@/types/product'
 import { AddonSection } from '@/components/products/AddonSection'
+import { ProductSizeStock } from '@/components/products/ProductSizeStock'
 
 interface ProductFormProps {
   form: Omit<Product, 'id' | 'code'>
@@ -11,7 +12,7 @@ interface ProductFormProps {
   saving: boolean
   uploading: boolean
   imagePreview: string | null
-  onFieldChange: (field: keyof Omit<Product, 'id' | 'code'>, value: string | number | boolean | null) => void
+  onFieldChange: (field: keyof Omit<Product, 'id' | 'code'>, value: string | number | boolean | null | ProductSize[]) => void
   onImageChange: (e: React.ChangeEvent<HTMLInputElement>) => void
   onSubmit: () => void
   onCancel: () => void
@@ -93,7 +94,8 @@ export function ProductForm({
 }: ProductFormProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [fiscalOpen, setFiscalOpen] = useState(false)
-
+  const currentCategory = categories.find(c => c.name === form.category)
+  const availableSizes = currentCategory?.sizes ?? []
   // Detecta se algum campo fiscal já está preenchido (modo edição)
   const hasFiscalData = !!(form.ncm || form.cfop || form.icms_csosn)
 
@@ -161,7 +163,16 @@ export function ProductForm({
           ) : (
             <select
               value={form.category}
-              onChange={e => onFieldChange('category', e.target.value)}
+              onChange={e => {
+                onFieldChange('category', e.target.value)
+                const cat = categories.find(c => c.name === e.target.value)
+                if (cat?.sizes?.length) {
+                  onFieldChange('stock', null)
+                  onFieldChange('sizes', [])
+                } else {
+                  onFieldChange('sizes', null)
+                }
+              }}
               className={inputCls}
             >
               {categories.map(c => (
@@ -173,7 +184,33 @@ export function ProductForm({
             Gerencie categorias na aba{' '}
             <button onClick={onGoToCategories} className="underline hover:text-gray-600">Categorias</button>
           </p>
+                  {/* ── Estoque / Tamanhos (mutuamente exclusivos) ───────── */}
+        {availableSizes.length > 0 ? (
+          <div className="mt-4">
+            <ProductSizeStock
+              availableSizes={availableSizes}
+              value={form.sizes ?? []}
+              onChange={sizes => onFieldChange('sizes', sizes)}
+            />
+          </div>
+        ) : (
+          <div className="mt-4">
+            <FieldLabel>Estoque</FieldLabel>
+            <input
+              type="number"
+              min={0}
+              step="1"
+              placeholder="Deixe vazio para não controlar"
+              value={form.stock ?? ''}
+              onChange={e => onFieldChange('stock', e.target.value === '' ? null : Number(e.target.value))}
+              className={inputCls}
+            />
+            <p className="text-xs text-gray-400 mt-1">Deixe vazio para não controlar estoque</p>
+          </div>
+        )}
         </div>
+
+
         {/* EAN */}
         <div>
           <FieldLabel>EAN / Código de barras</FieldLabel>
