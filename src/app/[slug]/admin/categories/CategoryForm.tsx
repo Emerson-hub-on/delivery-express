@@ -152,7 +152,7 @@ export function CategoryForm({
           </div>
 
           {/* Tags */}
-          <div className="flex flex-wrap gap-2 mb-3 min-h-[2rem]">
+          <div className="flex flex-wrap gap-2 mb-3 min-h-8">
             {sizes.length === 0
               ? <span className="text-xs text-gray-400 italic">Nenhum tamanho adicionado.</span>
               : sizes.map(s => (
