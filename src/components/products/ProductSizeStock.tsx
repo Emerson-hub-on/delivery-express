@@ -36,13 +36,14 @@ export function ProductSizeStock({ availableSizes, value, onChange }: Props) {
         Selecione os tamanhos disponíveis. Deixe o estoque em branco para não controlar.
       </p>
 
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap gap-3">
         {availableSizes.map(v => {
           const entry = getEntry(v)
           const active = !!entry
 
           return (
-            <div key={v} className="flex items-center gap-3">
+            <div key={v} className="flex flex-col items-center gap-1.5">
+
               {/* Toggle do tamanho */}
               <button
                 type="button"
@@ -56,24 +57,18 @@ export function ProductSizeStock({ availableSizes, value, onChange }: Props) {
                 {v}
               </button>
 
-              {/* Input de estoque — só aparece quando ativo */}
-              {active ? (
-                <div className="flex items-center gap-2">
-                  <input
-                    type="number"
-                    min={0}
-                    placeholder="∞"
-                    value={entry.stock ?? ''}
-                    onChange={e => setStock(v, e.target.value)}
-                    className="w-24 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-black"
-                  />
-                  <span className="text-xs text-gray-400">
-                    {entry.stock === null ? 'sem controle' : `uni`}
-                  </span>
-                </div>
-              ) : (
-                <span className="text-xs text-gray-300 italic">não disponível</span>
-              )}
+            {active ? (
+            <input
+                type="number"
+                min={0}
+                placeholder="∞"
+                value={entry.stock ?? ''}
+                onChange={e => setStock(v, e.target.value)}
+                className="w-16 border border-gray-200 rounded-lg px-2 py-1 text-xs text-center focus:outline-none focus:ring-2 focus:ring-black"
+            />
+            ) : (
+            <span className="w-16 h-7.5" />
+            )}
             </div>
           )
         })}

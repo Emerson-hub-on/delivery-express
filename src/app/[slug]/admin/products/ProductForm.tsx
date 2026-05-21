@@ -184,32 +184,7 @@ export function ProductForm({
             Gerencie categorias na aba{' '}
             <button onClick={onGoToCategories} className="underline hover:text-gray-600">Categorias</button>
           </p>
-                  {/* ── Estoque / Tamanhos (mutuamente exclusivos) ───────── */}
-        {availableSizes.length > 0 ? (
-          <div className="mt-4">
-            <ProductSizeStock
-              availableSizes={availableSizes}
-              value={form.sizes ?? []}
-              onChange={sizes => onFieldChange('sizes', sizes)}
-            />
-          </div>
-        ) : (
-          <div className="mt-4">
-            <FieldLabel>Estoque</FieldLabel>
-            <input
-              type="number"
-              min={0}
-              step="1"
-              placeholder="Deixe vazio para não controlar"
-              value={form.stock ?? ''}
-              onChange={e => onFieldChange('stock', e.target.value === '' ? null : Number(e.target.value))}
-              className={inputCls}
-            />
-            <p className="text-xs text-gray-400 mt-1">Deixe vazio para não controlar estoque</p>
-          </div>
-        )}
         </div>
-
 
         {/* EAN */}
         <div>
@@ -266,6 +241,31 @@ export function ProductForm({
           />
         </div>    
       </div>
+
+                        {/* ── Estoque / Tamanhos (mutuamente exclusivos) ───────── */}
+        {availableSizes.length > 0 ? (
+          <div className="mt-4">
+            <ProductSizeStock
+              availableSizes={availableSizes}
+              value={form.sizes ?? []}
+              onChange={sizes => onFieldChange('sizes', sizes)}
+            />
+          </div>
+        ) : (
+          <div className="mt-4">
+            <FieldLabel>Estoque</FieldLabel>
+            <input
+              type="number"
+              min={0}
+              step="1"
+              placeholder="Deixe vazio para não controlar"
+              value={form.stock ?? ''}
+              onChange={e => onFieldChange('stock', e.target.value === '' ? null : Number(e.target.value))}
+              className={inputCls}
+            />
+            <p className="text-xs text-gray-400 mt-1">Deixe vazio para não controlar estoque</p>
+          </div>
+        )}
       {editingId !== null && <AddonSection productId={editingId} />}
 
       {/* Estoque */}
