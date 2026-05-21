@@ -48,7 +48,7 @@ export function ProductSizeStock({ availableSizes, value, onChange }: Props) {
               <button
                 type="button"
                 onClick={() => toggle(v)}
-                className={`w-12 h-8 rounded-lg text-sm font-medium border transition-colors flex-shrink-0 ${
+                className={`w-12 h-8 rounded-lg text-sm font-medium border transition-colors shrink-0 ${
                   active
                     ? 'bg-black text-white border-black'
                     : 'bg-white text-gray-400 border-gray-200 hover:border-gray-400'
