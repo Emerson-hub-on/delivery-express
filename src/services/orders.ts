@@ -11,22 +11,13 @@ async function getUser() {
   return user
 }
 
-async function insertOrderItems(orderId: number, items: OrderItem[]) {
-  if (!items?.length) return
+type RawOrder = Order & { order_items?: OrderItem[] }
 
-  const rows = items.map(item => ({
-    order_id:     orderId,
-    product_id:   item.product_id ?? null,
-    product_name: item.product_name,
-    quantity:     item.quantity,
-    unit_price:   item.unit_price,
-    discount:     0,
-    addons:       item.addons   ?? null,
-    observation:  item.observation ?? null,
-  }))
-
-  const { error } = await supabase.from('order_items').insert(rows)
-  if (error) throw new Error(`order_items insert: ${error.message}`)
+function normalizeOrder(o: RawOrder): Order {
+  return {
+    ...o,
+    items: o.order_items?.length ? o.order_items : (o.items ?? []),
+  } as Order
 }
 
 // ── leitura ───────────────────────────────────────────────────────
@@ -36,17 +27,13 @@ export const getAllOrders = async (): Promise<Order[]> => {
 
   const { data, error } = await supabase
     .from('orders')
-    .select('*, order_items(*)')       // ← join quando pronto
+    .select('*, order_items(*)')
     .eq('company_id', user.id)
     .order('created_at', { ascending: false })
 
   if (error) throw new Error(error.message)
 
-  // normaliza: se order_items veio, usa; senão cai no jsonb legado
-  return (data ?? []).map(o => ({
-    ...o,
-    items: o.order_items?.length ? o.order_items : (o.items ?? []),
-  })) as Order[]
+  return (data ?? []).map(o => normalizeOrder(o as RawOrder))
 }
 
 export const getOrdersByDateRange = async (
@@ -68,10 +55,7 @@ export const getOrdersByDateRange = async (
 
   if (error) throw new Error(error.message)
 
-  return (data ?? []).map(o => ({
-    ...o,
-    items: o.order_items?.length ? o.order_items : (o.items ?? []),
-  })) as Order[]
+  return (data ?? []).map(o => normalizeOrder(o as RawOrder))
 }
 
 export const getOrderByCode = async (code: number): Promise<Order | null> => {
@@ -87,21 +71,14 @@ export const getOrderByCode = async (code: number): Promise<Order | null> => {
     .limit(1)
     .maybeSingle()
 
-  if (byCode) return normalizeOrder(byCode)
+  if (byCode) return normalizeOrder(byCode as RawOrder)
 
   const { data: byId } = await base
     .eq('id', code)
     .limit(1)
     .maybeSingle()
 
-  return byId ? normalizeOrder(byId) : null
-}
-
-function normalizeOrder(o: any): Order {
-  return {
-    ...o,
-    items: o.order_items?.length ? o.order_items : (o.items ?? []),
-  } as Order
+  return byId ? normalizeOrder(byId as RawOrder) : null
 }
 
 // ── escrita ───────────────────────────────────────────────────────
@@ -112,25 +89,18 @@ export const createOrder = async (
     delivery_pin?: string
   }
 ): Promise<Order> => {
-  const { data, error } = await supabase
-    .from('orders')
-    .insert([{ ...order, change: order.change ?? null }])
-    .select()
-    .single()
+  const res = await fetch('/api/orders', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(order),
+  })
 
-  if (error) throw new Error(error.message)
-
-  // dual-write: espelha em order_items
-  await insertOrderItems(data.id, order.items as OrderItem[])
-
-  if (!data.code) {
-    const { data: fresh, error: e2 } = await supabase
-      .from('orders').select().eq('id', data.id).single()
-    if (e2) throw new Error(e2.message)
-    return fresh as Order
+  if (!res.ok) {
+    const { error } = await res.json()
+    throw new Error(error || 'Erro ao criar pedido')
   }
 
-  return data as Order
+  return res.json()
 }
 
 export const updateOrderStatus = async (
