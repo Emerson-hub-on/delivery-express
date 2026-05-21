@@ -1,3 +1,5 @@
+
+
 export type Category = {
   id: number
   code: number

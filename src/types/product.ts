@@ -40,6 +40,7 @@ export type Product = {
   stock?: number | null
   cost_price?: number | null  // Preço de custo
   ean?: string | null 
+  sizes?: string[] 
 
   // ── Campos fiscais (NFC-e / NF-e) ─────────────────────────
 
@@ -87,12 +88,21 @@ export type Product = {
 
 // ── Categoria ─────────────────────────────────────────────────
 
+// ── Categoria ─────────────────────────────────────────────────
+
+export type CategoryType = 'clothing' | 'footwear' | 'other'
+export type SizeGroup   = 'adult' | 'kids'
+
 export type CategoryItem = {
   id: number
   name: string
   label: string
-  active?: boolean   // ← adicionar
+  active?: boolean
   sort_order?: number
+  // ── Novos campos (já existem no banco) ────────────────────
+  category_type?: CategoryType   // 'clothing' | 'footwear' | 'other'
+  size_group?: SizeGroup         // 'adult' | 'kids'
+  sizes?: string[]               // ['P','M','G'] ou ['38','39','40']
 }
 
 // ── Pedido ────────────────────────────────────────────────────

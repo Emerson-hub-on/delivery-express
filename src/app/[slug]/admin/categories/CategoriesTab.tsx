@@ -6,7 +6,13 @@ import { updateProduct } from '@/services/product'
 import { CategoryForm } from './CategoryForm'
 import { CategoryList } from './CategoryList'
 
-const EMPTY_CATEGORY: Omit<CategoryItem, 'id'> = { name: '', label: '' }
+const EMPTY_CATEGORY: Omit<CategoryItem, 'id'> = {
+  name: '',
+  label: '',
+  category_type: undefined,
+  size_group: undefined,
+  sizes: [],
+}
 
 interface CategoriesTabProps {
   categories: CategoryItem[]
