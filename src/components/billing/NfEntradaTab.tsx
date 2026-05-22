@@ -757,7 +757,7 @@ export function NfEntradaTab({ companyId, onError }: Props) {
                       </p>
                     </td>
                     <td className="px-4 py-3">
-                      <p className="font-medium text-gray-800 truncate max-w-[200px]">{nota.emitente_razao}</p>
+                      <p className="font-medium text-gray-800 truncate max-w-50">{nota.emitente_razao}</p>
                       <p className="text-xs text-gray-400">
                         {nota.emitente_cnpj.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5')}
                       </p>
