@@ -752,7 +752,7 @@ export function NfEntradaTab({ companyId, onError }: Props) {
                   <tr key={nota.chave} className="hover:bg-gray-50 transition-colors">
                     <td className="px-4 py-3">
                       <p className="font-medium text-gray-800">Nº {nota.numero} / {nota.serie}</p>
-                      <p className="text-[10px] text-gray-400 font-mono mt-0.5 truncate max-w-[160px]" title={nota.chave}>
+                      <p className="text-[10px] text-gray-400 font-mono mt-0.5 truncate max-w-40" title={nota.chave}>
                         {nota.chave}
                       </p>
                     </td>
