@@ -15,6 +15,8 @@ export type FiscalConfig = {
   nome_fantasia?: string | null
   /** 14 dígitos sem formatação */
   cnpj: string
+  /** 11 dígitos sem formatação — usado para consulta DFe em testes com e-CPF */
+  cpf?: string | null
   ie?: string | null
   crt: CRT
   logradouro: string
@@ -30,6 +32,8 @@ export type FiscalConfig = {
   telefone?: string | null
   ambiente: AmbienteSEFAZ
   cert_pfx_base64?: string | null
+  cert_cpf_pfx_base64?: string | null   // ← e-CPF para testes
+  cert_cpf_senha?: string | null
   cert_senha?: string | null
   cert_validade?: string | null
   csc_id?: string | null

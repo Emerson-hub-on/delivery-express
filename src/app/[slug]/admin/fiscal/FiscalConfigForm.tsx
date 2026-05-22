@@ -10,7 +10,7 @@ interface FiscalConfigFormProps {
 }
 
 const EMPTY: FiscalConfigPayload = {
-  razao_social: '', nome_fantasia: '', cnpj: '', ie: '', crt: 1,
+  razao_social: '', nome_fantasia: '', cnpj: '', cpf: null, ie: '', crt: 1,
   logradouro: '', numero: '', complemento: '', bairro: '',
   municipio: '', uf: 'PB', cep: '', codigo_ibge: '', telefone: '',
   ambiente: 2,
@@ -53,7 +53,19 @@ export function FiscalConfigForm({ config, onSaved, onError }: FiscalConfigFormP
   )
   const [saving, setSaving] = useState(false)
   const [certFile, setCertFile] = useState<string | null>(null)
+  const [certCpfFile, setCertCpfFile] = useState<string | null>(null)
 
+  const handleCpfCertUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      const b64 = (reader.result as string).split(',')[1]
+      set('cert_cpf_pfx_base64', b64)
+      setCertCpfFile(file.name)
+    }
+    reader.readAsDataURL(file)
+  }
   const set = (field: keyof FiscalConfigPayload, value: any) =>
     setForm(f => ({ ...f, [field]: value }))
 
@@ -77,6 +89,9 @@ export function FiscalConfigForm({ config, onSaved, onError }: FiscalConfigFormP
 
     if (!/^\d{14}$/.test(form.cnpj))
       return onError('CNPJ deve ter 14 dígitos numéricos sem formatação.')
+
+    if (form.cpf && !/^\d{11}$/.test(form.cpf))
+      return onError('CPF deve ter 11 dígitos numéricos sem formatação.')
 
     if (!/^\d{8}$/.test(form.cep))
       return onError('CEP deve ter 8 dígitos numéricos sem formatação.')
@@ -135,6 +150,24 @@ export function FiscalConfigForm({ config, onSaved, onError }: FiscalConfigFormP
             onChange={e => set('cnpj', e.target.value.replace(/\D/g, '').slice(0, 14))}
             className={inputCls}
           />
+        </Field>
+
+        {/* ── CPF para teste ── */}
+        <Field
+          label="CPF (consulta DFe em testes)"
+          hint="11 dígitos — preencha para consultar NF-e destinadas ao seu e-CPF"
+        >
+          <input
+            type="text" maxLength={11}
+            value={form.cpf ?? ''}
+            onChange={e => set('cpf', e.target.value.replace(/\D/g, '').slice(0, 11) || null)}
+            className={inputCls}
+          />
+          {form.cpf && form.cpf.length === 11 && (
+            <p className="text-xs bg-yellow-50 text-yellow-700 border border-yellow-200 rounded-lg px-3 py-2 mt-2">
+              🧪 Modo teste ativo — a consulta à SEFAZ usará o CPF no lugar do CNPJ
+            </p>
+          )}
         </Field>
 
         <Field label="Inscrição Estadual">
@@ -225,7 +258,6 @@ export function FiscalConfigForm({ config, onSaved, onError }: FiscalConfigFormP
           />
         </Field>
 
-        {/* CSC */}
         <Field
           label="CSC ID"
           required={form.ambiente === 1}
@@ -299,6 +331,51 @@ export function FiscalConfigForm({ config, onSaved, onError }: FiscalConfigFormP
             className={inputCls}
           />
         </Field>
+
+        {/* Certificado e-CPF — só aparece quando CPF está preenchido */}
+        {form.cpf && form.cpf.length === 11 && (
+          <>
+            <div className="sm:col-span-2 lg:col-span-3">
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg px-4 py-3 text-xs text-yellow-700">
+                🧪 <strong>Modo teste:</strong> carregue aqui seu <strong>e-CPF (.pfx)</strong> pessoal.
+                Ele será usado apenas para consultas DFe pelo CPF. O certificado da empresa acima continua
+                sendo usado para emissão de NFC-e.
+              </div>
+            </div>
+
+            <div className="sm:col-span-2">
+              <Field
+                label="e-CPF (.pfx) — para consulta DFe em testes"
+                hint={certCpfFile ? `Arquivo: ${certCpfFile}` : 'Certificado pessoal A1 (.pfx ou .p12)'}
+              >
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <div className="flex-1 border border-dashed border-yellow-200 rounded-lg px-4 py-3
+                    text-sm text-gray-400 hover:border-yellow-400 transition-colors text-center">
+                    {form.cert_cpf_pfx_base64
+                      ? certCpfFile ?? '✓ e-CPF carregado'
+                      : 'Clique para selecionar o e-CPF .pfx'}
+                  </div>
+                  <input
+                    type="file"
+                    accept=".pfx,.p12"
+                    className="hidden"
+                    onChange={handleCpfCertUpload}
+                  />
+                </label>
+              </Field>
+            </div>
+
+            <Field label="Senha do e-CPF">
+              <input
+                type="password"
+                placeholder="Senha do arquivo e-CPF .pfx"
+                value={form.cert_cpf_senha ?? ''}
+                onChange={e => set('cert_cpf_senha', e.target.value || null)}
+                className={inputCls}
+              />
+            </Field>
+          </>
+        )}
 
       </div>
 
