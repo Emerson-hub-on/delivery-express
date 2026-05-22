@@ -215,7 +215,7 @@ export function AdminTabs({ tab, onChange, reportSubTab, onReportSubTabChange, b
             ${tab === 'ifood'
               ? `${ACTIVE_BG} ${ACTIVE_TEXT}`
               : `${TEXT_DEFAULT} ${TEXT_HOVER} ${BG_HOVER}`}`}>
-          <span className="text-base">🟠</span>
+          <span className="text-base">◉</span>
           {TAB_LABELS.ifood}
         </button>
 
@@ -234,7 +234,7 @@ export function AdminTabs({ tab, onChange, reportSubTab, onReportSubTabChange, b
                 : `${TEXT_DEFAULT} ${TEXT_HOVER} ${BG_HOVER}`}`}
           >
             <div className="flex items-center gap-3">
-              <span className="text-base">📋</span>
+              <span className="text-base">▦</span>
               Faturamento
             </div>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
