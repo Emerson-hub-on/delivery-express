@@ -24,6 +24,7 @@ import { SettingsTab } from '@/settings/SettingsTab'
 import { CashTab } from './cash/CashTab'
 import { CustomersTab } from './customers/CustomersTab'
 import { PDVTab } from './caixa/PDVTab'
+import { BillingTab } from '@/components/billing/BillingTab'
 
 function todayLocalISO() {
   const d = new Date()
@@ -41,6 +42,7 @@ export default function AdminPage() {
   id: string
   serie: string
 } | null>(null)
+  const [billingSubTab, setBillingSubTab] = useState<'nf-entrada'>('nf-entrada')
 
   // ── Auth guard ──────────────────────────────────────────────────────────────
   const [authReady,  setAuthReady]  = useState(false)
@@ -246,6 +248,8 @@ if (tab === 'pdv') {
         onChange={handleTabChange}
         reportSubTab={reportSubTab}
         onReportSubTabChange={setReportSubTab}
+        billingSubTab={billingSubTab}
+        onBillingSubTabChange={setBillingSubTab}
       />
       <div className="flex-1 flex flex-col overflow-hidden" style={{ background: '#0a1520' }}>
         {activeCashRegister ? (
@@ -275,6 +279,8 @@ if (tab === 'pdv') {
         onChange={handleTabChange}
         reportSubTab={reportSubTab}
         onReportSubTabChange={setReportSubTab}
+        billingSubTab={billingSubTab}
+        onBillingSubTabChange={setBillingSubTab}
       />
 
       <div className="flex-1 px-8 py-8">
@@ -387,6 +393,14 @@ if (tab === 'pdv') {
           />
         )}
         {tab === 'fiscal'   && <FiscalTab   onError={setError} />}
+        {tab === 'billing' && (
+          <BillingTab
+            subTab={billingSubTab}
+            onSubTabChange={setBillingSubTab}
+            companyId={companyId}
+            onError={setError}
+          />
+        )}
         {tab === 'settings' && <SettingsTab onError={setError} />}
         {tab === 'cash'     && <CashTab />}
         {tab === 'ifood'    && <IfoodSync />}

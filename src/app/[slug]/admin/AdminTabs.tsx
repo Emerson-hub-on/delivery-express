@@ -3,13 +3,19 @@ import { useState } from 'react'
 import { Tab } from './types'
 
 type ReportSubTab = 'overview' | 'products' | 'categories' | 'inventory'
-
+type BillingSubTab = 'nf-entrada'
 interface AdminTabsProps {
   tab: Tab
   onChange: (tab: Tab) => void
   reportSubTab: ReportSubTab
   onReportSubTabChange: (sub: ReportSubTab) => void
+  billingSubTab: BillingSubTab
+  onBillingSubTabChange: (sub: BillingSubTab) => void
 }
+
+const BILLING_SUB_TABS = [
+  { id: 'nf-entrada' as BillingSubTab, label: 'Entrada de NF', icon: '📥' },
+]
 
 const CADASTRO_TABS: Tab[] = ['products', 'categories', 'motoboys', 'customers']
 
@@ -20,6 +26,7 @@ const TAB_LABELS: Record<Tab, string> = {
   reports:    'Relatórios',
   motoboys:   'Motoboys',
   fiscal:     'Fiscal',
+  billing:    'Faturamento',
   settings:   'Configurações',
   cash:       'Caixa',
   pdv:        'PDV',
@@ -34,6 +41,7 @@ const TAB_ICONS: Record<Tab, string> = {
   reports:    '📊',
   motoboys:   '🏍️',
   fiscal:     '🧾',
+  billing:    '📋',
   settings:   '⚙️',
   cash:       '🏪',
   pdv:        '💳',
@@ -60,10 +68,11 @@ const GROUP_ACTIVE_BG = 'bg-[#1a3a5c]'
 const GROUP_ACTIVE_TEXT = 'text-white'
 const DIVIDER         = 'border-[#1a3a5c]'
 
-export function AdminTabs({ tab, onChange, reportSubTab, onReportSubTabChange }: AdminTabsProps) {
+export function AdminTabs({ tab, onChange, reportSubTab, onReportSubTabChange, billingSubTab, onBillingSubTabChange }: AdminTabsProps) {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [cadastroOpen, setCadastroOpen] = useState(() => CADASTRO_TABS.includes(tab))
   const [reportsOpen, setReportsOpen] = useState(() => tab === 'reports')
+  const [billingOpen, setBillingOpen] = useState(() => tab === 'billing')
 
   const handleChange = (t: Tab) => {
     onChange(t)
@@ -211,7 +220,44 @@ export function AdminTabs({ tab, onChange, reportSubTab, onReportSubTabChange }:
         </button>
 
         <div className={`border-t ${DIVIDER} my-2`} />
+        
+        {/* Faturamento */}
+        <div>
+          <button
+            onClick={() => {
+              onChange('billing')
+              setBillingOpen(o => !o)
+            }}
+            className={`flex items-center justify-between w-full px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
+              ${tab === 'billing'
+                ? `${GROUP_ACTIVE_BG} ${GROUP_ACTIVE_TEXT}`
+                : `${TEXT_DEFAULT} ${TEXT_HOVER} ${BG_HOVER}`}`}
+          >
+            <div className="flex items-center gap-3">
+              <span className="text-base">📋</span>
+              Faturamento
+            </div>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+              className={`transition-transform duration-200 ${billingOpen ? 'rotate-180' : ''}`}>
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </button>
 
+          {billingOpen && tab === 'billing' && (
+            <div className={`mt-1 ml-3 flex flex-col gap-1 border-l ${DIVIDER} pl-3`}>
+              {BILLING_SUB_TABS.map(s => (
+                <button key={s.id} onClick={() => { onBillingSubTabChange(s.id); setMobileOpen(false) }}
+                  className={`flex items-center gap-3 text-sm px-3 py-2 rounded-lg transition-colors font-medium w-full text-left
+                    ${billingSubTab === s.id
+                      ? `${ACTIVE_BG} ${ACTIVE_TEXT}`
+                      : `${TEXT_DEFAULT} ${TEXT_HOVER} ${BG_HOVER}`}`}>
+                  <span className="text-base">{s.icon}</span>
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         {/* Fiscal + Configurações */}
         {(['fiscal', 'settings'] as Tab[]).map(t => (
           <button key={t} onClick={() => handleChange(t)}
@@ -223,6 +269,8 @@ export function AdminTabs({ tab, onChange, reportSubTab, onReportSubTabChange }:
             {TAB_LABELS[t]}
           </button>
         ))}
+
+        
 
       </div>
 

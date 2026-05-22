@@ -19,7 +19,7 @@ const SIZE_PRESETS: Record<'clothing' | 'footwear', string[]> = {
 const CATEGORY_TYPE_LABELS: Record<CategoryType, string> = {
   clothing: '👕 Roupa',
   footwear: '👟 Tênis / Sapato',
-  other:    '📦 Outro',
+  other:    '📦 Outros tipos',
 }
 
 export function CategoryForm({

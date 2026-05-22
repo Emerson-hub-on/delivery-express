@@ -45,6 +45,7 @@ export function AdminHeader({
     orders: null,
     reports: null,
     fiscal: 'Emita e gerencie cupons fiscais (NFC-e)',
+    billing: 'Gerencie notas fiscais de entrada e saída',
     settings: 'Personalize o visual da sua loja',
     cash: 'Abertura e fechamento de caixa',
     ifood: null,
