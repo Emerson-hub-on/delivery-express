@@ -35,25 +35,25 @@ const TAB_LABELS: Record<Tab, string> = {
 }
 
 const TAB_ICONS: Record<Tab, string> = {
-  products:   '📦',
-  categories: '🗂️',
-  orders:     '🛒',
-  reports:    '📊',
-  motoboys:   '🏍️',
-  fiscal:     '🧾',
-  billing:    '📋',
-  settings:   '⚙️',
-  cash:       '🏪',
-  pdv:        '💳',
-  ifood:      '🟠',
-  customers:  '👥',
+products:   '▣',
+categories: '▤',
+orders:     '◈',
+reports:    '◬',
+motoboys:   '➜',
+fiscal:     '◫',
+billing:    '☰',
+settings:   '⚙',
+cash:       '⌂',
+pdv:        '◧',
+ifood:      '⬢',
+customers:  '◉',
 }
 
 const REPORT_SUB_TABS: { id: ReportSubTab; label: string; icon: string }[] = [
-  { id: 'overview',   label: 'Visão Geral',           icon: '📈' },
-  { id: 'products',   label: 'Produtos mais vendidos', icon: '📦' },
-  { id: 'categories', label: 'Por Categoria',          icon: '🗂️' },
-  { id: 'inventory',  label: 'Inventário',             icon: '🏷️' },
+  { id: 'overview',   label: 'Visão Geral',           icon: '⬒' },
+  { id: 'products',   label: 'Produtos mais vendidos', icon: '⬓' },
+  { id: 'categories', label: 'Por Categoria',          icon: '▦' },
+  { id: 'inventory',  label: 'Inventário',             icon: '◬' },
   
 ]
 
@@ -115,7 +115,7 @@ export function AdminTabs({ tab, onChange, reportSubTab, onReportSubTabChange, b
                 : `${TEXT_DEFAULT} ${TEXT_HOVER} ${BG_HOVER}`}`}
           >
             <div className="flex items-center gap-3">
-              <span className="text-base">🗃️</span>
+              <span className="text-base">☰</span>
               Cadastros
             </div>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
@@ -182,7 +182,7 @@ export function AdminTabs({ tab, onChange, reportSubTab, onReportSubTabChange, b
                 : `${TEXT_DEFAULT} ${TEXT_HOVER} ${BG_HOVER}`}`}
           >
             <div className="flex items-center gap-3">
-              <span className="text-base">📊</span>
+              <span className="text-base">▤</span>
               Relatórios
             </div>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
