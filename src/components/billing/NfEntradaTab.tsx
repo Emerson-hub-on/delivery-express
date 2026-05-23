@@ -41,10 +41,9 @@ interface ProdutoBusca {
   stock?: number | null
 }
 
-// Estado por item após vínculo
 interface ItemVinculado {
   produto: ProdutoBusca
-  atualizarPrecoVenda: boolean | null // null = ainda não perguntou
+  atualizarPrecoVenda: boolean | null
   novoPrecoVenda: string
 }
 
@@ -89,7 +88,7 @@ function VincularItensCard({
   nota: NfEntrada
   onConfirmado: () => void
   onDismiss: () => void
-  onError: (msg: string) => void 
+  onError: (msg: string) => void
 }) {
   const todosItens     = nota.itens_nota ?? []
   const itensPendentes = todosItens.filter(i => i.produto_id === null)
@@ -125,14 +124,12 @@ function VincularItensCard({
     setTimers(prev => ({ ...prev, [codigo]: t }))
   }
 
-  // Seleciona o produto do dropdown — ainda não vincula, só pré-seleciona
   const handleSelecionarProduto = (item: ItemNota, produto: ProdutoBusca) => {
     setBuscas(b => ({ ...b, [item.codigo]: produto.name }))
-    setResultados(r => ({ ...r, [item.codigo]: [produto] })) // mantém só o selecionado
+    setResultados(r => ({ ...r, [item.codigo]: [produto] }))
     setDropdownAberto(null)
   }
 
-  // Vincula de fato: chama API, atualiza custo/estoque, pergunta preço de venda
   const handleVincular = async (item: ItemNota) => {
     const lista = resultados[item.codigo] ?? []
     if (lista.length === 0) return
@@ -152,82 +149,68 @@ function VincularItensCard({
       })
       if (!res.ok) throw new Error('Erro ao vincular')
 
-      // Marca como vinculado e define se deve perguntar sobre preço de venda
-      // O preço de custo da nota é item.valor_unitario
-      // Só pergunta se o novo custo for diferente do atual
       setVinculados(v => ({
         ...v,
         [item.codigo]: {
           produto,
-          atualizarPrecoVenda: null, // null = ainda não decidiu
+          atualizarPrecoVenda: null,
           novoPrecoVenda: '',
         },
       }))
       setDropdownAberto(null)
     } catch (e) {
-  const message = e instanceof Error ? e.message : 'Erro ao vincular'
-  onError(message)
-} finally {
+      const message = e instanceof Error ? e.message : 'Erro ao vincular'
+      onError(message)
+    } finally {
       setVinculando(v => ({ ...v, [item.codigo]: false }))
     }
   }
 
-const handleDecidirPrecoVenda = (codigo: string, atualizar: boolean) => {
-  setVinculados(v => ({
-    ...v,
-    [codigo]: {
-      ...v[codigo],
-      atualizarPrecoVenda: atualizar,
-      // Pré-preenche com o preço de venda atual do produto
-      novoPrecoVenda: atualizar
-        ? String(v[codigo].produto.price ?? '')
-        : '',
-    },
-  }))
-}
-
-const handleNovoPreco = (codigo: string, valor: string) => {
-  setVinculados(v => ({
-    ...v,
-    [codigo]: { ...v[codigo], novoPrecoVenda: valor },
-  }))
-}
-
-  // Todos pendentes vinculados E todos com decisão de preço tomada
-  const todosVinculados = itensPendentes.every(i => vinculados[i.codigo] !== undefined)
-const todosDecididos = itensPendentes.every(i => {
-  const v = vinculados[i.codigo]
-  if (!v) return false
-  if (v.atualizarPrecoVenda === null) return false
-  if (v.atualizarPrecoVenda === true) {
-    // Precisa ter um preço válido digitado
-    const preco = parseFloat(v.novoPrecoVenda.replace(',', '.'))
-    return !isNaN(preco) && preco > 0
+  const handleDecidirPrecoVenda = (codigo: string, atualizar: boolean) => {
+    setVinculados(v => ({
+      ...v,
+      [codigo]: {
+        ...v[codigo],
+        atualizarPrecoVenda: atualizar,
+        novoPrecoVenda: atualizar ? String(v[codigo].produto.price ?? '') : '',
+      },
+    }))
   }
-  return true // escolheu "não" — ok
-})
+
+  const handleNovoPreco = (codigo: string, valor: string) => {
+    setVinculados(v => ({
+      ...v,
+      [codigo]: { ...v[codigo], novoPrecoVenda: valor },
+    }))
+  }
+
+  const todosVinculados = itensPendentes.every(i => vinculados[i.codigo] !== undefined)
+  const todosDecididos = itensPendentes.every(i => {
+    const v = vinculados[i.codigo]
+    if (!v) return false
+    if (v.atualizarPrecoVenda === null) return false
+    if (v.atualizarPrecoVenda === true) {
+      const preco = parseFloat(v.novoPrecoVenda.replace(',', '.'))
+      return !isNaN(preco) && preco > 0
+    }
+    return true
+  })
   const prontoParaConfirmar = todosVinculados && todosDecididos
 
   const handleConfirmarEntrada = async () => {
     setConfirmando(true)
     try {
-      // Monta as atualizações de preço de venda para os que aceitaram
-        // ✓ correto — usa o preço digitado pelo usuário
-        const atualizacoes = itensPendentes
+      const atualizacoes = itensPendentes
         .filter(i => vinculados[i.codigo]?.atualizarPrecoVenda === true)
         .map(i => ({
-            produtoId:      vinculados[i.codigo].produto.id,
-            novoPrecoVenda: parseFloat(vinculados[i.codigo].novoPrecoVenda.replace(',', '.')),
+          produtoId:      vinculados[i.codigo].produto.id,
+          novoPrecoVenda: parseFloat(vinculados[i.codigo].novoPrecoVenda.replace(',', '.')),
         }))
 
       const res = await fetch('/api/fiscal/nf-entrada/confirmar-entrada', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          companyId,
-          chave: nota.chave,
-          atualizacoes,
-        }),
+        body: JSON.stringify({ companyId, chave: nota.chave, atualizacoes }),
       })
       if (!res.ok) throw new Error('Erro ao confirmar entrada')
 
@@ -245,11 +228,11 @@ const todosDecididos = itensPendentes.every(i => {
     <div className="bg-white border border-orange-200 rounded-xl shadow-sm overflow-hidden">
 
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 bg-orange-50 border-b border-orange-100">
-        <div className="flex items-center gap-2">
-          <span className="text-lg">🔗</span>
-          <div>
-            <p className="text-sm font-semibold text-orange-800">
+      <div className="flex items-start justify-between px-4 py-3 bg-orange-50 border-b border-orange-100 gap-3">
+        <div className="flex items-start gap-2 min-w-0">
+          <span className="text-lg shrink-0 mt-0.5">🔗</span>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-orange-800 leading-snug">
               Produtos não identificados — {nota.emitente_razao}
             </p>
             <p className="text-xs text-orange-600 mt-0.5">
@@ -260,7 +243,7 @@ const todosDecididos = itensPendentes.every(i => {
         </div>
         <button
           onClick={onDismiss}
-          className="text-orange-400 hover:text-orange-600 transition-colors text-lg leading-none ml-4 shrink-0"
+          className="text-orange-400 hover:text-orange-600 transition-colors text-lg leading-none shrink-0"
         >
           ✕
         </button>
@@ -278,10 +261,10 @@ const todosDecididos = itensPendentes.every(i => {
             <div key={item.codigo} className="px-4 py-4 space-y-3">
 
               {/* Info do item */}
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <p className="text-sm font-medium text-gray-800">{item.descricao}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">
+              <div className="flex items-start justify-between gap-2 flex-wrap">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-gray-800 break-words">{item.descricao}</p>
+                  <p className="text-xs text-gray-400 mt-0.5 break-all">
                     Código: {item.codigo}
                     {item.ean ? ` · EAN: ${item.ean}` : ''}
                     {' · '}{item.quantidade} {item.unidade}
@@ -297,7 +280,7 @@ const todosDecididos = itensPendentes.every(i => {
 
               {/* Busca + botão Vincular */}
               {!jaVinculou && (
-                <div className="flex gap-2">
+                <div className="flex flex-col sm:flex-row gap-2">
                   <div className="relative flex-1">
                     <input
                       type="text"
@@ -323,14 +306,14 @@ const todosDecididos = itensPendentes.every(i => {
                             className="w-full flex items-center justify-between px-3 py-2.5
                               hover:bg-orange-50 transition-colors text-left"
                           >
-                            <div>
-                              <p className="text-sm font-medium text-gray-800">{produto.name}</p>
-                              <p className="text-xs text-gray-400">
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-gray-800 truncate">{produto.name}</p>
+                              <p className="text-xs text-gray-400 truncate">
                                 {produto.ean ? `EAN: ${produto.ean} · ` : ''}
                                 Cód: {produto.code}
                                 {produto.stock != null ? ` · Estoque: ${produto.stock}` : ''}
                                 {produto.cost_price != null
-                                  ? ` · Custo atual: R$ ${produto.cost_price.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+                                  ? ` · Custo: R$ ${produto.cost_price.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
                                   : ''}
                               </p>
                             </div>
@@ -341,13 +324,13 @@ const todosDecididos = itensPendentes.every(i => {
                     )}
                   </div>
 
-                  {/* Botão Vincular */}
+                  {/* Botão Vincular — full width no mobile */}
                   <button
                     onClick={() => handleVincular(item)}
                     disabled={!buscas[item.codigo] || (resultados[item.codigo] ?? []).length === 0 || vinculando[item.codigo]}
-                    className="shrink-0 flex items-center gap-1.5 bg-orange-500 hover:bg-orange-600
-                      text-white text-sm px-4 py-2 rounded-lg transition-colors
-                      disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="w-full sm:w-auto shrink-0 flex items-center justify-center gap-1.5
+                      bg-orange-500 hover:bg-orange-600 text-white text-sm px-4 py-2 rounded-lg
+                      transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     {vinculando[item.codigo]
                       ? <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -358,85 +341,83 @@ const todosDecididos = itensPendentes.every(i => {
                 </div>
               )}
 
-{/* Pergunta sobre preço de venda */}
-{jaVinculou && vinculo.atualizarPrecoVenda === null && (
-  <div className="bg-blue-50 border border-blue-100 rounded-lg px-3 py-2.5 flex
-    flex-col sm:flex-row sm:items-center justify-between gap-2">
-    <p className="text-xs text-blue-700">
-      Deseja atualizar o <strong>preço de venda</strong> de{' '}
-      <strong>{vinculo.produto.name}</strong>?{' '}
-      {vinculo.produto.price != null && (
-        <>Venda atual: <strong>
-          R$ {vinculo.produto.price.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-        </strong></>
-      )}
-    </p>
-    <div className="flex gap-2 shrink-0">
-      <button
-        onClick={() => handleDecidirPrecoVenda(item.codigo, true)}
-        className="text-xs px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors"
-      >
-        Sim
-      </button>
-      <button
-        onClick={() => handleDecidirPrecoVenda(item.codigo, false)}
-        className="text-xs px-3 py-1.5 rounded-lg bg-white border border-blue-200 text-blue-600 hover:bg-blue-50 transition-colors"
-      >
-        Não
-      </button>
-    </div>
-  </div>
-)}
+              {/* Pergunta sobre preço de venda */}
+              {jaVinculou && vinculo.atualizarPrecoVenda === null && (
+                <div className="bg-blue-50 border border-blue-100 rounded-lg px-3 py-2.5 space-y-2">
+                  <p className="text-xs text-blue-700">
+                    Deseja atualizar o <strong>preço de venda</strong> de{' '}
+                    <strong>{vinculo.produto.name}</strong>?{' '}
+                    {vinculo.produto.price != null && (
+                      <>Venda atual: <strong>
+                        R$ {vinculo.produto.price.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </strong></>
+                    )}
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleDecidirPrecoVenda(item.codigo, true)}
+                      className="flex-1 sm:flex-none text-xs px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+                    >
+                      Sim
+                    </button>
+                    <button
+                      onClick={() => handleDecidirPrecoVenda(item.codigo, false)}
+                      className="flex-1 sm:flex-none text-xs px-3 py-1.5 rounded-lg bg-white border border-blue-200 text-blue-600 hover:bg-blue-50 transition-colors"
+                    >
+                      Não
+                    </button>
+                  </div>
+                </div>
+              )}
 
-{/* Input do novo preço de venda */}
-{jaVinculou && vinculo.atualizarPrecoVenda === true && (
-  <div className="bg-blue-50 border border-blue-100 rounded-lg px-3 py-2.5 space-y-2">
-    <p className="text-xs text-blue-700">
-      Digite o novo <strong>preço de venda</strong> para{' '}
-      <strong>{vinculo.produto.name}</strong>:
-      {vinculo.produto.price != null && (
-        <span className="ml-1 text-blue-500">
-          (atual: R$ {vinculo.produto.price.toLocaleString('pt-BR', { minimumFractionDigits: 2 })})
-        </span>
-      )}
-    </p>
-    <div className="flex items-center gap-2">
-      <span className="text-xs text-blue-600 font-medium">R$</span>
-      <input
-        type="number"
-        min="0.01"
-        step="0.01"
-        value={vinculo.novoPrecoVenda}
-        onChange={e => handleNovoPreco(item.codigo, e.target.value)}
-        placeholder="0,00"
-        className="flex-1 text-sm border border-blue-200 rounded-lg px-3 py-1.5
-          focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white"
-      />
-      <button
-        onClick={() => handleDecidirPrecoVenda(item.codigo, false)}
-        className="text-xs px-2 py-1.5 rounded-lg bg-white border border-blue-200
-          text-blue-500 hover:bg-blue-50 transition-colors whitespace-nowrap"
-      >
-        Cancelar
-      </button>
-    </div>
-  </div>
-)}
-
-{/* Confirmação da decisão */}
-{jaVinculou && vinculo.atualizarPrecoVenda === false && (
-  <p className="text-xs text-gray-400">
-    ✓ Preço de venda mantido — R$ {vinculo.produto.price?.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) ?? '—'}
-  </p>
-)}
-
-{jaVinculou && vinculo.atualizarPrecoVenda === true && vinculo.novoPrecoVenda && parseFloat(vinculo.novoPrecoVenda.replace(',', '.')) > 0 && (
-  <p className="text-xs text-gray-400">
-    ✓ Novo preço de venda: R$ {parseFloat(vinculo.novoPrecoVenda.replace(',', '.')).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-  </p>
-)}
+              {/* Input do novo preço de venda */}
+              {jaVinculou && vinculo.atualizarPrecoVenda === true && (
+                <div className="bg-blue-50 border border-blue-100 rounded-lg px-3 py-2.5 space-y-2">
+                  <p className="text-xs text-blue-700">
+                    Digite o novo <strong>preço de venda</strong> para{' '}
+                    <strong>{vinculo.produto.name}</strong>:
+                    {vinculo.produto.price != null && (
+                      <span className="ml-1 text-blue-500">
+                        (atual: R$ {vinculo.produto.price.toLocaleString('pt-BR', { minimumFractionDigits: 2 })})
+                      </span>
+                    )}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-blue-600 font-medium shrink-0">R$</span>
+                    <input
+                      type="number"
+                      min="0.01"
+                      step="0.01"
+                      value={vinculo.novoPrecoVenda}
+                      onChange={e => handleNovoPreco(item.codigo, e.target.value)}
+                      placeholder="0,00"
+                      className="flex-1 min-w-0 text-sm border border-blue-200 rounded-lg px-3 py-1.5
+                        focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white"
+                    />
+                    <button
+                      onClick={() => handleDecidirPrecoVenda(item.codigo, false)}
+                      className="shrink-0 text-xs px-2 py-1.5 rounded-lg bg-white border border-blue-200
+                        text-blue-500 hover:bg-blue-50 transition-colors whitespace-nowrap"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Confirmação da decisão */}
+              {jaVinculou && vinculo.atualizarPrecoVenda === false && (
+                <p className="text-xs text-gray-400">
+                  ✓ Preço de venda mantido — R$ {vinculo.produto.price?.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) ?? '—'}
+                </p>
+              )}
+
+              {jaVinculou && vinculo.atualizarPrecoVenda === true && vinculo.novoPrecoVenda && parseFloat(vinculo.novoPrecoVenda.replace(',', '.')) > 0 && (
+                <p className="text-xs text-gray-400">
+                  ✓ Novo preço de venda: R$ {parseFloat(vinculo.novoPrecoVenda.replace(',', '.')).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                </p>
+              )}
+
               {jaVinculou && decidiu && (
                 <p className="text-xs text-gray-400">
                   {vinculo.atualizarPrecoVenda
@@ -449,9 +430,9 @@ const todosDecididos = itensPendentes.every(i => {
         })}
       </div>
 
-      {/* Footer — botão confirmar entrada */}
-      <div className={`px-4 py-3 border-t flex items-center justify-between gap-3
-        ${prontoParaConfirmar ? 'bg-green-50 border-green-100' : 'bg-gray-50 border-gray-100'}`}>
+      {/* Footer */}
+      <div className={`px-4 py-3 border-t flex flex-col sm:flex-row items-start sm:items-center
+        justify-between gap-3 ${prontoParaConfirmar ? 'bg-green-50 border-green-100' : 'bg-gray-50 border-gray-100'}`}>
         <p className="text-xs text-gray-500">
           {prontoParaConfirmar
             ? 'Tudo pronto! Clique em confirmar para registrar a entrada no sistema.'
@@ -463,14 +444,115 @@ const todosDecididos = itensPendentes.every(i => {
         <button
           onClick={handleConfirmarEntrada}
           disabled={!prontoParaConfirmar || confirmando}
-          className="shrink-0 flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white
-            text-sm px-4 py-2 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          className="w-full sm:w-auto shrink-0 flex items-center justify-center gap-2
+            bg-green-600 hover:bg-green-700 text-white text-sm px-4 py-2 rounded-lg
+            transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {confirmando
             ? <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
             : '✓'
           }
           {confirmando ? 'Confirmando…' : 'Confirmar entrada'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── Card mobile para cada nota (substitui linha da tabela) ────
+
+function NotaCard({
+  nota,
+  excluindo,
+  onManifestar,
+  onExcluir,
+}: {
+  nota: NfEntrada
+  excluindo: string | null
+  onManifestar: (chave: string, evento: Evento) => void
+  onExcluir: (chave: string) => void
+}) {
+  return (
+    <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 space-y-3">
+      {/* Linha 1: número + status */}
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="font-semibold text-gray-800 text-sm">Nº {nota.numero} / {nota.serie}</p>
+          <p className="text-[10px] text-gray-400 font-mono mt-0.5 truncate" title={nota.chave}>
+            {nota.chave}
+          </p>
+        </div>
+        <span className={`shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLOR[nota.status]}`}>
+          {STATUS_LABEL[nota.status]}
+        </span>
+      </div>
+
+      {/* Linha 2: emitente */}
+      <div>
+        <p className="text-sm text-gray-700 font-medium truncate">{nota.emitente_razao}</p>
+        <p className="text-xs text-gray-400 mt-0.5">
+          {nota.emitente_cnpj.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5')}
+        </p>
+      </div>
+
+      {/* Linha 3: data + valor */}
+      <div className="flex items-center justify-between text-sm">
+        <span className="text-gray-500 text-xs">
+          {new Date(nota.data_emissao).toLocaleDateString('pt-BR')}
+        </span>
+        <span className="font-semibold text-gray-800">
+          R$ {nota.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+        </span>
+      </div>
+
+      {/* Linha 4: ações */}
+      <div className="flex flex-wrap gap-1.5 pt-1 border-t border-gray-50">
+        {nota.status === 'pendente' && (
+          <>
+            <button onClick={() => onManifestar(nota.chave, 'ciencia')}
+              className="text-xs px-2.5 py-1.5 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors">
+              Ciência
+            </button>
+            <button onClick={() => onManifestar(nota.chave, 'confirmacao')}
+              className="text-xs px-2.5 py-1.5 rounded-lg bg-green-50 text-green-600 hover:bg-green-100 transition-colors">
+              Confirmar
+            </button>
+            <button onClick={() => onManifestar(nota.chave, 'recusa')}
+              className="text-xs px-2.5 py-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors">
+              Recusar
+            </button>
+            <button onClick={() => onManifestar(nota.chave, 'cancelamento')}
+              className="text-xs px-2.5 py-1.5 rounded-lg bg-orange-50 text-orange-600 hover:bg-orange-100 transition-colors">
+              Cancelar
+            </button>
+          </>
+        )}
+        {nota.status === 'confirmada' && (
+          <button onClick={() => onManifestar(nota.chave, 'cancelamento')}
+            className="text-xs px-2.5 py-1.5 rounded-lg bg-orange-50 text-orange-600 hover:bg-orange-100 transition-colors">
+            Cancelar
+          </button>
+        )}
+        {(nota.status === 'recusada' || nota.status === 'cancelada') && (
+          <button onClick={() => onManifestar(nota.chave, 'reabrir')}
+            className="text-xs px-2.5 py-1.5 rounded-lg bg-yellow-50 text-yellow-600 hover:bg-yellow-100 transition-colors">
+            Reabrir
+          </button>
+        )}
+        {nota.xml_url && (
+          <a href={nota.xml_url} target="_blank" rel="noopener noreferrer"
+            className="text-xs px-2.5 py-1.5 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors">
+            XML
+          </a>
+        )}
+        <button
+          onClick={() => onExcluir(nota.chave)}
+          disabled={excluindo === nota.chave}
+          title="Excluir nota permanentemente"
+          className="text-xs px-2.5 py-1.5 rounded-lg bg-red-50 text-red-500 hover:bg-red-100
+            transition-colors disabled:opacity-40 disabled:cursor-not-allowed ml-auto"
+        >
+          {excluindo === nota.chave ? '...' : 'Excluir'}
         </button>
       </div>
     </div>
@@ -491,6 +573,7 @@ export function NfEntradaTab({ companyId, onError }: Props) {
 
   const [notasParaVincular, setNotasParaVincular] = useState<NfEntrada[]>([])
   const [cardsDescartados, setCardsDescartados]   = useState<Set<string>>(new Set())
+  const [excluindo, setExcluindo] = useState<string | null>(null)
 
   const xmlInputRef = useRef<HTMLInputElement>(null)
 
@@ -516,12 +599,12 @@ export function NfEntradaTab({ companyId, onError }: Props) {
       const lista = data ?? []
       setNotas(lista)
 
-    const comItensPendentes = lista.filter(
-      n =>
-        n.status === 'pendente' &&
-        Array.isArray(n.itens_nota) &&
-        (n.itens_nota as ItemNota[]).some(i => i.produto_id === null)  // ← cast tipado
-    )
+      const comItensPendentes = lista.filter(
+        n =>
+          n.status === 'pendente' &&
+          Array.isArray(n.itens_nota) &&
+          (n.itens_nota as ItemNota[]).some(i => i.produto_id === null)
+      )
 
       if (comItensPendentes.length > 0) {
         setNotasParaVincular(prev => {
@@ -536,9 +619,9 @@ export function NfEntradaTab({ companyId, onError }: Props) {
         })
       }
     } catch (e) {
-  const message = e instanceof Error ? e.message : 'Erro interno'
-  onError(message)
-} finally {
+      const message = e instanceof Error ? e.message : 'Erro interno'
+      onError(message)
+    } finally {
       setLoading(false)
     }
   }, [companyId])
@@ -559,9 +642,9 @@ export function NfEntradaTab({ companyId, onError }: Props) {
       }
       await loadNotas()
     } catch (e) {
-  const message = e instanceof Error ? e.message : 'Erro ao consultar SEFAZ'
-  onError(message)
-} finally {
+      const message = e instanceof Error ? e.message : 'Erro ao consultar SEFAZ'
+      onError(message)
+    } finally {
       setSyncing(false)
     }
   }
@@ -589,22 +672,22 @@ export function NfEntradaTab({ companyId, onError }: Props) {
           console.error(`Erro em ${file.name}:`, err.message)
           erros++
         } else {
-const result = await res.json() as {
-  nota: NfEntrada
-  requer_revisao: boolean
-  nao_encontrados: ItemNota[]
-}
-importados++
-if (result.nao_encontrados?.length > 0) {
-  novasNotasParaVincular.push({
-    ...result.nota,
-    itens_nota: result.nao_encontrados.map(i => ({  // ← sem any, i já é ItemNota
-      ...i,
-      produto_id:   null,
-      produto_nome: null,
-    })),
-  })
-}
+          const result = await res.json() as {
+            nota: NfEntrada
+            requer_revisao: boolean
+            nao_encontrados: ItemNota[]
+          }
+          importados++
+          if (result.nao_encontrados?.length > 0) {
+            novasNotasParaVincular.push({
+              ...result.nota,
+              itens_nota: result.nao_encontrados.map(i => ({
+                ...i,
+                produto_id:   null,
+                produto_nome: null,
+              })),
+            })
+          }
         }
       } catch {
         erros++
@@ -642,10 +725,30 @@ if (result.nao_encontrados?.length > 0) {
       })
       if (!res.ok) throw new Error('Erro ao manifestar')
       await loadNotas()
-} catch (e) {
-  const message = e instanceof Error ? e.message : 'Erro ao manifestar'
-  onError(message)
-}
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Erro ao manifestar'
+      onError(message)
+    }
+  }
+
+  const handleExcluir = async (chave: string) => {
+    if (!window.confirm('Tem certeza que deseja excluir esta nota permanentemente? Esta ação não pode ser desfeita.')) return
+
+    setExcluindo(chave)
+    try {
+      const res = await fetch('/api/fiscal/nf-entrada/excluir', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ companyId, chave }),
+      })
+      if (!res.ok) throw new Error('Erro ao excluir nota')
+      await loadNotas()
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Erro ao excluir'
+      onError(message)
+    } finally {
+      setExcluindo(null)
+    }
   }
 
   const handleDismissCard = (chave: string) => {
@@ -653,31 +756,10 @@ if (result.nao_encontrados?.length > 0) {
   }
 
   const handleConfirmado = (chave: string) => {
-    // Remove o card e recarrega a lista
     setCardsDescartados(prev => new Set([...prev, chave]))
     loadNotas()
   }
-const [excluindo, setExcluindo] = useState<string | null>(null) // chave sendo excluída
 
-const handleExcluir = async (chave: string) => {
-  if (!window.confirm('Tem certeza que deseja excluir esta nota permanentemente? Esta ação não pode ser desfeita.')) return
-
-  setExcluindo(chave)
-  try {
-    const res = await fetch('/api/fiscal/nf-entrada/excluir', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ companyId, chave }),
-    })
-    if (!res.ok) throw new Error('Erro ao excluir nota')
-    await loadNotas()
-  } catch (e) {
-    const message = e instanceof Error ? e.message : 'Erro ao excluir'
-    onError(message)
-  } finally {
-    setExcluindo(null)
-  }
-}
   const cardsVisiveis = notasParaVincular.filter(n => !cardsDescartados.has(n.chave))
 
   const filtered = notas.filter(n => {
@@ -698,7 +780,7 @@ const handleExcluir = async (chave: string) => {
     <div className="space-y-5">
 
       {/* Cabeçalho */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+      <div className="flex flex-col gap-3">
         <div>
           <h2 className="text-lg font-semibold text-gray-800">Entrada de Nota Fiscal</h2>
           <p className="text-xs text-gray-400 mt-0.5">
@@ -706,43 +788,46 @@ const handleExcluir = async (chave: string) => {
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
           {cfg?.cpf && (
-            <span className="text-xs bg-yellow-50 text-yellow-700 border border-yellow-200 rounded-full px-3 py-0.5">
+            <span className="text-xs bg-yellow-50 text-yellow-700 border border-yellow-200 rounded-full px-3 py-1 self-start sm:self-auto">
               🧪 Modo teste — consultando por CPF
             </span>
           )}
 
-          <label className={`flex items-center gap-2 border border-gray-200 text-gray-600
-            bg-white hover:bg-gray-50 text-sm px-4 py-2 rounded-lg transition-colors
-            cursor-pointer select-none ${importing ? 'opacity-60 pointer-events-none' : ''}`}>
-            {importing
-              ? <span className="inline-block w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
-              : '📂'
-            }
-            {importing ? 'Importando…' : 'Importar XML'}
-            <input
-              ref={xmlInputRef}
-              type="file"
-              accept=".xml"
-              multiple
-              className="hidden"
-              onChange={handleImportXml}
-            />
-          </label>
+          <div className="flex gap-2 sm:ml-auto">
+            <label className={`flex-1 sm:flex-none flex items-center justify-center gap-2 border border-gray-200 text-gray-600
+              bg-white hover:bg-gray-50 text-sm px-4 py-2 rounded-lg transition-colors
+              cursor-pointer select-none ${importing ? 'opacity-60 pointer-events-none' : ''}`}>
+              {importing
+                ? <span className="inline-block w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+                : '📂'
+              }
+              {importing ? 'Importando…' : 'Importar XML'}
+              <input
+                ref={xmlInputRef}
+                type="file"
+                accept=".xml"
+                multiple
+                className="hidden"
+                onChange={handleImportXml}
+              />
+            </label>
 
-          <button
-            onClick={handleSync}
-            disabled={syncing}
-            className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white
-              text-sm px-4 py-2 rounded-lg transition-colors disabled:opacity-60"
-          >
-            {syncing
-              ? <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              : '🔄'
-            }
-            {syncing ? 'Consultando SEFAZ…' : 'Consultar SEFAZ'}
-          </button>
+            <button
+              onClick={handleSync}
+              disabled={syncing}
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-orange-500
+                hover:bg-orange-600 text-white text-sm px-4 py-2 rounded-lg transition-colors
+                disabled:opacity-60"
+            >
+              {syncing
+                ? <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                : '🔄'
+              }
+              {syncing ? 'Consultando…' : 'Consultar SEFAZ'}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -760,7 +845,7 @@ const handleExcluir = async (chave: string) => {
 
       {/* Resultado da importação */}
       {importResult && (
-        <div className={`flex items-center justify-between gap-3 rounded-lg px-4 py-3 text-sm
+        <div className={`flex items-start sm:items-center justify-between gap-3 rounded-lg px-4 py-3 text-sm
           ${importResult.erros > 0 && importResult.importados === 0
             ? 'bg-red-50 border border-red-100 text-red-700'
             : importResult.erros > 0
@@ -777,7 +862,7 @@ const handleExcluir = async (chave: string) => {
           </span>
           <button
             onClick={() => setImportResult(null)}
-            className="text-xs opacity-60 hover:opacity-100 transition-opacity"
+            className="text-xs opacity-60 hover:opacity-100 transition-opacity shrink-0"
           >✕</button>
         </div>
       )}
@@ -788,7 +873,7 @@ const handleExcluir = async (chave: string) => {
           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
           <input
             type="text"
-            placeholder="Buscar por emitente, CNPJ, número ou chave…"
+            placeholder="Buscar por emitente, CNPJ, número…"
             value={search}
             onChange={e => setSearch(e.target.value)}
             className="w-full pl-8 pr-4 py-2 text-sm border border-gray-200 rounded-lg
@@ -798,7 +883,8 @@ const handleExcluir = async (chave: string) => {
         <select
           value={statusFilter}
           onChange={e => setStatus(e.target.value as NfEntrada['status'] | 'todas')}
-          className="text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gray-200"
+          className="text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none
+            focus:ring-2 focus:ring-gray-200 bg-white"
         >
           <option value="todas">Todos os status</option>
           <option value="pendente">Pendente</option>
@@ -823,7 +909,7 @@ const handleExcluir = async (chave: string) => {
         ))}
       </div>
 
-      {/* Tabela */}
+      {/* Lista de notas */}
       {loading ? (
         <div className="flex justify-center py-16">
           <div className="w-8 h-8 border-4 border-gray-200 border-t-orange-500 rounded-full animate-spin" />
@@ -833,106 +919,116 @@ const handleExcluir = async (chave: string) => {
           flex flex-col items-center gap-3 text-gray-400">
           <span className="text-4xl">📥</span>
           <p className="text-sm font-medium">Nenhuma nota encontrada</p>
-          <p className="text-xs text-center">
-          Clique em &ldquo;Consultar SEFAZ&rdquo; para buscar notas destinadas à empresa,
-          ou em &ldquo;Importar XML&rdquo; para carregar arquivos manualmente
-        </p>
+          <p className="text-xs text-center px-4">
+            Clique em &ldquo;Consultar SEFAZ&rdquo; para buscar notas destinadas à empresa,
+            ou em &ldquo;Importar XML&rdquo; para carregar arquivos manualmente
+          </p>
         </div>
       ) : (
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-gray-50 border-b border-gray-100">
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">NF / Série</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Emitente</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Emissão</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Valor</th>
-                  <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
-                  <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Ações</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {filtered.map(nota => (
-                  <tr key={nota.chave} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-4 py-3">
-                      <p className="font-medium text-gray-800">Nº {nota.numero} / {nota.serie}</p>
-                      <p className="text-[10px] text-gray-400 font-mono mt-0.5 truncate max-w-40" title={nota.chave}>
-                        {nota.chave}
-                      </p>
-                    </td>
-                    <td className="px-4 py-3">
-                      <p className="font-medium text-gray-800 truncate max-w-50">{nota.emitente_razao}</p>
-                      <p className="text-xs text-gray-400">
-                        {nota.emitente_cnpj.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5')}
-                      </p>
-                    </td>
-                    <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
-                      {new Date(nota.data_emissao).toLocaleDateString('pt-BR')}
-                    </td>
-                    <td className="px-4 py-3 text-right font-medium text-gray-800 whitespace-nowrap">
-                      R$ {nota.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLOR[nota.status]}`}>
-                        {STATUS_LABEL[nota.status]}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center justify-center gap-1.5 flex-wrap">
-                        {nota.status === 'pendente' && (
-                          <>
-                            <button onClick={() => handleManifestar(nota.chave, 'ciencia')}
-                              className="text-xs px-2 py-1 rounded bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
-                            >Ciência</button>
-                            <button onClick={() => handleManifestar(nota.chave, 'confirmacao')}
-                              className="text-xs px-2 py-1 rounded bg-green-50 text-green-600 hover:bg-green-100 transition-colors"
-                            >Confirmar</button>
-                            <button onClick={() => handleManifestar(nota.chave, 'recusa')}
-                              className="text-xs px-2 py-1 rounded bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
-                            >Recusar</button>
-                            <button onClick={() => handleManifestar(nota.chave, 'cancelamento')}
-                              className="text-xs px-2 py-1 rounded bg-orange-50 text-orange-600 hover:bg-orange-100 transition-colors"
-                            >Cancelar</button>
-                          </>
-                        )}
-                        {nota.status === 'confirmada' && (
-                          <button onClick={() => handleManifestar(nota.chave, 'cancelamento')}
-                            className="text-xs px-2 py-1 rounded bg-orange-50 text-orange-600 hover:bg-orange-100 transition-colors"
-                          >Cancelar</button>
-                        )}
-                        {(nota.status === 'recusada' || nota.status === 'cancelada') && (
-                          <button onClick={() => handleManifestar(nota.chave, 'reabrir')}
-                            className="text-xs px-2 py-1 rounded bg-yellow-50 text-yellow-600 hover:bg-yellow-100 transition-colors"
-                          >Reabrir</button>
-                        )}
-                        {nota.xml_url && (
-                          <a href={nota.xml_url} target="_blank" rel="noopener noreferrer"
-                            className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
-                          >XML</a>
-                        )}
-
-                        {/* ← botão excluir — aparece sempre */}
-                        <button
-                        onClick={() => handleExcluir(nota.chave)}
-                        disabled={excluindo === nota.chave}
-                        title="Excluir nota permanentemente"
-                        className="text-xs px-2 py-1 rounded bg-red-50 text-red-500 hover:bg-red-100
-                            transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                        >
-                        {excluindo === nota.chave ? '...' : 'Excluir'}
-                        </button>
-                      </div>
-                    </td>
+        <>
+          {/* Tabela — visível só em telas grandes */}
+          <div className="hidden md:block bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-100">
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">NF / Série</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Emitente</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Emissão</th>
+                    <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Valor</th>
+                    <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
+                    <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Ações</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {filtered.map(nota => (
+                    <tr key={nota.chave} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-4 py-3">
+                        <p className="font-medium text-gray-800">Nº {nota.numero} / {nota.serie}</p>
+                        <p className="text-[10px] text-gray-400 font-mono mt-0.5 truncate max-w-[10rem]" title={nota.chave}>
+                          {nota.chave}
+                        </p>
+                      </td>
+                      <td className="px-4 py-3">
+                        <p className="font-medium text-gray-800 truncate max-w-[12rem]">{nota.emitente_razao}</p>
+                        <p className="text-xs text-gray-400">
+                          {nota.emitente_cnpj.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5')}
+                        </p>
+                      </td>
+                      <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
+                        {new Date(nota.data_emissao).toLocaleDateString('pt-BR')}
+                      </td>
+                      <td className="px-4 py-3 text-right font-medium text-gray-800 whitespace-nowrap">
+                        R$ {nota.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLOR[nota.status]}`}>
+                          {STATUS_LABEL[nota.status]}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                          {nota.status === 'pendente' && (
+                            <>
+                              <button onClick={() => handleManifestar(nota.chave, 'ciencia')}
+                                className="text-xs px-2 py-1 rounded bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors">Ciência</button>
+                              <button onClick={() => handleManifestar(nota.chave, 'confirmacao')}
+                                className="text-xs px-2 py-1 rounded bg-green-50 text-green-600 hover:bg-green-100 transition-colors">Confirmar</button>
+                              <button onClick={() => handleManifestar(nota.chave, 'recusa')}
+                                className="text-xs px-2 py-1 rounded bg-red-50 text-red-600 hover:bg-red-100 transition-colors">Recusar</button>
+                              <button onClick={() => handleManifestar(nota.chave, 'cancelamento')}
+                                className="text-xs px-2 py-1 rounded bg-orange-50 text-orange-600 hover:bg-orange-100 transition-colors">Cancelar</button>
+                            </>
+                          )}
+                          {nota.status === 'confirmada' && (
+                            <button onClick={() => handleManifestar(nota.chave, 'cancelamento')}
+                              className="text-xs px-2 py-1 rounded bg-orange-50 text-orange-600 hover:bg-orange-100 transition-colors">Cancelar</button>
+                          )}
+                          {(nota.status === 'recusada' || nota.status === 'cancelada') && (
+                            <button onClick={() => handleManifestar(nota.chave, 'reabrir')}
+                              className="text-xs px-2 py-1 rounded bg-yellow-50 text-yellow-600 hover:bg-yellow-100 transition-colors">Reabrir</button>
+                          )}
+                          {nota.xml_url && (
+                            <a href={nota.xml_url} target="_blank" rel="noopener noreferrer"
+                              className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors">XML</a>
+                          )}
+                          <button
+                            onClick={() => handleExcluir(nota.chave)}
+                            disabled={excluindo === nota.chave}
+                            title="Excluir nota permanentemente"
+                            className="text-xs px-2 py-1 rounded bg-red-50 text-red-500 hover:bg-red-100
+                              transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                          >
+                            {excluindo === nota.chave ? '...' : 'Excluir'}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="border-t border-gray-50 px-4 py-2.5 text-xs text-gray-400">
+              {filtered.length} nota{filtered.length !== 1 ? 's' : ''} exibida{filtered.length !== 1 ? 's' : ''}
+            </div>
           </div>
-          <div className="border-t border-gray-50 px-4 py-2.5 text-xs text-gray-400">
-            {filtered.length} nota{filtered.length !== 1 ? 's' : ''} exibida{filtered.length !== 1 ? 's' : ''}
+
+          {/* Cards — visíveis só no mobile */}
+          <div className="md:hidden space-y-3">
+            {filtered.map(nota => (
+              <NotaCard
+                key={nota.chave}
+                nota={nota}
+                excluindo={excluindo}
+                onManifestar={handleManifestar}
+                onExcluir={handleExcluir}
+              />
+            ))}
+            <p className="text-xs text-gray-400 text-center pb-2">
+              {filtered.length} nota{filtered.length !== 1 ? 's' : ''} exibida{filtered.length !== 1 ? 's' : ''}
+            </p>
           </div>
-        </div>
+        </>
       )}
     </div>
   )
