@@ -22,7 +22,10 @@ type ItemNota = {
   produto_nome: string | null
 }
 
-type ProdutoVinculo = Pick<Product, 'id' | 'name' | 'price' | 'cost_price' | 'stock'>
+type ProdutoVinculo = Pick<Product, 'id' | 'name' | 'price' | 'cost_price' | 'stock'> & {
+  fator_conversao: number
+  unidade_estoque: string
+}
 
 export async function POST(req: NextRequest) {
   const { companyId, chave, itemCodigo, produtoId } = await req.json() as {
@@ -31,7 +34,9 @@ export async function POST(req: NextRequest) {
     itemCodigo: string
     produtoId: number
   }
-console.log('vincular-item payload:', { companyId, chave, itemCodigo, produtoId })
+
+  console.log('vincular-item payload:', { companyId, chave, itemCodigo, produtoId })
+
   if (!companyId || !chave || !itemCodigo || !produtoId) {
     return NextResponse.json({ message: 'Parâmetros inválidos' }, { status: 400 })
   }
@@ -46,19 +51,18 @@ console.log('vincular-item payload:', { companyId, chave, itemCodigo, produtoId 
         .single<{ itens_nota: ItemNota[] }>(),
       supabaseAdmin
         .from('products')
-        .select('id, name, stock, cost_price, price')
+        // ← inclui os dois novos campos
+        .select('id, name, stock, cost_price, price, fator_conversao, unidade_estoque')
         .eq('id', produtoId)
         .eq('company_id', companyId)
         .single<ProdutoVinculo>(),
     ])
-    
 
     if (!notaData || !produto) {
       return NextResponse.json({ message: 'Nota ou produto não encontrado' }, { status: 404 })
     }
 
     const itens: ItemNota[] = notaData.itens_nota ?? []
-
     const idx = itens.findIndex(i => i.codigo === itemCodigo)
 
     if (idx === -1) {

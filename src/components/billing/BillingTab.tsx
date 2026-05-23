@@ -1,5 +1,5 @@
 'use client'
-import { NfEntradaTab } from './NfEntradaTab'
+import { NfEntradaTab } from './nf-entrada/NfEntradaTab'
 
 type BillingSubTab = 'nf-entrada'
 
