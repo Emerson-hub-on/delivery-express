@@ -28,8 +28,6 @@ export async function POST(req: NextRequest) {
     atualizacoes: { produtoId: number; novoPrecoVenda: number }[]
   }
 
-  console.log('confirmar-entrada payload:', { companyId, chave, atualizacoes })
-
   if (!companyId || !chave) {
     return NextResponse.json({ message: 'Parâmetros inválidos' }, { status: 400 })
   }
@@ -41,9 +39,6 @@ export async function POST(req: NextRequest) {
       .eq('company_id', companyId)
       .eq('chave', chave)
       .single<{ itens_nota: ItemNota[] }>()
-
-    console.log('nota:', nota)
-    console.log('notaError:', notaError)
 
     if (notaError || !nota) {
       return NextResponse.json({ message: 'Nota não encontrada' }, { status: 404 })

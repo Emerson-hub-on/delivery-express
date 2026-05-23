@@ -59,12 +59,7 @@ console.log('vincular-item payload:', { companyId, chave, itemCodigo, produtoId 
 
     const itens: ItemNota[] = notaData.itens_nota ?? []
 
-    console.log('itens na nota:', itens.map(i => ({ codigo: i.codigo, produto_id: i.produto_id })))
-    console.log('buscando itemCodigo:', itemCodigo)
-
     const idx = itens.findIndex(i => i.codigo === itemCodigo)
-
-     console.log('idx encontrado:', idx)
 
     if (idx === -1) {
       return NextResponse.json({ message: 'Item não encontrado na nota' }, { status: 404 })
