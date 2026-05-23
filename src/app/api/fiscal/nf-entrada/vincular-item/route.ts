@@ -1,78 +1,93 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import type { Product } from '@/types/product'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
+type ItemNota = {
+  ean: string
+  codigo: string
+  descricao: string
+  ncm: string
+  cfop: string
+  cst: string
+  unidade: string
+  quantidade: number
+  valor_unitario: number
+  valor_total: number
+  produto_id: number | null
+  produto_nome: string | null
+}
+
+type ProdutoVinculo = Pick<Product, 'id' | 'name' | 'price' | 'cost_price' | 'stock'>
+
 export async function POST(req: NextRequest) {
   const { companyId, chave, itemCodigo, produtoId } = await req.json() as {
     companyId: string
     chave: string
-    itemCodigo: string   // codigo do item na nota (cProd)
+    itemCodigo: string
     produtoId: number
   }
-
+console.log('vincular-item payload:', { companyId, chave, itemCodigo, produtoId })
   if (!companyId || !chave || !itemCodigo || !produtoId) {
     return NextResponse.json({ message: 'Parâmetros inválidos' }, { status: 400 })
   }
 
   try {
-    // Busca a nota e o produto
     const [{ data: notaData }, { data: produto }] = await Promise.all([
       supabaseAdmin
         .from('nf_entrada')
         .select('itens_nota')
         .eq('company_id', companyId)
         .eq('chave', chave)
-        .single(),
+        .single<{ itens_nota: ItemNota[] }>(),
       supabaseAdmin
         .from('products')
-        .select('id, name, stock')
+        .select('id, name, stock, cost_price, price')
         .eq('id', produtoId)
         .eq('company_id', companyId)
-        .single(),
+        .single<ProdutoVinculo>(),
     ])
+    
 
     if (!notaData || !produto) {
       return NextResponse.json({ message: 'Nota ou produto não encontrado' }, { status: 404 })
     }
 
-    const itens: any[] = notaData.itens_nota ?? []
+    const itens: ItemNota[] = notaData.itens_nota ?? []
+
+    console.log('itens na nota:', itens.map(i => ({ codigo: i.codigo, produto_id: i.produto_id })))
+    console.log('buscando itemCodigo:', itemCodigo)
+
     const idx = itens.findIndex(i => i.codigo === itemCodigo)
+
+     console.log('idx encontrado:', idx)
+
     if (idx === -1) {
       return NextResponse.json({ message: 'Item não encontrado na nota' }, { status: 404 })
     }
 
-    const item = itens[idx]
-
-    // Evita vínculo duplicado
-    if (item.produto_id === produtoId) {
+    if (itens[idx].produto_id === produtoId) {
       return NextResponse.json({ message: 'Item já vinculado a este produto' }, { status: 409 })
     }
 
-    // Atualiza o vínculo no array
-    itens[idx] = { ...item, produto_id: produtoId, produto_nome: produto.name }
+    // Apenas salva o vínculo — estoque é atualizado só na confirmação
+    itens[idx] = { ...itens[idx], produto_id: produtoId, produto_nome: produto.name }
 
-    await supabaseAdmin
+    const { error } = await supabaseAdmin
       .from('nf_entrada')
       .update({ itens_nota: itens })
       .eq('company_id', companyId)
       .eq('chave', chave)
 
-    // Atualiza estoque se o produto controla
-    if (produto.stock !== null && produto.stock !== undefined) {
-      const novoEstoque = (produto.stock ?? 0) + item.quantidade
-      await supabaseAdmin
-        .from('products')
-        .update({ stock: novoEstoque })
-        .eq('id', produtoId)
-        .eq('company_id', companyId)
-    }
+    if (error) throw error
 
-    return NextResponse.json({ ok: true })
-  } catch (e: any) {
-    return NextResponse.json({ message: e.message }, { status: 500 })
+    return NextResponse.json({ ok: true, produto })
+  } catch (e) {
+    const message = e instanceof Error ? e.message : 'Erro interno'
+    return NextResponse.json({ message }, { status: 500 })
   }
 }

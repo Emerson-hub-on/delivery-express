@@ -6,6 +6,21 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
+type ItemNota = {
+  ean: string
+  codigo: string
+  descricao: string
+  ncm: string
+  cfop: string
+  cst: string
+  unidade: string
+  quantidade: number
+  valor_unitario: number
+  valor_total: number
+  produto_id: number | null
+  produto_nome: string | null
+}
+
 export async function POST(req: NextRequest) {
   const { companyId, chave, atualizacoes } = await req.json() as {
     companyId: string
@@ -13,47 +28,51 @@ export async function POST(req: NextRequest) {
     atualizacoes: { produtoId: number; novoPrecoVenda: number }[]
   }
 
+  console.log('confirmar-entrada payload:', { companyId, chave, atualizacoes })
+
   if (!companyId || !chave) {
     return NextResponse.json({ message: 'Parâmetros inválidos' }, { status: 400 })
   }
 
   try {
-    // Busca a nota para pegar os itens vinculados
     const { data: nota, error: notaError } = await supabaseAdmin
       .from('nf_entrada')
       .select('itens_nota')
       .eq('company_id', companyId)
       .eq('chave', chave)
-      .single()
+      .single<{ itens_nota: ItemNota[] }>()
+
+    console.log('nota:', nota)
+    console.log('notaError:', notaError)
 
     if (notaError || !nota) {
       return NextResponse.json({ message: 'Nota não encontrada' }, { status: 404 })
     }
 
-    const itens: any[] = nota.itens_nota ?? []
+    const itens: ItemNota[] = nota.itens_nota ?? []
 
     // Atualiza custo e estoque de todos os itens com produto_id
     await Promise.all(
       itens
-        .filter(i => i.produto_id !== null)
+        .filter((i): i is ItemNota & { produto_id: number } => i.produto_id !== null)
         .map(async item => {
           const { data: prod } = await supabaseAdmin
             .from('products')
             .select('stock')
             .eq('id', item.produto_id)
             .eq('company_id', companyId)
-            .single()
+            .single<{ stock: number | null }>()
 
-          const updates: Record<string, any> = {
+            const updates: Record<string, number> = {
             cost_price: item.valor_unitario,
-          }
+            }
 
-          // Soma estoque só se o produto controla
-          if (prod && prod.stock !== null) {
-            updates.stock = (prod.stock ?? 0) + item.quantidade
-          }
+            if (prod) {
+            updates.stock = prod.stock === null
+                ? item.quantidade
+                : prod.stock + item.quantidade
+            }
 
-          // Atualiza preço de venda se o usuário optou
           const decisao = atualizacoes.find(a => a.produtoId === item.produto_id)
           if (decisao) {
             updates.price = decisao.novoPrecoVenda
@@ -67,8 +86,18 @@ export async function POST(req: NextRequest) {
         })
     )
 
+    // Marca a nota como confirmada
+    const { error: updateError } = await supabaseAdmin
+      .from('nf_entrada')
+      .update({ status: 'confirmada' })
+      .eq('company_id', companyId)
+      .eq('chave', chave)
+
+    if (updateError) throw updateError
+
     return NextResponse.json({ ok: true })
-  } catch (e: any) {
-    return NextResponse.json({ message: e.message }, { status: 500 })
+  } catch (e) {
+    const message = e instanceof Error ? e.message : 'Erro interno'
+    return NextResponse.json({ message }, { status: 500 })
   }
 }

@@ -43,7 +43,8 @@ export async function POST(req: NextRequest) {
     if (error) throw error
 
     return NextResponse.json({ ok: true, status: novoStatus })
-  } catch (e: any) {
-    return NextResponse.json({ message: e.message }, { status: 500 })
+  } catch (e) {
+    const message = e instanceof Error ? e.message : 'Erro interno'
+    return NextResponse.json({ message }, { status: 500 })
   }
 }

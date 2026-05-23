@@ -45,6 +45,7 @@ interface ProdutoBusca {
 interface ItemVinculado {
   produto: ProdutoBusca
   atualizarPrecoVenda: boolean | null // null = ainda não perguntou
+  novoPrecoVenda: string
 }
 
 interface Props {
@@ -82,11 +83,13 @@ function VincularItensCard({
   nota,
   onConfirmado,
   onDismiss,
+  onError,
 }: {
   companyId: string
   nota: NfEntrada
   onConfirmado: () => void
   onDismiss: () => void
+  onError: (msg: string) => void 
 }) {
   const todosItens     = nota.itens_nota ?? []
   const itensPendentes = todosItens.filter(i => i.produto_id === null)
@@ -157,39 +160,64 @@ function VincularItensCard({
         [item.codigo]: {
           produto,
           atualizarPrecoVenda: null, // null = ainda não decidiu
+          novoPrecoVenda: '',
         },
       }))
       setDropdownAberto(null)
-    } catch {
-      // silencia — pai tem onError
-    } finally {
+    } catch (e) {
+  const message = e instanceof Error ? e.message : 'Erro ao vincular'
+  onError(message)
+} finally {
       setVinculando(v => ({ ...v, [item.codigo]: false }))
     }
   }
 
-  const handleDecidirPrecoVenda = (codigo: string, atualizar: boolean) => {
-    setVinculados(v => ({
-      ...v,
-      [codigo]: { ...v[codigo], atualizarPrecoVenda: atualizar },
-    }))
-  }
+const handleDecidirPrecoVenda = (codigo: string, atualizar: boolean) => {
+  setVinculados(v => ({
+    ...v,
+    [codigo]: {
+      ...v[codigo],
+      atualizarPrecoVenda: atualizar,
+      // Pré-preenche com o preço de venda atual do produto
+      novoPrecoVenda: atualizar
+        ? String(v[codigo].produto.price ?? '')
+        : '',
+    },
+  }))
+}
+
+const handleNovoPreco = (codigo: string, valor: string) => {
+  setVinculados(v => ({
+    ...v,
+    [codigo]: { ...v[codigo], novoPrecoVenda: valor },
+  }))
+}
 
   // Todos pendentes vinculados E todos com decisão de preço tomada
   const todosVinculados = itensPendentes.every(i => vinculados[i.codigo] !== undefined)
-  const todosDecididos  = itensPendentes.every(
-    i => vinculados[i.codigo] && vinculados[i.codigo].atualizarPrecoVenda !== null
-  )
+const todosDecididos = itensPendentes.every(i => {
+  const v = vinculados[i.codigo]
+  if (!v) return false
+  if (v.atualizarPrecoVenda === null) return false
+  if (v.atualizarPrecoVenda === true) {
+    // Precisa ter um preço válido digitado
+    const preco = parseFloat(v.novoPrecoVenda.replace(',', '.'))
+    return !isNaN(preco) && preco > 0
+  }
+  return true // escolheu "não" — ok
+})
   const prontoParaConfirmar = todosVinculados && todosDecididos
 
   const handleConfirmarEntrada = async () => {
     setConfirmando(true)
     try {
       // Monta as atualizações de preço de venda para os que aceitaram
-      const atualizacoes = itensPendentes
+        // ✓ correto — usa o preço digitado pelo usuário
+        const atualizacoes = itensPendentes
         .filter(i => vinculados[i.codigo]?.atualizarPrecoVenda === true)
         .map(i => ({
-          produtoId:      vinculados[i.codigo].produto.id,
-          novoPrecoVenda: i.valor_unitario, // ou aplicar markup — aqui usa o custo direto
+            produtoId:      vinculados[i.codigo].produto.id,
+            novoPrecoVenda: parseFloat(vinculados[i.codigo].novoPrecoVenda.replace(',', '.')),
         }))
 
       const res = await fetch('/api/fiscal/nf-entrada/confirmar-entrada', {
@@ -330,34 +358,83 @@ function VincularItensCard({
                 </div>
               )}
 
-              {/* Pergunta sobre preço de venda */}
-              {jaVinculou && !decidiu && (
-                <div className="bg-blue-50 border border-blue-100 rounded-lg px-3 py-2.5 flex
-                  flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <p className="text-xs text-blue-700">
-                    Deseja atualizar o <strong>preço de venda</strong> de{' '}
-                    <strong>{vinculo.produto.name}</strong>?{' '}
-                    Novo custo: <strong>R$ {custoNota.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong>
-                    {vinculo.produto.price != null && (
-                      <> · Venda atual: <strong>R$ {vinculo.produto.price.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong></>
-                    )}
-                  </p>
-                  <div className="flex gap-2 shrink-0">
-                    <button
-                      onClick={() => handleDecidirPrecoVenda(item.codigo, true)}
-                      className="text-xs px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors"
-                    >
-                      Sim, atualizar
-                    </button>
-                    <button
-                      onClick={() => handleDecidirPrecoVenda(item.codigo, false)}
-                      className="text-xs px-3 py-1.5 rounded-lg bg-white border border-blue-200 text-blue-600 hover:bg-blue-50 transition-colors"
-                    >
-                      Não
-                    </button>
-                  </div>
-                </div>
-              )}
+{/* Pergunta sobre preço de venda */}
+{jaVinculou && vinculo.atualizarPrecoVenda === null && (
+  <div className="bg-blue-50 border border-blue-100 rounded-lg px-3 py-2.5 flex
+    flex-col sm:flex-row sm:items-center justify-between gap-2">
+    <p className="text-xs text-blue-700">
+      Deseja atualizar o <strong>preço de venda</strong> de{' '}
+      <strong>{vinculo.produto.name}</strong>?{' '}
+      {vinculo.produto.price != null && (
+        <>Venda atual: <strong>
+          R$ {vinculo.produto.price.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+        </strong></>
+      )}
+    </p>
+    <div className="flex gap-2 shrink-0">
+      <button
+        onClick={() => handleDecidirPrecoVenda(item.codigo, true)}
+        className="text-xs px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+      >
+        Sim
+      </button>
+      <button
+        onClick={() => handleDecidirPrecoVenda(item.codigo, false)}
+        className="text-xs px-3 py-1.5 rounded-lg bg-white border border-blue-200 text-blue-600 hover:bg-blue-50 transition-colors"
+      >
+        Não
+      </button>
+    </div>
+  </div>
+)}
+
+{/* Input do novo preço de venda */}
+{jaVinculou && vinculo.atualizarPrecoVenda === true && (
+  <div className="bg-blue-50 border border-blue-100 rounded-lg px-3 py-2.5 space-y-2">
+    <p className="text-xs text-blue-700">
+      Digite o novo <strong>preço de venda</strong> para{' '}
+      <strong>{vinculo.produto.name}</strong>:
+      {vinculo.produto.price != null && (
+        <span className="ml-1 text-blue-500">
+          (atual: R$ {vinculo.produto.price.toLocaleString('pt-BR', { minimumFractionDigits: 2 })})
+        </span>
+      )}
+    </p>
+    <div className="flex items-center gap-2">
+      <span className="text-xs text-blue-600 font-medium">R$</span>
+      <input
+        type="number"
+        min="0.01"
+        step="0.01"
+        value={vinculo.novoPrecoVenda}
+        onChange={e => handleNovoPreco(item.codigo, e.target.value)}
+        placeholder="0,00"
+        className="flex-1 text-sm border border-blue-200 rounded-lg px-3 py-1.5
+          focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white"
+      />
+      <button
+        onClick={() => handleDecidirPrecoVenda(item.codigo, false)}
+        className="text-xs px-2 py-1.5 rounded-lg bg-white border border-blue-200
+          text-blue-500 hover:bg-blue-50 transition-colors whitespace-nowrap"
+      >
+        Cancelar
+      </button>
+    </div>
+  </div>
+)}
+
+{/* Confirmação da decisão */}
+{jaVinculou && vinculo.atualizarPrecoVenda === false && (
+  <p className="text-xs text-gray-400">
+    ✓ Preço de venda mantido — R$ {vinculo.produto.price?.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) ?? '—'}
+  </p>
+)}
+
+{jaVinculou && vinculo.atualizarPrecoVenda === true && vinculo.novoPrecoVenda && parseFloat(vinculo.novoPrecoVenda.replace(',', '.')) > 0 && (
+  <p className="text-xs text-gray-400">
+    ✓ Novo preço de venda: R$ {parseFloat(vinculo.novoPrecoVenda.replace(',', '.')).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+  </p>
+)}
 
               {/* Confirmação da decisão */}
               {jaVinculou && decidiu && (
@@ -439,12 +516,12 @@ export function NfEntradaTab({ companyId, onError }: Props) {
       const lista = data ?? []
       setNotas(lista)
 
-      const comItensPendentes = lista.filter(
-        n =>
-          n.status === 'pendente' &&
-          Array.isArray(n.itens_nota) &&
-          n.itens_nota.some((i: any) => i.produto_id === null)
-      )
+    const comItensPendentes = lista.filter(
+      n =>
+        n.status === 'pendente' &&
+        Array.isArray(n.itens_nota) &&
+        (n.itens_nota as ItemNota[]).some(i => i.produto_id === null)  // ← cast tipado
+    )
 
       if (comItensPendentes.length > 0) {
         setNotasParaVincular(prev => {
@@ -458,9 +535,10 @@ export function NfEntradaTab({ companyId, onError }: Props) {
           return next
         })
       }
-    } catch (e: any) {
-      onError(e.message)
-    } finally {
+    } catch (e) {
+  const message = e instanceof Error ? e.message : 'Erro interno'
+  onError(message)
+} finally {
       setLoading(false)
     }
   }, [companyId])
@@ -480,9 +558,10 @@ export function NfEntradaTab({ companyId, onError }: Props) {
         throw new Error(err.message ?? 'Erro ao consultar SEFAZ')
       }
       await loadNotas()
-    } catch (e: any) {
-      onError(e.message)
-    } finally {
+    } catch (e) {
+  const message = e instanceof Error ? e.message : 'Erro ao consultar SEFAZ'
+  onError(message)
+} finally {
       setSyncing(false)
     }
   }
@@ -510,18 +589,22 @@ export function NfEntradaTab({ companyId, onError }: Props) {
           console.error(`Erro em ${file.name}:`, err.message)
           erros++
         } else {
-          const result = await res.json()
-          importados++
-          if (result.nao_encontrados?.length > 0) {
-            novasNotasParaVincular.push({
-              ...result.nota,
-              itens_nota: result.nao_encontrados.map((i: any) => ({
-                ...i,
-                produto_id:   null,
-                produto_nome: null,
-              })),
-            })
-          }
+const result = await res.json() as {
+  nota: NfEntrada
+  requer_revisao: boolean
+  nao_encontrados: ItemNota[]
+}
+importados++
+if (result.nao_encontrados?.length > 0) {
+  novasNotasParaVincular.push({
+    ...result.nota,
+    itens_nota: result.nao_encontrados.map(i => ({  // ← sem any, i já é ItemNota
+      ...i,
+      produto_id:   null,
+      produto_nome: null,
+    })),
+  })
+}
         }
       } catch {
         erros++
@@ -559,9 +642,10 @@ export function NfEntradaTab({ companyId, onError }: Props) {
       })
       if (!res.ok) throw new Error('Erro ao manifestar')
       await loadNotas()
-    } catch (e: any) {
-      onError(e.message)
-    }
+} catch (e) {
+  const message = e instanceof Error ? e.message : 'Erro ao manifestar'
+  onError(message)
+}
   }
 
   const handleDismissCard = (chave: string) => {
@@ -573,7 +657,27 @@ export function NfEntradaTab({ companyId, onError }: Props) {
     setCardsDescartados(prev => new Set([...prev, chave]))
     loadNotas()
   }
+const [excluindo, setExcluindo] = useState<string | null>(null) // chave sendo excluída
 
+const handleExcluir = async (chave: string) => {
+  if (!window.confirm('Tem certeza que deseja excluir esta nota permanentemente? Esta ação não pode ser desfeita.')) return
+
+  setExcluindo(chave)
+  try {
+    const res = await fetch('/api/fiscal/nf-entrada/excluir', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ companyId, chave }),
+    })
+    if (!res.ok) throw new Error('Erro ao excluir nota')
+    await loadNotas()
+  } catch (e) {
+    const message = e instanceof Error ? e.message : 'Erro ao excluir'
+    onError(message)
+  } finally {
+    setExcluindo(null)
+  }
+}
   const cardsVisiveis = notasParaVincular.filter(n => !cardsDescartados.has(n.chave))
 
   const filtered = notas.filter(n => {
@@ -650,6 +754,7 @@ export function NfEntradaTab({ companyId, onError }: Props) {
           nota={nota}
           onConfirmado={() => handleConfirmado(nota.chave)}
           onDismiss={() => handleDismissCard(nota.chave)}
+          onError={onError}
         />
       ))}
 
@@ -692,7 +797,7 @@ export function NfEntradaTab({ companyId, onError }: Props) {
         </div>
         <select
           value={statusFilter}
-          onChange={e => setStatus(e.target.value as any)}
+          onChange={e => setStatus(e.target.value as NfEntrada['status'] | 'todas')}
           className="text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gray-200"
         >
           <option value="todas">Todos os status</option>
@@ -729,9 +834,9 @@ export function NfEntradaTab({ companyId, onError }: Props) {
           <span className="text-4xl">📥</span>
           <p className="text-sm font-medium">Nenhuma nota encontrada</p>
           <p className="text-xs text-center">
-            Clique em "Consultar SEFAZ" para buscar notas destinadas à empresa,
-            ou em "Importar XML" para carregar arquivos manualmente
-          </p>
+          Clique em &ldquo;Consultar SEFAZ&rdquo; para buscar notas destinadas à empresa,
+          ou em &ldquo;Importar XML&rdquo; para carregar arquivos manualmente
+        </p>
         </div>
       ) : (
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
@@ -806,6 +911,17 @@ export function NfEntradaTab({ companyId, onError }: Props) {
                             className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
                           >XML</a>
                         )}
+
+                        {/* ← botão excluir — aparece sempre */}
+                        <button
+                        onClick={() => handleExcluir(nota.chave)}
+                        disabled={excluindo === nota.chave}
+                        title="Excluir nota permanentemente"
+                        className="text-xs px-2 py-1 rounded bg-red-50 text-red-500 hover:bg-red-100
+                            transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                        {excluindo === nota.chave ? '...' : 'Excluir'}
+                        </button>
                       </div>
                     </td>
                   </tr>
