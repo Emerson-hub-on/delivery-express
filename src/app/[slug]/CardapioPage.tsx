@@ -5,6 +5,7 @@ import { ProductSelect } from '@/components/products/select'
 import { TabsSkeleton } from '@/components/products/skeleton'
 import { Header } from '@/components/ui/header'
 import { Suspense } from 'react'
+import { Footer } from '@/components/ui/footer'
 
 type Props = {
   companyId: string
@@ -31,6 +32,7 @@ const CardapioPage = ({ companyId, slug, companyName, bannerUrl, logoUrl, minOrd
           <ProductSelect companyId={companyId} />
         </Suspense>
       </div>
+      <Footer />
     </div>
   )
 }

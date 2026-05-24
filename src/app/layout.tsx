@@ -18,7 +18,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Loja",
+  title: "Store",
 };
 
 export default function RootLayout({
@@ -40,7 +40,6 @@ export default function RootLayout({
           <main className="flex-1">
             {children}
           </main>
-          <Footer />
           <Suspense fallback={null}>
             <AuthSuccessToast />
           </Suspense>
