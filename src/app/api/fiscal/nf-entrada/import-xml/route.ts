@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { XMLParser } from 'fast-xml-parser'
 import { converterCfopCst, Finalidade } from '@/lib/fiscal/conversao-cfop-cst'
 import type { Product } from '@/types/product'
+import { upsertSupplier } from '@/lib/fiscal/upsertSupplier'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -31,7 +32,6 @@ type ProdutoCasado = Pick<Product, 'id' | 'name' | 'stock'> & {
   code: number
 }
 
-/** Shape bruta retornada pelo fast-xml-parser para cada <det> da NF-e */
 type DetNFe = {
   prod?: {
     cEAN?: string | number
@@ -54,6 +54,9 @@ type ItensCasado = {
   produto_id: number | null
   produto_nome: string | null
 }
+
+// ── Upsert de fornecedor ──────────────────────────────────────
+
 
 // ── Handler ───────────────────────────────────────────────────
 
@@ -96,11 +99,7 @@ export async function POST(req: NextRequest) {
     const chave = rawId
 
     const rawDet = infNFe['det'] as DetNFe | DetNFe[] | undefined
-    const dets: DetNFe[] = Array.isArray(rawDet)
-      ? rawDet
-      : rawDet
-      ? [rawDet]
-      : []
+    const dets: DetNFe[] = Array.isArray(rawDet) ? rawDet : rawDet ? [rawDet] : []
 
     // ── Itens da nota ─────────────────────────────────────────
     const itensNota: ItemNota[] = dets.map((det) => {
@@ -110,8 +109,7 @@ export async function POST(req: NextRequest) {
 
       return {
         ean:            det.prod?.cEAN && det.prod.cEAN !== 'SEM GTIN'
-                          ? String(det.prod.cEAN)
-                          : '',
+                          ? String(det.prod.cEAN) : '',
         codigo:         String(det.prod?.cProd ?? ''),
         descricao:      det.prod?.xProd ?? '',
         ncm:            String(det.prod?.NCM ?? ''),
@@ -130,11 +128,34 @@ export async function POST(req: NextRequest) {
     const itensConvertidos = await converterCfopCst({ companyId, itens: itensOriginais, finalidade })
     const requer_revisao   = itensConvertidos.some(i => !i.convertido)
 
-    // ── Helpers para acessar infNFe com segurança ─────────────
-    const ide   = infNFe['ide']   as Record<string, unknown> | undefined
-    const emit  = infNFe['emit']  as Record<string, unknown> | undefined
-    const total = infNFe['total'] as Record<string, unknown> | undefined
+    const ide     = infNFe['ide']   as Record<string, unknown> | undefined
+    const emit    = infNFe['emit']  as Record<string, unknown> | undefined
+    const total   = infNFe['total'] as Record<string, unknown> | undefined
     const icmsTot = total?.['ICMSTot'] as Record<string, unknown> | undefined
+
+    // ── Upsert fornecedor ─────────────────────────────────────
+
+    if (emit) {
+    const enderEmit = emit['enderEmit'] as Record<string, unknown> | undefined
+    await upsertSupplier(companyId, {
+        cnpj:              String(emit['CNPJ'] ?? ''),
+        razao_social:      String(emit['xNome'] ?? ''),
+        nome_fantasia:     emit['xFant']  ? String(emit['xFant'])  : null,
+        regime_tributario: emit['CRT']
+        ? ({ '1': 'simples', '2': 'simples_excesso', '3': 'lucro_real' }[String(emit['CRT'])] ?? null)
+        : null,
+        telefone: emit['fone']  ? String(emit['fone'])  : null,
+        email:    emit['email'] ? String(emit['email']) : null,
+        endereco: enderEmit ? {
+        logradouro: enderEmit['xLgr']    ? String(enderEmit['xLgr'])    : undefined,
+        numero:     enderEmit['nro']     ? String(enderEmit['nro'])     : undefined,
+        bairro:     enderEmit['xBairro'] ? String(enderEmit['xBairro']) : undefined,
+        municipio:  enderEmit['xMun']    ? String(enderEmit['xMun'])    : undefined,
+        uf:         enderEmit['UF']      ? String(enderEmit['UF'])      : undefined,
+        cep:        enderEmit['CEP']     ? String(enderEmit['CEP'])     : undefined,
+        } : null,
+    })
+    }
 
     // ── Salva a nota ──────────────────────────────────────────
     const nota = {
@@ -178,7 +199,6 @@ export async function POST(req: NextRequest) {
 
     const produtos: ProdutoCasado[] = produtosEncontrados ?? []
 
-    // ── Associa cada item da nota a um produto cadastrado ─────
     const itensCasados: ItensCasado[] = itensNota.map(item => {
       const match =
         (item.ean    && produtos.find(p => p.ean  === item.ean)) ||
@@ -191,7 +211,7 @@ export async function POST(req: NextRequest) {
       }
     })
 
-    // ── Atualiza estoque dos produtos casados ─────────────────
+    // ── Atualiza estoque ──────────────────────────────────────
     await Promise.all(
       itensCasados
         .filter((c): c is ItensCasado & { produto_id: number } => c.produto_id !== null)
@@ -207,7 +227,7 @@ export async function POST(req: NextRequest) {
         })
     )
 
-    // ── Salva o vínculo dos itens na nota ─────────────────────
+    // ── Salva vínculo dos itens ───────────────────────────────
     await supabaseAdmin
       .from('nf_entrada')
       .update({

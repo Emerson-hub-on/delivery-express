@@ -1,11 +1,102 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
 import https from 'https'
 import { XMLParser } from 'fast-xml-parser'
 
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
+
+// ── Upsert de fornecedor ───────────────────────────────────────────────────
+
+const CRT_MAP: Record<string, string> = {
+  '1': 'simples',
+  '2': 'simples_excesso',
+  '3': 'lucro_real',
+}
+
+async function upsertSupplier(
+  companyId: string,
+  emit: Record<string, unknown>,
+  enderNode: Record<string, unknown> | undefined
+) {
+  const cnpj = String(emit['CNPJ'] ?? '').replace(/\D/g, '')
+  if (!cnpj) return
+
+  const str = (v: unknown) => (v != null ? String(v).trim() : null)
+  const crt = str(emit['CRT'])
+
+  const novosDados = {
+    razao_social:      str(emit['xNome']),
+    nome_fantasia:     str(emit['xFant']),
+    regime_tributario: crt ? (CRT_MAP[crt] ?? null) : null,
+    telefone:          str(emit['fone']),
+    email:             str(emit['email']),
+    endereco: enderNode
+      ? {
+          logradouro: str(enderNode['xLgr']),
+          numero:     str(enderNode['nro']),
+          bairro:     str(enderNode['xBairro']),
+          municipio:  str(enderNode['xMun']),
+          uf:         str(enderNode['UF']),
+          cep:        str(enderNode['CEP']),
+        }
+      : null,
+  }
+
+  const { data: existing } = await supabaseAdmin
+    .from('suppliers')
+    .select('id, razao_social, nome_fantasia, regime_tributario, endereco, telefone, email')
+    .eq('company_id', companyId)
+    .eq('cnpj', cnpj)
+    .maybeSingle()
+
+  if (!existing) {
+    await supabaseAdmin
+      .from('suppliers')
+      .insert({ company_id: companyId, cnpj, ...novosDados })
+    return
+  }
+
+  // Diff — atualiza apenas campos que mudaram
+  const updates: Record<string, unknown> = {}
+
+  if (novosDados.razao_social && novosDados.razao_social !== existing.razao_social)
+    updates.razao_social = novosDados.razao_social
+
+  if (novosDados.nome_fantasia && novosDados.nome_fantasia !== existing.nome_fantasia)
+    updates.nome_fantasia = novosDados.nome_fantasia
+
+  if (novosDados.regime_tributario && novosDados.regime_tributario !== existing.regime_tributario)
+    updates.regime_tributario = novosDados.regime_tributario
+
+  if (novosDados.telefone && novosDados.telefone !== existing.telefone)
+    updates.telefone = novosDados.telefone
+
+  if (novosDados.email && novosDados.email !== existing.email)
+    updates.email = novosDados.email
+
+  if (
+    novosDados.endereco &&
+    JSON.stringify(novosDados.endereco) !== JSON.stringify(existing.endereco ?? {})
+  )
+    updates.endereco = novosDados.endereco
+
+  if (Object.keys(updates).length === 0) return
+
+  updates.updated_at = new Date().toISOString()
+
+  await supabaseAdmin
+    .from('suppliers')
+    .update(updates)
+    .eq('company_id', companyId)
+    .eq('cnpj', cnpj)
+}
+
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-/** Faz a requisição SOAP com mTLS usando o Agent do Node.js */
 function soapRequest(
   xmlBody: string,
   pfxBuffer: Buffer,
@@ -33,24 +124,16 @@ function soapRequest(
 
     const req = https.request(options, (res) => {
       let data = ''
-
-      res.on('data', (chunk) => {
-        data += chunk
-      })
-
-      res.on('end', () => {
-        resolve(data)
-      })
+      res.on('data', (chunk) => { data += chunk })
+      res.on('end', () => { resolve(data) })
     })
 
     req.on('error', reject)
-
     req.write(xmlBody)
     req.end()
   })
 }
 
-/** Monta o envelope SOAP para distNSU */
 function buildSoapEnvelope({
   tipo,
   valor,
@@ -93,10 +176,8 @@ function buildSoapEnvelope({
 </soap12:Envelope>`
 }
 
-/** Extrai e descomprime os documentos retornados (base64 + gzip) */
 async function extrairNotas(xmlResposta: string) {
   const parser = new XMLParser({ ignoreAttributes: false })
-
   const parsed = parser.parse(xmlResposta)
 
   const body =
@@ -109,24 +190,15 @@ async function extrairNotas(xmlResposta: string) {
   if (!retorno) return []
 
   const cStat = Number(retorno?.cStat)
-
-  // 137 = documentos localizados
-  // 138 = nenhum documento localizado
-  if (![137, 138].includes(cStat)) {
-    return []
-  }
+  if (![137, 138].includes(cStat)) return []
 
   const docs = retorno?.loteDistDFeInt?.docZip
-
-  if (!docs) {
-    return []
-  }
+  if (!docs) return []
 
   const lista = Array.isArray(docs) ? docs : [docs]
 
   const { gunzip } = await import('zlib')
   const { promisify } = await import('util')
-
   const gunzipAsync = promisify(gunzip)
 
   const notas = []
@@ -135,17 +207,10 @@ async function extrairNotas(xmlResposta: string) {
     if (!doc) continue
 
     try {
-      const buffer = Buffer.from(doc['#text'] ?? doc, 'base64')
+      const buffer   = Buffer.from(doc['#text'] ?? doc, 'base64')
+      const xmlNota  = (await gunzipAsync(buffer)).toString('utf-8')
 
-      const xmlNota = (
-        await gunzipAsync(buffer)
-      ).toString('utf-8')
-
-      const p2 = new XMLParser({
-        ignoreAttributes: false,
-        attributeNamePrefix: '@_',
-      })
-
+      const p2 = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_' })
       const nfe = p2.parse(xmlNota)
 
       const infNFe =
@@ -155,38 +220,20 @@ async function extrairNotas(xmlResposta: string) {
       if (!infNFe) continue
 
       notas.push({
-        chave:
-          infNFe['@_Id']?.replace('NFe', '') ??
-          doc['@_NSU'],
-
-        numero:
-          infNFe.ide?.nNF?.toString() ?? '',
-
-        serie:
-          infNFe.ide?.serie?.toString() ?? '',
-
-        emitente_razao:
-          infNFe.emit?.xNome ?? '',
-
-        emitente_cnpj:
-          infNFe.emit?.CNPJ ?? '',
-
-        valor_total: parseFloat(
-          infNFe.total?.ICMSTot?.vNF ?? '0'
-        ),
-
-        data_emissao:
-          infNFe.ide?.dhEmi ??
-          infNFe.ide?.dEmi ??
-          '',
-
-        xml: xmlNota,
-
-        nsu: doc['@_NSU'],
+        chave:          infNFe['@_Id']?.replace('NFe', '') ?? doc['@_NSU'],
+        numero:         infNFe.ide?.nNF?.toString() ?? '',
+        serie:          infNFe.ide?.serie?.toString() ?? '',
+        emitente_razao: infNFe.emit?.xNome ?? '',
+        emitente_cnpj:  infNFe.emit?.CNPJ ?? '',
+        valor_total:    parseFloat(infNFe.total?.ICMSTot?.vNF ?? '0'),
+        data_emissao:   infNFe.ide?.dhEmi ?? infNFe.ide?.dEmi ?? '',
+        xml:            xmlNota,
+        nsu:            doc['@_NSU'],
+        // guarda o nó emit para usar no upsertSupplier
+        emit:           infNFe.emit as Record<string, unknown> | undefined,
       })
     } catch {
-      // Pode ser evento, CT-e etc.
-      // Ignora documentos não compatíveis
+      // Pode ser evento, CT-e etc. — ignora documentos não compatíveis
     }
   }
 
@@ -229,37 +276,20 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // 2. Define modo
-    // CPF = homologação/teste
-    // CNPJ = produção
-    const tipo = cfg.cpf ? 'cpf' : 'cnpj'
-
-    const valor = cfg.cpf
-      ? cfg.cpf
-      : cfg.cnpj
+    // 2. Define modo (CPF = teste, CNPJ = produção)
+    const tipo  = cfg.cpf ? 'cpf' : 'cnpj'
+    const valor = cfg.cpf ? cfg.cpf : cfg.cnpj
 
     if (!valor) {
       return NextResponse.json(
-        {
-          message:
-            tipo === 'cpf'
-              ? 'CPF não configurado'
-              : 'CNPJ não configurado',
-        },
+        { message: tipo === 'cpf' ? 'CPF não configurado' : 'CNPJ não configurado' },
         { status: 400 }
       )
     }
 
-    // 3. Seleciona certificado correto
-    // CPF → e-CPF
-    // CNPJ → e-CNPJ
-    const pfxBase64 = cfg.cpf
-      ? cfg.cert_cpf_pfx_base64
-      : cfg.cert_pfx_base64
-
-    const pfxSenha = cfg.cpf
-      ? cfg.cert_cpf_senha
-      : cfg.cert_senha
+    // 3. Seleciona certificado
+    const pfxBase64 = cfg.cpf ? cfg.cert_cpf_pfx_base64 : cfg.cert_pfx_base64
+    const pfxSenha  = cfg.cpf ? cfg.cert_cpf_senha       : cfg.cert_senha
 
     if (!pfxBase64) {
       return NextResponse.json(
@@ -283,123 +313,88 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const pfxBuffer = Buffer.from(
-      pfxBase64,
-      'base64'
-    )
+    const pfxBuffer = Buffer.from(pfxBase64, 'base64')
 
-    // cUFAutor = 2 primeiros dígitos IBGE
-    const cUFAutor =
-      cfg.codigo_ibge?.substring(0, 2)
-
+    // 4. cUFAutor = 2 primeiros dígitos IBGE
+    const cUFAutor = cfg.codigo_ibge?.substring(0, 2)
     if (!cUFAutor) {
       return NextResponse.json(
-        {
-          message:
-            'Código IBGE não configurado',
-        },
+        { message: 'Código IBGE não configurado' },
         { status: 400 }
       )
     }
 
-    // 4. Recupera último NSU
+    // 5. Recupera último NSU
     const { data: nsuRow } = await supabase
       .from('nf_entrada_nsu')
       .select('ult_nsu')
       .eq('company_id', companyId)
       .single()
 
-    const ultNSU =
-      nsuRow?.ult_nsu ??
-      '000000000000000'
+    const ultNSU = nsuRow?.ult_nsu ?? '000000000000000'
 
-    // 5. Monta envelope SOAP
-    const envelope = buildSoapEnvelope({
-      tipo,
-      valor,
-      ultNSU,
-      ambiente: cfg.ambiente,
-      cUFAutor,
-    })
+    // 6. Monta envelope SOAP
+    const envelope = buildSoapEnvelope({ tipo, valor, ultNSU, ambiente: cfg.ambiente, cUFAutor })
 
-    // 6. Envia para SEFAZ
+    // 7. Envia para SEFAZ
     let xmlResposta: string
-
     try {
-      xmlResposta = await soapRequest(
-        envelope,
-        pfxBuffer,
-        pfxSenha
-      )
+      xmlResposta = await soapRequest(envelope, pfxBuffer, pfxSenha)
     } catch (e: any) {
       return NextResponse.json(
-        {
-          message: `Erro ao conectar na SEFAZ: ${e.message}`,
-        },
+        { message: `Erro ao conectar na SEFAZ: ${e.message}` },
         { status: 502 }
       )
     }
 
-    // 7. Extrai notas
-    const notas = await extrairNotas(
-      xmlResposta
-    )
+    // 8. Extrai notas
+    const notas = await extrairNotas(xmlResposta)
 
-    // 8. Salva no banco
+    // 9. Salva no banco + upsert de fornecedores
     if (notas.length > 0) {
       await supabase
         .from('nf_entrada')
         .upsert(
           notas.map((n) => ({
-            company_id: companyId,
-            chave: n.chave,
-            numero: n.numero,
-            serie: n.serie,
-            emitente_razao:
-              n.emitente_razao,
-            emitente_cnpj:
-              n.emitente_cnpj,
-            valor_total:
-              n.valor_total,
-            data_emissao:
-              n.data_emissao,
-            status: 'pendente',
-            xml_raw: n.xml,
+            company_id:     companyId,
+            chave:          n.chave,
+            numero:         n.numero,
+            serie:          n.serie,
+            emitente_razao: n.emitente_razao,
+            emitente_cnpj:  n.emitente_cnpj,
+            valor_total:    n.valor_total,
+            data_emissao:   n.data_emissao,
+            status:         'pendente',
+            xml_raw:        n.xml,
           })),
-          {
-            onConflict:
-              'company_id,chave',
-            ignoreDuplicates: true,
-          }
+          { onConflict: 'company_id,chave', ignoreDuplicates: true }
         )
 
-      // Atualiza último NSU
-      const maiorNSU =
-        notas[notas.length - 1].nsu
+      // ── Upsert fornecedores ──────────────────────────────────
+      // Silencioso: falha individual não bloqueia o sync
+      await Promise.allSettled(
+        notas.map(async (n) => {
+          if (!n.emit) return
+          const enderEmit = n.emit['enderEmit'] as Record<string, unknown> | undefined
+          await upsertSupplier(companyId, n.emit, enderEmit)
+        })
+      )
 
+      // Atualiza último NSU
+      const maiorNSU = notas[notas.length - 1].nsu
       await supabase
         .from('nf_entrada_nsu')
         .upsert(
-          {
-            company_id: companyId,
-            ult_nsu: maiorNSU,
-          },
-          {
-            onConflict: 'company_id',
-          }
+          { company_id: companyId, ult_nsu: maiorNSU },
+          { onConflict: 'company_id' }
         )
     }
 
-    return NextResponse.json({
-      synced: notas.length,
-    })
+    return NextResponse.json({ synced: notas.length })
+
   } catch (e: any) {
     return NextResponse.json(
-      {
-        message:
-          e?.message ??
-          'Erro interno ao sincronizar notas',
-      },
+      { message: e?.message ?? 'Erro interno ao sincronizar notas' },
       { status: 500 }
     )
   }
