@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
 import https from 'https'
 import { XMLParser } from 'fast-xml-parser'
+import { upsertSupplier } from '@/lib/fiscal/upsertSupplier'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -11,89 +12,6 @@ const supabaseAdmin = createClient(
 
 // ── Upsert de fornecedor ───────────────────────────────────────────────────
 
-const CRT_MAP: Record<string, string> = {
-  '1': 'simples',
-  '2': 'simples_excesso',
-  '3': 'lucro_real',
-}
-
-async function upsertSupplier(
-  companyId: string,
-  emit: Record<string, unknown>,
-  enderNode: Record<string, unknown> | undefined
-) {
-  const cnpj = String(emit['CNPJ'] ?? '').replace(/\D/g, '')
-  if (!cnpj) return
-
-  const str = (v: unknown) => (v != null ? String(v).trim() : null)
-  const crt = str(emit['CRT'])
-
-  const novosDados = {
-    razao_social:      str(emit['xNome']),
-    nome_fantasia:     str(emit['xFant']),
-    regime_tributario: crt ? (CRT_MAP[crt] ?? null) : null,
-    telefone:          str(emit['fone']),
-    email:             str(emit['email']),
-    endereco: enderNode
-      ? {
-          logradouro: str(enderNode['xLgr']),
-          numero:     str(enderNode['nro']),
-          bairro:     str(enderNode['xBairro']),
-          municipio:  str(enderNode['xMun']),
-          uf:         str(enderNode['UF']),
-          cep:        str(enderNode['CEP']),
-        }
-      : null,
-  }
-
-  const { data: existing } = await supabaseAdmin
-    .from('suppliers')
-    .select('id, razao_social, nome_fantasia, regime_tributario, endereco, telefone, email')
-    .eq('company_id', companyId)
-    .eq('cnpj', cnpj)
-    .maybeSingle()
-
-  if (!existing) {
-    await supabaseAdmin
-      .from('suppliers')
-      .insert({ company_id: companyId, cnpj, ...novosDados })
-    return
-  }
-
-  // Diff — atualiza apenas campos que mudaram
-  const updates: Record<string, unknown> = {}
-
-  if (novosDados.razao_social && novosDados.razao_social !== existing.razao_social)
-    updates.razao_social = novosDados.razao_social
-
-  if (novosDados.nome_fantasia && novosDados.nome_fantasia !== existing.nome_fantasia)
-    updates.nome_fantasia = novosDados.nome_fantasia
-
-  if (novosDados.regime_tributario && novosDados.regime_tributario !== existing.regime_tributario)
-    updates.regime_tributario = novosDados.regime_tributario
-
-  if (novosDados.telefone && novosDados.telefone !== existing.telefone)
-    updates.telefone = novosDados.telefone
-
-  if (novosDados.email && novosDados.email !== existing.email)
-    updates.email = novosDados.email
-
-  if (
-    novosDados.endereco &&
-    JSON.stringify(novosDados.endereco) !== JSON.stringify(existing.endereco ?? {})
-  )
-    updates.endereco = novosDados.endereco
-
-  if (Object.keys(updates).length === 0) return
-
-  updates.updated_at = new Date().toISOString()
-
-  await supabaseAdmin
-    .from('suppliers')
-    .update(updates)
-    .eq('company_id', companyId)
-    .eq('cnpj', cnpj)
-}
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -372,13 +290,30 @@ export async function POST(req: NextRequest) {
 
       // ── Upsert fornecedores ──────────────────────────────────
       // Silencioso: falha individual não bloqueia o sync
-      await Promise.allSettled(
-        notas.map(async (n) => {
-          if (!n.emit) return
-          const enderEmit = n.emit['enderEmit'] as Record<string, unknown> | undefined
-          await upsertSupplier(companyId, n.emit, enderEmit)
+    await Promise.allSettled(
+    notas.map(async (n) => {
+        if (!n.emit) return
+        const enderEmit = n.emit['enderEmit'] as Record<string, unknown> | undefined
+        await upsertSupplier(companyId, {
+        cnpj:              String(n.emit['CNPJ'] ?? ''),
+        razao_social:      String(n.emit['xNome'] ?? ''),
+        nome_fantasia:     n.emit['xFant']  ? String(n.emit['xFant'])  : null,
+        regime_tributario: n.emit['CRT']
+            ? ({ '1': 'simples', '2': 'simples_excesso', '3': 'lucro_real' }[String(n.emit['CRT'])] ?? null)
+            : null,
+        telefone: n.emit['fone']  ? String(n.emit['fone'])  : null,
+        email:    n.emit['email'] ? String(n.emit['email']) : null,
+        endereco: enderEmit ? {
+            logradouro: enderEmit['xLgr']    ? String(enderEmit['xLgr'])    : undefined,
+            numero:     enderEmit['nro']     ? String(enderEmit['nro'])     : undefined,
+            bairro:     enderEmit['xBairro'] ? String(enderEmit['xBairro']) : undefined,
+            municipio:  enderEmit['xMun']    ? String(enderEmit['xMun'])    : undefined,
+            uf:         enderEmit['UF']      ? String(enderEmit['UF'])      : undefined,
+            cep:        enderEmit['CEP']     ? String(enderEmit['CEP'])     : undefined,
+        } : null,
         })
-      )
+    })
+    )
 
       // Atualiza último NSU
       const maiorNSU = notas[notas.length - 1].nsu
