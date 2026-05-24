@@ -2,9 +2,8 @@
 import { useState } from 'react'
 import { Tab } from './types'
 
-type ReportSubTab  = 'overview' | 'products' | 'categories' | 'inventory'
-type BillingSubTab = 'nf-entrada' | 'nf-saida'   // ← corrigido
-
+type ReportSubTab = 'overview' | 'products' | 'categories' | 'inventory'
+type BillingSubTab = 'nf-entrada'
 interface AdminTabsProps {
   tab: Tab
   onChange: (tab: Tab) => void
@@ -14,9 +13,8 @@ interface AdminTabsProps {
   onBillingSubTabChange: (sub: BillingSubTab) => void
 }
 
-const BILLING_SUB_TABS: { id: BillingSubTab; label: string; icon: string }[] = [
-  { id: 'nf-entrada', label: 'Entrada de NF',          icon: '➜' },
-  { id: 'nf-saida',  label: 'Saída / Faturamento',     icon: '◈' },  // ← novo
+const BILLING_SUB_TABS = [
+  { id: 'nf-entrada' as BillingSubTab, label: 'Entrada de NF', icon: '➜' },
 ]
 
 const CADASTRO_TABS: Tab[] = ['products', 'categories', 'motoboys', 'customers']
@@ -37,18 +35,18 @@ const TAB_LABELS: Record<Tab, string> = {
 }
 
 const TAB_ICONS: Record<Tab, string> = {
-  products:   '▣',
-  categories: '▤',
-  orders:     '◈',
-  reports:    '◬',
-  motoboys:   '➜',
-  fiscal:     '◫',
-  billing:    '☰',
-  settings:   '⚙',
-  cash:       '⌂',
-  pdv:        '◧',
-  ifood:      '⬢',
-  customers:  '◉',
+products:   '▣',
+categories: '▤',
+orders:     '◈',
+reports:    '◬',
+motoboys:   '➜',
+fiscal:     '◫',
+billing:    '☰',
+settings:   '⚙',
+cash:       '⌂',
+pdv:        '◧',
+ifood:      '⬢',
+customers:  '◉',
 }
 
 const REPORT_SUB_TABS: { id: ReportSubTab; label: string; icon: string }[] = [
@@ -56,41 +54,47 @@ const REPORT_SUB_TABS: { id: ReportSubTab; label: string; icon: string }[] = [
   { id: 'products',   label: 'Produtos mais vendidos', icon: '⬓' },
   { id: 'categories', label: 'Por Categoria',          icon: '▦' },
   { id: 'inventory',  label: 'Inventário',             icon: '◬' },
+  
 ]
 
-const SIDEBAR_BG       = 'bg-[#0f2137]'
-const SIDEBAR_BORDER   = 'border-[#1a3a5c]'
-const TEXT_DEFAULT     = 'text-[#8faec9]'
-const TEXT_HOVER       = 'hover:text-white'
-const BG_HOVER         = 'hover:bg-[#1a3a5c]'
-const ACTIVE_BG        = 'bg-orange-500'
-const ACTIVE_TEXT      = 'text-white'
-const GROUP_ACTIVE_BG  = 'bg-[#1a3a5c]'
+const SIDEBAR_BG      = 'bg-[#0f2137]'
+const SIDEBAR_BORDER  = 'border-[#1a3a5c]'
+const TEXT_DEFAULT    = 'text-[#8faec9]'
+const TEXT_HOVER      = 'hover:text-white'
+const BG_HOVER        = 'hover:bg-[#1a3a5c]'
+const ACTIVE_BG       = 'bg-orange-500'
+const ACTIVE_TEXT     = 'text-white'
+const GROUP_ACTIVE_BG = 'bg-[#1a3a5c]'
 const GROUP_ACTIVE_TEXT = 'text-white'
-const DIVIDER          = 'border-[#1a3a5c]'
+const DIVIDER         = 'border-[#1a3a5c]'
 
-export function AdminTabs({
-  tab, onChange,
-  reportSubTab, onReportSubTabChange,
-  billingSubTab, onBillingSubTabChange,
-}: AdminTabsProps) {
-  const [mobileOpen,   setMobileOpen]   = useState(false)
+export function AdminTabs({ tab, onChange, reportSubTab, onReportSubTabChange, billingSubTab, onBillingSubTabChange }: AdminTabsProps) {
+  const [mobileOpen, setMobileOpen] = useState(false)
   const [cadastroOpen, setCadastroOpen] = useState(() => CADASTRO_TABS.includes(tab))
-  const [reportsOpen,  setReportsOpen]  = useState(() => tab === 'reports')
-  const [billingOpen,  setBillingOpen]  = useState(() => tab === 'billing')
+  const [reportsOpen, setReportsOpen] = useState(() => tab === 'reports')
+  const [billingOpen, setBillingOpen] = useState(() => tab === 'billing')
 
-  const handleChange = (t: Tab) => { onChange(t); setMobileOpen(false) }
+  const handleChange = (t: Tab) => {
+    onChange(t)
+    setMobileOpen(false)
+  }
 
   const handleReportsClick = () => {
-    if (tab !== 'reports') { onChange('reports'); setReportsOpen(true) }
-    else setReportsOpen(o => !o)
+    if (tab !== 'reports') {
+      onChange('reports')
+      setReportsOpen(true)
+    } else {
+      setReportsOpen(o => !o)
+    }
   }
 
   const sidebarContent = (
     <div className="flex flex-col h-full overflow-hidden py-6 px-3">
+
+      {/* Área scrollável */}
       <div className="flex-1 overflow-y-auto flex flex-col gap-1 pr-1 scrollbar-thin scrollbar-thumb-[#1a3a5c] scrollbar-track-transparent">
 
-        {/* Logo */}
+        {/* Logo / marca */}
         <div className="px-3 mb-6">
           <div className="flex items-center gap-2">
             <span className="text-xl">🚀</span>
@@ -106,21 +110,30 @@ export function AdminTabs({
           <button
             onClick={() => setCadastroOpen(o => !o)}
             className={`flex items-center justify-between w-full px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
-              ${CADASTRO_TABS.includes(tab) ? `${GROUP_ACTIVE_BG} ${GROUP_ACTIVE_TEXT}` : `${TEXT_DEFAULT} ${TEXT_HOVER} ${BG_HOVER}`}`}
+              ${CADASTRO_TABS.includes(tab)
+                ? `${GROUP_ACTIVE_BG} ${GROUP_ACTIVE_TEXT}`
+                : `${TEXT_DEFAULT} ${TEXT_HOVER} ${BG_HOVER}`}`}
           >
-            <div className="flex items-center gap-3"><span className="text-base">☰</span>Cadastros</div>
+            <div className="flex items-center gap-3">
+              <span className="text-base">☰</span>
+              Cadastros
+            </div>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
               className={`transition-transform duration-200 ${cadastroOpen ? 'rotate-180' : ''}`}>
               <polyline points="6 9 12 15 18 9" />
             </svg>
           </button>
+
           {cadastroOpen && (
             <div className={`mt-1 ml-3 flex flex-col gap-1 border-l ${DIVIDER} pl-3`}>
               {CADASTRO_TABS.map(t => (
                 <button key={t} onClick={() => handleChange(t)}
                   className={`flex items-center gap-3 text-sm px-3 py-2 rounded-lg transition-colors font-medium w-full text-left
-                    ${tab === t ? `${ACTIVE_BG} ${ACTIVE_TEXT}` : `${TEXT_DEFAULT} ${TEXT_HOVER} ${BG_HOVER}`}`}>
-                  <span className="text-base">{TAB_ICONS[t]}</span>{TAB_LABELS[t]}
+                    ${tab === t
+                      ? `${ACTIVE_BG} ${ACTIVE_TEXT}`
+                      : `${TEXT_DEFAULT} ${TEXT_HOVER} ${BG_HOVER}`}`}>
+                  <span className="text-base">{TAB_ICONS[t]}</span>
+                  {TAB_LABELS[t]}
                 </button>
               ))}
             </div>
@@ -130,42 +143,64 @@ export function AdminTabs({
         {/* Pedidos */}
         <button onClick={() => handleChange('orders')}
           className={`flex items-center gap-3 text-sm px-3 py-2.5 rounded-lg transition-colors font-medium w-full text-left
-            ${tab === 'orders' ? `${ACTIVE_BG} ${ACTIVE_TEXT}` : `${TEXT_DEFAULT} ${TEXT_HOVER} ${BG_HOVER}`}`}>
-          <span className="text-base">{TAB_ICONS.orders}</span>{TAB_LABELS.orders}
+            ${tab === 'orders'
+              ? `${ACTIVE_BG} ${ACTIVE_TEXT}`
+              : `${TEXT_DEFAULT} ${TEXT_HOVER} ${BG_HOVER}`}`}>
+          <span className="text-base">{TAB_ICONS.orders}</span>
+          {TAB_LABELS.orders}
         </button>
 
         {/* Caixa */}
         <button onClick={() => handleChange('cash')}
           className={`flex items-center gap-3 text-sm px-3 py-2.5 rounded-lg transition-colors font-medium w-full text-left
-            ${tab === 'cash' ? `${ACTIVE_BG} ${ACTIVE_TEXT}` : `${TEXT_DEFAULT} ${TEXT_HOVER} ${BG_HOVER}`}`}>
-          <span className="text-base">{TAB_ICONS.cash}</span>{TAB_LABELS.cash}
+            ${tab === 'cash'
+              ? `${ACTIVE_BG} ${ACTIVE_TEXT}`
+              : `${TEXT_DEFAULT} ${TEXT_HOVER} ${BG_HOVER}`}`}>
+          <span className="text-base">{TAB_ICONS.cash}</span>
+          {TAB_LABELS.cash}
         </button>
 
         {/* PDV */}
-        <button onClick={() => handleChange('pdv')}
+        <button
+          onClick={() => handleChange('pdv')}
           className={`flex items-center gap-3 text-sm px-3 py-2.5 rounded-lg transition-colors font-medium w-full text-left
-            ${tab === 'pdv' ? `${ACTIVE_BG} ${ACTIVE_TEXT}` : `${TEXT_DEFAULT} ${TEXT_HOVER} ${BG_HOVER}`}`}>
-          <span className="text-base">{TAB_ICONS.pdv}</span>{TAB_LABELS.pdv}
+            ${tab === 'pdv'
+              ? `${ACTIVE_BG} ${ACTIVE_TEXT}`
+              : `${TEXT_DEFAULT} ${TEXT_HOVER} ${BG_HOVER}`}`}
+        >
+          <span className="text-base">{TAB_ICONS.pdv}</span>
+          {TAB_LABELS.pdv}
         </button>
 
         {/* Relatórios */}
         <div>
-          <button onClick={handleReportsClick}
+          <button
+            onClick={handleReportsClick}
             className={`flex items-center justify-between w-full px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
-              ${tab === 'reports' ? `${GROUP_ACTIVE_BG} ${GROUP_ACTIVE_TEXT}` : `${TEXT_DEFAULT} ${TEXT_HOVER} ${BG_HOVER}`}`}>
-            <div className="flex items-center gap-3"><span className="text-base">▤</span>Relatórios</div>
+              ${tab === 'reports'
+                ? `${GROUP_ACTIVE_BG} ${GROUP_ACTIVE_TEXT}`
+                : `${TEXT_DEFAULT} ${TEXT_HOVER} ${BG_HOVER}`}`}
+          >
+            <div className="flex items-center gap-3">
+              <span className="text-base">▤</span>
+              Relatórios
+            </div>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
               className={`transition-transform duration-200 ${reportsOpen ? 'rotate-180' : ''}`}>
               <polyline points="6 9 12 15 18 9" />
             </svg>
           </button>
+
           {reportsOpen && tab === 'reports' && (
             <div className={`mt-1 ml-3 flex flex-col gap-1 border-l ${DIVIDER} pl-3`}>
               {REPORT_SUB_TABS.map(s => (
                 <button key={s.id} onClick={() => { onReportSubTabChange(s.id); setMobileOpen(false) }}
                   className={`flex items-center gap-3 text-sm px-3 py-2 rounded-lg transition-colors font-medium w-full text-left
-                    ${reportSubTab === s.id ? `${ACTIVE_BG} ${ACTIVE_TEXT}` : `${TEXT_DEFAULT} ${TEXT_HOVER} ${BG_HOVER}`}`}>
-                  <span className="text-base">{s.icon}</span>{s.label}
+                    ${reportSubTab === s.id
+                      ? `${ACTIVE_BG} ${ACTIVE_TEXT}`
+                      : `${TEXT_DEFAULT} ${TEXT_HOVER} ${BG_HOVER}`}`}>
+                  <span className="text-base">{s.icon}</span>
+                  {s.label}
                 </button>
               ))}
             </div>
@@ -177,53 +212,75 @@ export function AdminTabs({
         {/* iFood Sync */}
         <button onClick={() => handleChange('ifood')}
           className={`flex items-center gap-3 text-sm px-3 py-2.5 rounded-lg transition-colors font-medium w-full text-left
-            ${tab === 'ifood' ? `${ACTIVE_BG} ${ACTIVE_TEXT}` : `${TEXT_DEFAULT} ${TEXT_HOVER} ${BG_HOVER}`}`}>
-          <span className="text-base">◉</span>{TAB_LABELS.ifood}
+            ${tab === 'ifood'
+              ? `${ACTIVE_BG} ${ACTIVE_TEXT}`
+              : `${TEXT_DEFAULT} ${TEXT_HOVER} ${BG_HOVER}`}`}>
+          <span className="text-base">◉</span>
+          {TAB_LABELS.ifood}
         </button>
 
         <div className={`border-t ${DIVIDER} my-2`} />
-
+        
         {/* Faturamento */}
         <div>
           <button
-            onClick={() => { onChange('billing'); setBillingOpen(o => !o) }}
+            onClick={() => {
+              onChange('billing')
+              setBillingOpen(o => !o)
+            }}
             className={`flex items-center justify-between w-full px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
-              ${tab === 'billing' ? `${GROUP_ACTIVE_BG} ${GROUP_ACTIVE_TEXT}` : `${TEXT_DEFAULT} ${TEXT_HOVER} ${BG_HOVER}`}`}
+              ${tab === 'billing'
+                ? `${GROUP_ACTIVE_BG} ${GROUP_ACTIVE_TEXT}`
+                : `${TEXT_DEFAULT} ${TEXT_HOVER} ${BG_HOVER}`}`}
           >
-            <div className="flex items-center gap-3"><span className="text-base">▦</span>Faturamento</div>
+            <div className="flex items-center gap-3">
+              <span className="text-base">▦</span>
+              Faturamento
+            </div>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
               className={`transition-transform duration-200 ${billingOpen ? 'rotate-180' : ''}`}>
               <polyline points="6 9 12 15 18 9" />
             </svg>
           </button>
+
           {billingOpen && tab === 'billing' && (
             <div className={`mt-1 ml-3 flex flex-col gap-1 border-l ${DIVIDER} pl-3`}>
               {BILLING_SUB_TABS.map(s => (
-                <button key={s.id}
-                  onClick={() => { onBillingSubTabChange(s.id); setMobileOpen(false) }}
+                <button key={s.id} onClick={() => { onBillingSubTabChange(s.id); setMobileOpen(false) }}
                   className={`flex items-center gap-3 text-sm px-3 py-2 rounded-lg transition-colors font-medium w-full text-left
-                    ${billingSubTab === s.id ? `${ACTIVE_BG} ${ACTIVE_TEXT}` : `${TEXT_DEFAULT} ${TEXT_HOVER} ${BG_HOVER}`}`}>
-                  <span className="text-base">{s.icon}</span>{s.label}
+                    ${billingSubTab === s.id
+                      ? `${ACTIVE_BG} ${ACTIVE_TEXT}`
+                      : `${TEXT_DEFAULT} ${TEXT_HOVER} ${BG_HOVER}`}`}>
+                  <span className="text-base">{s.icon}</span>
+                  {s.label}
                 </button>
               ))}
             </div>
           )}
         </div>
-
         {/* Fiscal + Configurações */}
         {(['fiscal', 'settings'] as Tab[]).map(t => (
           <button key={t} onClick={() => handleChange(t)}
             className={`flex items-center gap-3 text-sm px-3 py-2.5 rounded-lg transition-colors font-medium w-full text-left
-              ${tab === t ? `${ACTIVE_BG} ${ACTIVE_TEXT}` : `${TEXT_DEFAULT} ${TEXT_HOVER} ${BG_HOVER}`}`}>
-            <span className="text-base">{TAB_ICONS[t]}</span>{TAB_LABELS[t]}
+              ${tab === t
+                ? `${ACTIVE_BG} ${ACTIVE_TEXT}`
+                : `${TEXT_DEFAULT} ${TEXT_HOVER} ${BG_HOVER}`}`}>
+            <span className="text-base">{TAB_ICONS[t]}</span>
+            {TAB_LABELS[t]}
           </button>
         ))}
+
+        
+
       </div>
 
-      {/* Footer */}
+      {/* Footer fixo no rodapé — fora da área scrollável */}
       <div className={`shrink-0 border-t ${DIVIDER} pt-4 px-1 mt-2`}>
-        <p className="text-[10px] text-[#4a6a8a] text-center">© 2026 deliveryExpress</p>
+        <p className="text-[10px] text-[#4a6a8a] text-center">
+          © 2026 deliveryExpress
+        </p>
       </div>
+
     </div>
   )
 
@@ -243,9 +300,11 @@ export function AdminTabs({
         <div className="md:hidden fixed inset-0 bg-black/50 z-40" onClick={() => setMobileOpen(false)} />
       )}
 
+      {/* Mobile sidebar */}
       <aside className={`
         fixed top-0 left-0 h-screen w-64 ${SIDEBAR_BG} border-r ${SIDEBAR_BORDER}
-        flex flex-col z-50 overflow-hidden transition-transform duration-300 ease-in-out md:hidden
+        flex flex-col z-50 overflow-hidden
+        transition-transform duration-300 ease-in-out md:hidden
         ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}
       `}>
         <div className="flex items-center justify-between px-5 pt-5 pb-2 shrink-0">
@@ -259,6 +318,7 @@ export function AdminTabs({
         {sidebarContent}
       </aside>
 
+      {/* Desktop sidebar */}
       <aside className={`hidden md:flex w-56 h-screen sticky top-0 ${SIDEBAR_BG} border-r ${SIDEBAR_BORDER} flex-col shrink-0 overflow-hidden`}>
         {sidebarContent}
       </aside>

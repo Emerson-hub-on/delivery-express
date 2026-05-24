@@ -42,7 +42,7 @@ export default function AdminPage() {
   id: string
   serie: string
 } | null>(null)
-  const [billingSubTab, setBillingSubTab] = useState<'nf-entrada'>('nf-entrada')
+  const [billingSubTab, setBillingSubTab] = useState<'nf-entrada' | 'nf-saida'>('nf-entrada')
 
   // ── Auth guard ──────────────────────────────────────────────────────────────
   const [authReady,  setAuthReady]  = useState(false)
