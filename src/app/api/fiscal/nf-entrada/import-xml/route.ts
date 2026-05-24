@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { XMLParser } from 'fast-xml-parser'
 import { converterCfopCst, Finalidade } from '@/lib/fiscal/conversao-cfop-cst'
 import type { Product } from '@/types/product'
-import { upsertSupplier } from '@/lib/fiscal/upsertSupplier'
+import { upsertSupplier, resolverContribuinte } from '@/lib/fiscal/upsertSupplier'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -54,9 +54,6 @@ type ItensCasado = {
   produto_id: number | null
   produto_nome: string | null
 }
-
-// ── Upsert de fornecedor ──────────────────────────────────────
-
 
 // ── Handler ───────────────────────────────────────────────────
 
@@ -134,27 +131,29 @@ export async function POST(req: NextRequest) {
     const icmsTot = total?.['ICMSTot'] as Record<string, unknown> | undefined
 
     // ── Upsert fornecedor ─────────────────────────────────────
-
     if (emit) {
-    const enderEmit = emit['enderEmit'] as Record<string, unknown> | undefined
-    await upsertSupplier(companyId, {
-        cnpj:              String(emit['CNPJ'] ?? ''),
-        razao_social:      String(emit['xNome'] ?? ''),
-        nome_fantasia:     emit['xFant']  ? String(emit['xFant'])  : null,
-        regime_tributario: emit['CRT']
-        ? ({ '1': 'simples', '2': 'simples_excesso', '3': 'lucro_real' }[String(emit['CRT'])] ?? null)
-        : null,
-        telefone: emit['fone']  ? String(emit['fone'])  : null,
-        email:    emit['email'] ? String(emit['email']) : null,
+      const enderEmit = emit['enderEmit'] as Record<string, unknown> | undefined
+      await upsertSupplier(companyId, {
+        cnpj:               String(emit['CNPJ']  ?? ''),
+        razao_social:       String(emit['xNome'] ?? ''),
+        nome_fantasia:      emit['xFant'] ? String(emit['xFant']) : null,
+        inscricao_estadual: emit['IE']    ? String(emit['IE'])    : null,
+        contribuinte:       resolverContribuinte(emit['IE']),
+        regime_tributario:  emit['CRT']
+          ? ({ '1': 'simples', '2': 'simples_excesso', '3': 'lucro_real' }[String(emit['CRT'])] ?? null)
+          : null,
+        codigo_municipio:   enderEmit?.['cMun'] ? String(enderEmit['cMun']) : null,
+        telefone:           emit['fone']  ? String(emit['fone'])  : null,
+        email:              emit['email'] ? String(emit['email']) : null,
         endereco: enderEmit ? {
-        logradouro: enderEmit['xLgr']    ? String(enderEmit['xLgr'])    : undefined,
-        numero:     enderEmit['nro']     ? String(enderEmit['nro'])     : undefined,
-        bairro:     enderEmit['xBairro'] ? String(enderEmit['xBairro']) : undefined,
-        municipio:  enderEmit['xMun']    ? String(enderEmit['xMun'])    : undefined,
-        uf:         enderEmit['UF']      ? String(enderEmit['UF'])      : undefined,
-        cep:        enderEmit['CEP']     ? String(enderEmit['CEP'])     : undefined,
+          logradouro: enderEmit['xLgr']    ? String(enderEmit['xLgr'])    : undefined,
+          numero:     enderEmit['nro']     ? String(enderEmit['nro'])     : undefined,
+          bairro:     enderEmit['xBairro'] ? String(enderEmit['xBairro']) : undefined,
+          municipio:  enderEmit['xMun']    ? String(enderEmit['xMun'])    : undefined,
+          uf:         enderEmit['UF']      ? String(enderEmit['UF'])      : undefined,
+          cep:        enderEmit['CEP']     ? String(enderEmit['CEP'])     : undefined,
         } : null,
-    })
+      })
     }
 
     // ── Salva a nota ──────────────────────────────────────────

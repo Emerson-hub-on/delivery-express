@@ -3,15 +3,12 @@ import { createClient } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
 import https from 'https'
 import { XMLParser } from 'fast-xml-parser'
-import { upsertSupplier } from '@/lib/fiscal/upsertSupplier'
+import { upsertSupplier, resolverContribuinte } from '@/lib/fiscal/upsertSupplier'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
-
-// ── Upsert de fornecedor ───────────────────────────────────────────────────
-
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -125,8 +122,8 @@ async function extrairNotas(xmlResposta: string) {
     if (!doc) continue
 
     try {
-      const buffer   = Buffer.from(doc['#text'] ?? doc, 'base64')
-      const xmlNota  = (await gunzipAsync(buffer)).toString('utf-8')
+      const buffer  = Buffer.from(doc['#text'] ?? doc, 'base64')
+      const xmlNota = (await gunzipAsync(buffer)).toString('utf-8')
 
       const p2 = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_' })
       const nfe = p2.parse(xmlNota)
@@ -147,7 +144,6 @@ async function extrairNotas(xmlResposta: string) {
         data_emissao:   infNFe.ide?.dhEmi ?? infNFe.ide?.dEmi ?? '',
         xml:            xmlNota,
         nsu:            doc['@_NSU'],
-        // guarda o nó emit para usar no upsertSupplier
         emit:           infNFe.emit as Record<string, unknown> | undefined,
       })
     } catch {
@@ -288,32 +284,34 @@ export async function POST(req: NextRequest) {
           { onConflict: 'company_id,chave', ignoreDuplicates: true }
         )
 
-      // ── Upsert fornecedores ──────────────────────────────────
-      // Silencioso: falha individual não bloqueia o sync
-    await Promise.allSettled(
-    notas.map(async (n) => {
-        if (!n.emit) return
-        const enderEmit = n.emit['enderEmit'] as Record<string, unknown> | undefined
-        await upsertSupplier(companyId, {
-        cnpj:              String(n.emit['CNPJ'] ?? ''),
-        razao_social:      String(n.emit['xNome'] ?? ''),
-        nome_fantasia:     n.emit['xFant']  ? String(n.emit['xFant'])  : null,
-        regime_tributario: n.emit['CRT']
-            ? ({ '1': 'simples', '2': 'simples_excesso', '3': 'lucro_real' }[String(n.emit['CRT'])] ?? null)
-            : null,
-        telefone: n.emit['fone']  ? String(n.emit['fone'])  : null,
-        email:    n.emit['email'] ? String(n.emit['email']) : null,
-        endereco: enderEmit ? {
-            logradouro: enderEmit['xLgr']    ? String(enderEmit['xLgr'])    : undefined,
-            numero:     enderEmit['nro']     ? String(enderEmit['nro'])     : undefined,
-            bairro:     enderEmit['xBairro'] ? String(enderEmit['xBairro']) : undefined,
-            municipio:  enderEmit['xMun']    ? String(enderEmit['xMun'])    : undefined,
-            uf:         enderEmit['UF']      ? String(enderEmit['UF'])      : undefined,
-            cep:        enderEmit['CEP']     ? String(enderEmit['CEP'])     : undefined,
-        } : null,
+      // ── Upsert fornecedores — silencioso, falha individual não bloqueia o sync
+      await Promise.allSettled(
+        notas.map(async (n) => {
+          if (!n.emit) return
+          const enderEmit = n.emit['enderEmit'] as Record<string, unknown> | undefined
+          await upsertSupplier(companyId, {
+            cnpj:               String(n.emit['CNPJ']  ?? ''),
+            razao_social:       String(n.emit['xNome'] ?? ''),
+            nome_fantasia:      n.emit['xFant'] ? String(n.emit['xFant']) : null,
+            inscricao_estadual: n.emit['IE']    ? String(n.emit['IE'])    : null,
+            contribuinte:       resolverContribuinte(n.emit['IE']),
+            regime_tributario:  n.emit['CRT']
+              ? ({ '1': 'simples', '2': 'simples_excesso', '3': 'lucro_real' }[String(n.emit['CRT'])] ?? null)
+              : null,
+            codigo_municipio:   enderEmit?.['cMun'] ? String(enderEmit['cMun']) : null,
+            telefone:           n.emit['fone']  ? String(n.emit['fone'])  : null,
+            email:              n.emit['email'] ? String(n.emit['email']) : null,
+            endereco: enderEmit ? {
+              logradouro: enderEmit['xLgr']    ? String(enderEmit['xLgr'])    : undefined,
+              numero:     enderEmit['nro']     ? String(enderEmit['nro'])     : undefined,
+              bairro:     enderEmit['xBairro'] ? String(enderEmit['xBairro']) : undefined,
+              municipio:  enderEmit['xMun']    ? String(enderEmit['xMun'])    : undefined,
+              uf:         enderEmit['UF']      ? String(enderEmit['UF'])      : undefined,
+              cep:        enderEmit['CEP']     ? String(enderEmit['CEP'])     : undefined,
+            } : null,
+          })
         })
-    })
-    )
+      )
 
       // Atualiza último NSU
       const maiorNSU = notas[notas.length - 1].nsu
