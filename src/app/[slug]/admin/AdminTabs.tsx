@@ -14,7 +14,7 @@ interface AdminTabsProps {
 }
 
 const BILLING_SUB_TABS = [
-  { id: 'nf-entrada' as BillingSubTab, label: 'Entrada de NF', icon: '📥' },
+  { id: 'nf-entrada' as BillingSubTab, label: 'Entrada de NF', icon: '➜' },
 ]
 
 const CADASTRO_TABS: Tab[] = ['products', 'categories', 'motoboys', 'customers']
