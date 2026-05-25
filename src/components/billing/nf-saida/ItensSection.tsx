@@ -149,7 +149,9 @@ function ItemRow({ item, companyId, canRemove, onUpdate, onRemove, onApplyProduc
     setQuery('')
     setResults([])
     setOpen(false)
-    onUpdate(item.id, 'produto_desc', '')
+    ;(['produto_desc', 'ncm', 'cfop', 'cst_csosn'] as const).forEach(key => onUpdate(item.id, key, ''))
+    onUpdate(item.id, 'valor_unit', '0')
+    onUpdate(item.id, 'valor_total', '0')
   }, [item.id, onUpdate])
 
   // Fecha ao clicar fora
