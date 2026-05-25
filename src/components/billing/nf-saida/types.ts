@@ -1,28 +1,10 @@
 export type NfSaidaStatus =
-  | 'rascunho'
-  | 'pendente'
-  | 'autorizada'
-  | 'cancelada'
-  | 'rejeitada'
-
-export type TipoNotaPadrao =
-  | 'venda_interna'
-  | 'venda_externa'
-  | 'devolucao'
-  | 'transferencia'
-  | 'outras_saidas'
-  | 'nota_anulatoria'
+  | 'rascunho' | 'pendente' | 'autorizada' | 'cancelada' | 'rejeitada'
 
 export type FormaPagamento =
-  | 'boleto'
-  | 'dinheiro'
-  | 'cartao_credito'
-  | 'cartao_debito'
-  | 'pix'
-  | 'sem_pagamento'
+  | 'boleto' | 'dinheiro' | 'cartao_credito' | 'cartao_debito' | 'pix' | 'sem_pagamento'
 
 export interface TipoNotaCustom {
-  /** chave única local — ex: "custom_1717000000000" */
   key: string
   nome: string
   natureza_operacao: string
@@ -32,7 +14,7 @@ export interface TipoNotaCustom {
 }
 
 export interface TipoNota {
-  value: string          // TipoNotaPadrao | TipoNotaCustom.key
+  value: string
   label: string
   cfop: string
   natureza_operacao: string
@@ -52,13 +34,26 @@ export interface ItemNota {
 }
 
 export interface DestinatarioForm {
+  // ── origem do destinatário ──────────────────────────────────
+  /** UUID do registro em customers ou suppliers */
+  dest_id?: string
+  /** De onde veio o destinatário (para rastreio na nf_saida) */
+  dest_origem?: 'cliente' | 'fornecedor'
+
+  // ── dados cadastrais ────────────────────────────────────────
   tipo: 'fisica' | 'juridica'
   nome: string
   cpf: string
   cnpj: string
   ie: string
+  /** contribuinte: '1' = contribuinte, '2' = isento, '9' = não contribuinte */
+  contribuinte: string
+  /** indIEDest gerado automaticamente: 1 | 2 | 9 */
+  ind_ie_dest: 1 | 2 | 9
   email: string
   telefone: string
+
+  // ── endereço ────────────────────────────────────────────────
   cep: string
   logradouro: string
   numero: string
@@ -81,7 +76,10 @@ export interface NfSaidaForm {
   valor_frete: number
   forma_pagamento: FormaPagamento
   informacoes_adicionais: string
-  chave_ref: string        // usado em devolução / nota anulatória
+  /** Chave NF-e referenciada (devolução / nota anulatória) */
+  chave_ref: string
+  /** ID da NF de entrada referenciada (devolução) */
+  nf_entrada_id?: string
 }
 
 export interface NfSaida {
@@ -96,6 +94,7 @@ export interface NfSaida {
   data_emissao: string
   data_saida: string | null
   dest_tipo: string
+  dest_origem: 'cliente' | 'fornecedor' | null
   dest_id: string | null
   dest_nome: string
   dest_cpf_cnpj: string | null
@@ -118,6 +117,8 @@ export interface NfSaida {
   valor_desconto: number
   valor_frete: number
   valor_total: number
+  informacoes_adicionais: string | null
+  forma_pagamento: string | null
   status: NfSaidaStatus
   sefaz_motivo: string | null
   xml_raw: string | null

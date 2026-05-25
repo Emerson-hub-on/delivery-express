@@ -44,6 +44,8 @@ const DEST_EMPTY: DestinatarioForm = {
   municipio: '',
   codigo_municipio: '',
   uf: 'PB',
+  contribuinte: '',
+  ind_ie_dest: 1
 }
 
 const ITEM_EMPTY = (): ItemNota => ({
@@ -211,7 +213,7 @@ export function NfSaidaTab({ companyId, onError }: Props) {
           <p className="text-[12px] text-[#7a7f86] mt-0.5">Emissão de NF-e</p>
         </div>
         <div className="flex items-center gap-2">
-          <span className="bg-[#2a2d30] border border-[#3a3d42] rounded-md px-3 py-1.5
+          <span className="bg-[#2a2d30] border border-[#141516] rounded-md px-3 py-1.5
             text-[12px] text-[#a0a5ad]">
             Rascunho
           </span>
@@ -237,6 +239,7 @@ export function NfSaidaTab({ companyId, onError }: Props) {
       <DestinatarioSection
         form={form.destinatario}
         onChange={handleDestChange}
+        companyId={companyId}
       />
 
       {/* Itens */}
@@ -244,6 +247,7 @@ export function NfSaidaTab({ companyId, onError }: Props) {
         itens={form.itens}
         cfopBadgeLabel={cfopBadgeLabel}
         onChange={handleItensChange}
+        companyId={companyId}
       />
 
       {/* Totais */}

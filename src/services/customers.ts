@@ -1,20 +1,11 @@
 import { supabase } from '@/lib/supabase'
 import { Customer } from '@/types/customer'
 
-export async function getAllCustomers(companyId?: string): Promise<Customer[]> {
-  let q = supabase
-    .from('customers')
-    .select('*')
-    .order('created_at', { ascending: false })
-
-  if (companyId) q = q.eq('company_id', companyId)
-
-  const { data, error } = await q
-  if (error) throw error
-  return data as Customer[]
-}
-
-async function parseSupabaseError(error: any, cpf?: string | null, cnpj?: string | null): Promise<string> {
+async function parseSupabaseError(
+  error: any,
+  cpf?: string | null,
+  cnpj?: string | null
+): Promise<string> {
   if (error?.code === '23505') {
     if (error.message?.includes('cpf') && cpf) {
       const { data } = await supabase
@@ -39,6 +30,19 @@ async function parseSupabaseError(error: any, cpf?: string | null, cnpj?: string
   return error.message ?? 'Erro desconhecido.'
 }
 
+export async function getAllCustomers(companyId?: string): Promise<Customer[]> {
+  let q = supabase
+    .from('customers')
+    .select('*')
+    .order('created_at', { ascending: false })
+
+  if (companyId) q = q.eq('company_id', companyId)
+
+  const { data, error } = await q
+  if (error) throw error
+  return data as Customer[]
+}
+
 export async function createCustomer(
   customer: Omit<Customer, 'id' | 'created_at'>
 ): Promise<Customer> {
@@ -47,6 +51,7 @@ export async function createCustomer(
     .insert(customer)
     .select()
     .single()
+
   if (error) throw new Error(await parseSupabaseError(error, customer.cpf, customer.cnpj))
   return data as Customer
 }
@@ -61,6 +66,7 @@ export async function updateCustomer(
     .eq('id', id)
     .select()
     .single()
+
   if (error) throw new Error(await parseSupabaseError(error, customer.cpf, customer.cnpj))
   return data as Customer
 }
@@ -70,5 +76,6 @@ export async function deleteCustomer(id: string): Promise<void> {
     .from('customers')
     .delete()
     .eq('id', id)
+
   if (error) throw error
 }
