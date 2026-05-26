@@ -41,7 +41,7 @@ interface NfSaidaRow {
   dest_cep: string | null
   informacoes_adicionais: string | null
   chave_ref: string | null
-  finalidade: number
+  finalidade: 1 | 2 | 3 | 4
 }
 
 interface Emitente {
@@ -180,7 +180,8 @@ export function NfSaidaGerenciador({ companyId, onError }: Props) {
       tipo_nota:          row.tipo_nota,
       natureza_operacao:  row.natureza_operacao,
       cfop_padrao:        row.itens?.[0]?.cfop ?? '',
-      finalidade:         row.finalidade ?? 1,
+      finalidade: ([1, 2, 3, 4].includes(row.finalidade) ? row.finalidade : 1) as 1 | 2 | 3 | 4,
+
       serie:              row.serie,
       destinatario: {
         tipo:             row.dest_tipo as any ?? 'fisica',
