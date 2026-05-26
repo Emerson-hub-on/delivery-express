@@ -25,6 +25,7 @@ import { CashTab } from './cash/CashTab'
 import { CustomersTab } from './customers/CustomersTab'
 import { PDVTab } from './caixa/PDVTab'
 import { BillingTab } from '@/components/billing/BillingTab'
+import type { BillingSubTab } from '@/types/billing'
 
 function todayLocalISO() {
   const d = new Date()
@@ -42,7 +43,9 @@ export default function AdminPage() {
   id: string
   serie: string
 } | null>(null)
-  const [billingSubTab, setBillingSubTab] = useState<'nf-entrada' | 'nf-saida'>('nf-entrada')
+  const [billingSubTab, setBillingSubTab] = useState<BillingSubTab>('nf-entrada')
+
+  
 
   // ── Auth guard ──────────────────────────────────────────────────────────────
   const [authReady,  setAuthReady]  = useState(false)

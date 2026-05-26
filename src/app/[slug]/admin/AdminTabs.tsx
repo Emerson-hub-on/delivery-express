@@ -1,9 +1,10 @@
 'use client'
 import { useState } from 'react'
 import { Tab } from './types'
+import type { BillingSubTab } from '@/types/billing'
 
 type ReportSubTab  = 'overview' | 'products' | 'categories' | 'inventory'
-type BillingSubTab = 'nf-entrada' | 'nf-saida'   // ← corrigido
+
 
 interface AdminTabsProps {
   tab: Tab
@@ -15,8 +16,9 @@ interface AdminTabsProps {
 }
 
 const BILLING_SUB_TABS: { id: BillingSubTab; label: string; icon: string }[] = [
-  { id: 'nf-entrada', label: 'Entrada de NF',          icon: '➜' },
-  { id: 'nf-saida',  label: 'Saída / Faturamento',     icon: '◈' },  // ← novo
+  { id: 'nf-entrada',           label: 'Entrada de NF',        icon: '➜' },
+  { id: 'nf-saida',             label: 'Saída / Faturamento',  icon: '◈' },
+  { id: 'nf-saida-gerenciador', label: 'Gerenciador de NF-e',  icon: '☰' },
 ]
 
 const CADASTRO_TABS: Tab[] = ['products', 'categories', 'motoboys', 'customers']

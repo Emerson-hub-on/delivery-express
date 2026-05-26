@@ -3,7 +3,7 @@ import { NfEntradaTab }       from './nf-entrada/NfEntradaTab'
 import { NfSaidaTab }         from './nf-saida/NfSaidaTab'
 import { NfSaidaGerenciador } from './nf-saida/NfSaidaGerenciador'
 
-type BillingSubTab = 'nf-entrada' | 'nf-saida' | 'nf-saida-gerenciador'
+import type { BillingSubTab } from '@/types/billing'
 
 interface Props {
   subTab: BillingSubTab
