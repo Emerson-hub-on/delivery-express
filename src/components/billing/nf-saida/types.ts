@@ -126,4 +126,8 @@ export interface NfSaida {
   order_id: number | null
   created_at: string
   updated_at: string
+  chave_acesso:  string | null
+  xml_url:       string | null
+  xml_protocolo: string | null
+  autorizada_em: string | null
 }

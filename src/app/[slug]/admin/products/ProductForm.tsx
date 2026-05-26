@@ -386,6 +386,20 @@ export function ProductForm({
               <p className="text-xs text-gray-400 mt-1">Somente quando diferente</p>
             </div>
 
+            {form.unit_trib && (
+            <div>
+              <FieldLabel>Fator de conversão</FieldLabel>
+              <input type="number" min={1} step={1}
+                value={form.fator_conversao ?? 1}
+                onChange={e => onFieldChange('fator_conversao', Number(e.target.value))}
+                className={inputCls}
+              />
+              <p className="text-xs text-gray-400 mt-1">
+                Ex: 1 CX = 12 UN → fator 12
+              </p>
+            </div>
+          )}
+
             {/* Origem */}
             <div>
               <FieldLabel required>Origem</FieldLabel>

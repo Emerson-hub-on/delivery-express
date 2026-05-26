@@ -1,14 +1,14 @@
 'use client'
 import { useState, useMemo, useCallback, useEffect } from 'react'
-import { FileText, Save, Send } from 'lucide-react'
+import { FileText, Save, Send, CheckCircle2, Copy } from 'lucide-react'
 import { nanoid } from 'nanoid'
 import { supabase } from '@/lib/supabase'
 
-import { TipoNotaSelect } from './TipoNotaSelect'
+import { TipoNotaSelect }      from './TipoNotaSelect'
 import { DestinatarioSection } from './DestinatarioSection'
-import { ItensSection } from './ItensSection'
-import { TotaisSection } from './TotaisSection'
-import { DanfePreview } from './DanfePreview'
+import { ItensSection }        from './ItensSection'
+import { TotaisSection }       from './TotaisSection'
+import { DanfePreview }        from './DanfePreview'
 
 import {
   TIPOS_NOTA_PADRAO,
@@ -42,6 +42,14 @@ type Emitente = {
   fone?: string
 }
 
+// Resultado da emissão bem-sucedida
+interface EmissaoResult {
+  chave_acesso: string
+  protocolo: string
+  numero: string
+  xml_url: string
+}
+
 // ── Estado inicial ────────────────────────────────────────────────────────────
 const DEST_EMPTY: DestinatarioForm = {
   tipo: 'fisica',
@@ -67,18 +75,21 @@ const TIPO_INICIAL = TIPOS_NOTA_PADRAO[0]
 
 function emptyForm(): NfSaidaForm {
   return {
-    tipo_nota: TIPO_INICIAL.value,
-    natureza_operacao: TIPO_INICIAL.natureza_operacao,
-    cfop_padrao: TIPO_INICIAL.cfop,
-    finalidade: TIPO_INICIAL.finalidade,
-    serie: '001',
-    destinatario: DEST_EMPTY,
-    itens: [{ id: nanoid(), produto_desc: '', ncm: '', cfop: '', cst_csosn: '', quantidade: 1, valor_unit: 0, valor_total: 0 }],
-    valor_desconto: 0,
-    valor_frete: 0,
-    forma_pagamento: 'boleto',
+    tipo_nota:          TIPO_INICIAL.value,
+    natureza_operacao:  TIPO_INICIAL.natureza_operacao,
+    cfop_padrao:        TIPO_INICIAL.cfop,
+    finalidade:         TIPO_INICIAL.finalidade,
+    serie:              '001',
+    destinatario:       DEST_EMPTY,
+    itens: [{
+      id: nanoid(), produto_desc: '', ncm: '', cfop: '',
+      cst_csosn: '', quantidade: 1, valor_unit: 0, valor_total: 0,
+    }],
+    valor_desconto:       0,
+    valor_frete:          0,
+    forma_pagamento:      'boleto',
     informacoes_adicionais: '',
-    chave_ref: '',
+    chave_ref:            '',
   }
 }
 
@@ -91,14 +102,16 @@ export function NfSaidaTab({ companyId, onError }: Props) {
   const [showDanfe, setShowDanfe]     = useState(false)
   const [savedNumero, setSavedNumero] = useState<string | undefined>()
 
-  // Emitente buscado internamente via fiscal_config
-  const [emitente, setEmitente]       = useState<Emitente | null>(null)
+  // Resultado da última emissão autorizada
+  const [emissaoResult, setEmissaoResult] = useState<EmissaoResult | null>(null)
+  const [copiedChave, setCopiedChave]     = useState(false)
+
+  const [emitente, setEmitente]               = useState<Emitente | null>(null)
   const [loadingEmitente, setLoadingEmitente] = useState(true)
 
   // ── Busca dados do emitente ──────────────────────────────────────────────
   useEffect(() => {
     if (!companyId) return
-
     async function fetchEmitente() {
       setLoadingEmitente(true)
       const { data, error } = await supabase
@@ -121,13 +134,12 @@ export function NfSaidaTab({ companyId, onError }: Props) {
         numero:       data.numero,
         bairro:       data.bairro,
         municipio:    data.municipio,
-        uf:           data.uf.trim(), // uf é char(2), pode vir com espaço
+        uf:           data.uf.trim(),
         cep:          data.cep,
         fone:         data.telefone ?? undefined,
       })
       setLoadingEmitente(false)
     }
-
     fetchEmitente()
   }, [companyId])
 
@@ -135,22 +147,18 @@ export function NfSaidaTab({ companyId, onError }: Props) {
   function handleTipoChange(tipo: TipoNota) {
     setForm(prev => ({
       ...prev,
-      tipo_nota:          tipo.value,
-      natureza_operacao:  tipo.natureza_operacao,
-      cfop_padrao:        tipo.cfop,
-      finalidade:         tipo.finalidade,
+      tipo_nota:         tipo.value,
+      natureza_operacao: tipo.natureza_operacao,
+      cfop_padrao:       tipo.cfop,
+      finalidade:        tipo.finalidade,
     }))
   }
 
   // ── Destinatário ─────────────────────────────────────────────────────────
   const handleDestChange = useCallback(
     <K extends keyof DestinatarioForm>(k: K, v: DestinatarioForm[K]) => {
-      setForm(prev => ({
-        ...prev,
-        destinatario: { ...prev.destinatario, [k]: v },
-      }))
-    },
-    []
+      setForm(prev => ({ ...prev, destinatario: { ...prev.destinatario, [k]: v } }))
+    }, []
   )
 
   // ── Itens ────────────────────────────────────────────────────────────────
@@ -189,16 +197,16 @@ export function NfSaidaTab({ companyId, onError }: Props) {
       dest_tipo:         d.tipo === 'juridica' ? 'juridica' : 'fisica',
       dest_nome:         d.nome,
       dest_cpf_cnpj:     d.tipo === 'juridica' ? d.cnpj.replace(/\D/g, '') : d.cpf.replace(/\D/g, ''),
-      dest_ie:           d.ie           || null,
-      dest_email:        d.email        || null,
-      dest_telefone:     d.telefone     || null,
-      dest_logradouro:   d.logradouro   || null,
-      dest_numero:       d.numero       || null,
-      dest_complemento:  d.complemento  || null,
-      dest_bairro:       d.bairro       || null,
-      dest_municipio:    d.municipio    || null,
+      dest_ie:           d.ie          || null,
+      dest_email:        d.email       || null,
+      dest_telefone:     d.telefone    || null,
+      dest_logradouro:   d.logradouro  || null,
+      dest_numero:       d.numero      || null,
+      dest_complemento:  d.complemento || null,
+      dest_bairro:       d.bairro      || null,
+      dest_municipio:    d.municipio   || null,
       dest_codigo_mun:   d.codigo_municipio || null,
-      dest_uf:           d.uf           || null,
+      dest_uf:           d.uf          || null,
       dest_cep:          d.cep.replace(/\D/g, '') || null,
       chave_ref:         form.chave_ref || null,
       itens:             form.itens,
@@ -212,16 +220,12 @@ export function NfSaidaTab({ companyId, onError }: Props) {
 
   // ── Salvar rascunho → abre DANFE ─────────────────────────────────────────
   async function handleSaveRascunho() {
-    if (!emitente) {
-      onError?.('Configuração fiscal não encontrada. Cadastre os dados do emitente.')
-      return
-    }
+    if (!emitente) { onError?.('Configuração fiscal não encontrada.'); return }
     try {
       setSaving(true)
-      const payload = buildPayload('rascunho')
       const { data, error } = await supabase
         .from('nf_saida')
-        .insert(payload)
+        .insert(buildPayload('rascunho'))
         .select('numero')
         .single()
       if (error) throw error
@@ -236,24 +240,34 @@ export function NfSaidaTab({ companyId, onError }: Props) {
 
   // ── Emitir NF-e ──────────────────────────────────────────────────────────
   async function handleEmitir() {
-    if (!emitente) {
-      onError?.('Configuração fiscal não encontrada. Cadastre os dados do emitente.')
-      return
-    }
+    if (!emitente) { onError?.('Configuração fiscal não encontrada.'); return }
     try {
       setEmitting(true)
-      const payload = buildPayload('pendente')
-      const { data, error } = await supabase
+      setEmissaoResult(null)
+
+      // 1. Salva a nota como 'pendente'
+      const { data: inserted, error: insertErr } = await supabase
         .from('nf_saida')
-        .insert(payload)
+        .insert(buildPayload('pendente'))
         .select('id')
         .single()
-      if (error) throw error
+      if (insertErr) throw insertErr
 
-      const { error: fnErr } = await supabase.functions.invoke('emitir-nfe', {
-        body: { nf_saida_id: data.id },
+      // 2. Chama a edge function — ela gera XML, envia à SEFAZ e salva no Storage
+      const { data: fnData, error: fnErr } = await supabase.functions.invoke('emitir-nfe', {
+        body: { nf_saida_id: inserted.id },
       })
       if (fnErr) throw fnErr
+
+      // 3. Exibe o resultado de sucesso e limpa o formulário
+      setEmissaoResult({
+        chave_acesso: fnData.chave_acesso,
+        protocolo:    fnData.protocolo,
+        numero:       fnData.numero,
+        xml_url:      fnData.xml_url,
+      })
+      setForm(emptyForm())
+
     } catch (e: any) {
       onError?.(e.message ?? 'Erro ao emitir NF-e')
     } finally {
@@ -261,10 +275,28 @@ export function NfSaidaTab({ companyId, onError }: Props) {
     }
   }
 
+  // ── Copiar chave de acesso ────────────────────────────────────────────────
+  function handleCopyChave(chave: string) {
+    navigator.clipboard.writeText(chave)
+    setCopiedChave(true)
+    setTimeout(() => setCopiedChave(false), 2000)
+  }
+
+  // ── Download XML direto do Storage ───────────────────────────────────────
+  async function handleDownloadXml(xmlUrl: string, numero: string) {
+    const { data, error } = await supabase.storage.from('nfe-xmls').download(xmlUrl)
+    if (error || !data) { onError?.('Erro ao baixar XML: ' + error?.message); return }
+    const url = URL.createObjectURL(data)
+    const a   = document.createElement('a')
+    a.href     = url
+    a.download = `nfe-${numero}.xml`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <>
-      {/* Modal DANFE — só monta quando emitente está disponível */}
       {showDanfe && emitente && (
         <DanfePreview
           form={form}
@@ -283,7 +315,6 @@ export function NfSaidaTab({ companyId, onError }: Props) {
             <p className="text-[12px] text-[#7a7f86] mt-0.5">Emissão de NF-e</p>
           </div>
           <div className="flex items-center gap-2">
-            {/* Badge de status do emitente */}
             {loadingEmitente && (
               <span className="bg-[#2a2d30] border border-[#141516] rounded-md px-3 py-1.5 text-[12px] text-[#7a7f86] animate-pulse">
                 Carregando emitente…
@@ -303,6 +334,83 @@ export function NfSaidaTab({ companyId, onError }: Props) {
             </span>
           </div>
         </div>
+
+        {/* ── Banner de sucesso pós-emissão ── */}
+        {emissaoResult && (
+          <div style={{
+            background: '#102a18', border: '1px solid #205a30',
+            borderRadius: '12px', padding: '16px 20px',
+            marginBottom: '24px', display: 'flex',
+            flexDirection: 'column', gap: '12px',
+          }}>
+            {/* Título */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <CheckCircle2 size={18} color="#60c080" />
+              <span style={{ fontSize: '14px', fontWeight: 600, color: '#60c080' }}>
+                NF-e autorizada com sucesso!
+              </span>
+              <span style={{ fontSize: '12px', color: '#4a7a58', marginLeft: 'auto' }}>
+                NF-e {emissaoResult.numero} · Protocolo {emissaoResult.protocolo}
+              </span>
+            </div>
+
+            {/* Chave de acesso */}
+            <div style={{
+              background: '#0a1a10', border: '1px solid #1a3a20',
+              borderRadius: '8px', padding: '10px 14px',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px',
+            }}>
+              <div>
+                <div style={{ fontSize: '10px', color: '#3a6a48', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>
+                  Chave de Acesso
+                </div>
+                <div style={{ fontSize: '12px', color: '#6c9fd4', fontFamily: 'monospace', letterSpacing: '1.5px', wordBreak: 'break-all' }}>
+                  {emissaoResult.chave_acesso}
+                </div>
+              </div>
+              <button
+                onClick={() => handleCopyChave(emissaoResult.chave_acesso)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '5px',
+                  background: copiedChave ? '#1a4a28' : '#1a2a20',
+                  border: `1px solid ${copiedChave ? '#3a7a48' : '#2a4a30'}`,
+                  borderRadius: '7px', padding: '6px 12px',
+                  fontSize: '12px', color: copiedChave ? '#60c080' : '#4a7a58',
+                  cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.2s',
+                  flexShrink: 0,
+                }}
+              >
+                {copiedChave ? <CheckCircle2 size={12} /> : <Copy size={12} />}
+                {copiedChave ? 'Copiado!' : 'Copiar'}
+              </button>
+            </div>
+
+            {/* Ações pós-emissão */}
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={() => handleDownloadXml(emissaoResult.xml_url, emissaoResult.numero)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '6px',
+                  background: '#1a2a20', border: '1px solid #2a4a30',
+                  borderRadius: '8px', padding: '7px 14px',
+                  fontSize: '12px', color: '#4a9a68', cursor: 'pointer',
+                }}
+              >
+                ↓ Baixar XML
+              </button>
+              <button
+                onClick={() => setEmissaoResult(null)}
+                style={{
+                  background: 'none', border: '1px solid #1a3a20',
+                  borderRadius: '8px', padding: '7px 14px',
+                  fontSize: '12px', color: '#3a5a40', cursor: 'pointer',
+                }}
+              >
+                Nova nota
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Tipo de nota */}
         <div className="mb-5">
@@ -351,10 +459,7 @@ export function NfSaidaTab({ companyId, onError }: Props) {
           <button
             type="button"
             onClick={() => {
-              if (!emitente) {
-                onError?.('Configuração fiscal não encontrada.')
-                return
-              }
+              if (!emitente) { onError?.('Configuração fiscal não encontrada.'); return }
               setShowDanfe(true)
             }}
             disabled={loadingEmitente || !emitente}

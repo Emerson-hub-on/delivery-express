@@ -45,55 +45,23 @@ export type Product = {
   cost_price?: number | null  // Preço de custo
   ean?: string | null 
   sizes?: ProductSize[] | null
-
-
-  // ── Campos fiscais (NFC-e / NF-e) ─────────────────────────
-
-  /** NCM: 8 dígitos — ex: '21069090' */
+  unidade_estoque?: string   // interno — não vai para o XML fiscal
+  fator_conversao?: number
   ncm?: string
-
-  /** CEST: 7 dígitos — somente com Substituição Tributária */
   cest?: string
-
-  /**
-   * CFOP: 4 dígitos
-   * 5101 = produção própria dentro do estado
-   * 5102 = mercadoria de terceiros dentro do estado  ← padrão
-   * 6101/6102 = equivalentes fora do estado
-   */
   cfop?: string
-
-  /** Unidade comercial: 'UN', 'KG', 'L' … */
-  unit_com?: UnitCom
-
-  /** Unidade tributável (somente quando diferente da comercial) */
-  unit_trib?: UnitCom
-
-  /** Origem: 0 = Nacional, 1 = Importação direta, 2 = Merc. interno estrangeiro */
+  unit_com?: UnitCom         // fiscal — tag <uCom> na NFC-e
+  unit_trib?: UnitCom 
   origem?: OrigemMercadoria
-
-  /** CSOSN do Simples Nacional — '400' é o padrão para alimentação */
   icms_csosn?: ICMS_CSOSN
-
-  /** Alíquota ICMS (%) — preencher somente quando icms_csosn = '900' */
   icms_aliq?: number
-
-  /** CST PIS — '07' para Simples Nacional */
   pis_cst?: PIS_COFINS_CST
-
-  /** Alíquota PIS (%) — 0 para Simples Nacional */
   pis_aliq?: number
-
-  /** CST COFINS — '07' para Simples Nacional */
   cofins_cst?: PIS_COFINS_CST
-
-  /** Alíquota COFINS (%) — 0 para Simples Nacional */
   cofins_aliq?: number
+  ind_escala?: 'S' | 'N'  // padrão 'S'
+  cnpj_fabricante?: string
 }
-
-// ── Categoria ─────────────────────────────────────────────────
-
-// ── Categoria ─────────────────────────────────────────────────
 
 export type CategoryType = 'clothing' | 'footwear' | 'other'
 export type SizeGroup   = 'adult' | 'kids'
