@@ -49,7 +49,7 @@ const maskCpf = (v: string) => {
 function useProducts(companyId: string, onError: (m: string) => void) {
   const [products, setProducts] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-
+  
   useEffect(() => {
     if (!companyId) return
     setLoading(true)

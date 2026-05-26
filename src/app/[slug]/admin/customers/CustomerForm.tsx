@@ -61,20 +61,20 @@ export function CustomerForm({ initial, companyId, onSaved, onCancel, onError }:
     useForm<FormValues>({
       resolver: zodResolver(pessoaTipo === 'fisica' ? pfSchema : pjSchema),
       defaultValues: {
-        name:         initial?.name                  ?? '',
-        email:        initial?.email                 ?? '',
-        phone:        initial?.phone                 ?? '',
-        cpf:          initial?.cpf                   ?? '',
-        cnpj:         initial?.cnpj                  ?? '',
-        razao_social: initial?.razao_social          ?? '',
-        ie:           initial?.ie                    ?? '',
-        cep:          '',
-        street:       initial?.address?.street       ?? '',
-        number:       initial?.address?.number       ?? '',
-        complement:   initial?.address?.complement   ?? '',
-        district:     initial?.address?.district     ?? '',
-        city:         initial?.address?.city         ?? '',
-        state:        initial?.address?.state        ?? '',
+        name:         initial?.name          ?? '',
+        email:        initial?.email         ?? '',
+        phone:        initial?.phone         ?? '',
+        cpf:          initial?.cpf           ?? '',
+        cnpj:         initial?.cnpj          ?? '',
+        razao_social: initial?.razao_social  ?? '',
+        ie:           initial?.ie            ?? '',
+        cep:          '',                          // sempre começa vazio para forçar lookup
+        street:       initial?.logradouro    ?? '',
+        number:       initial?.numero        ?? '',
+        complement:   initial?.complemento   ?? '',
+        district:     initial?.bairro        ?? '',
+        city:         initial?.municipio     ?? '',
+        state:        initial?.uf            ?? '',
       },
     })
 
@@ -118,20 +118,30 @@ export function CustomerForm({ initial, companyId, onSaved, onCancel, onError }:
           state:      values.state      ?? '',
         }
       : null
-
-    const common = {
-      company_id:   companyId,
-      is_guest:     true,
-      pessoa_tipo:  pessoaTipo,
-      name:         values.name,
-      email:        values.email,
-      phone:        values.phone        || null,
-      address,
-      cpf:          pessoaTipo === 'fisica'    ? (values.cpf          || null) : null,
-      cnpj:         pessoaTipo === 'juridica'  ? (values.cnpj         || null) : null,
-      razao_social: pessoaTipo === 'juridica'  ? (values.razao_social || null) : null,
-      ie:           pessoaTipo === 'juridica'  ? (values.ie           || null) : null,
-    }
+      const common = {
+      company_id:       companyId,
+      is_guest:         true,
+      pessoa_tipo:      pessoaTipo,
+      name:             values.name,
+      email:            values.email,
+      phone:            values.phone       || null,
+      cep:              values.cep?.replace('-', '') || null,
+      logradouro:       values.street      || null,
+      numero:           values.number      || null,
+      complemento:      values.complement  || null,
+      bairro:           values.district    || null,
+      municipio:        values.city        || null,
+      uf:               values.state       || null,
+      cpf:              pessoaTipo === 'fisica'   ? (values.cpf          || null) : null,
+      cnpj:             pessoaTipo === 'juridica' ? (values.cnpj         || null) : null,
+      razao_social:     pessoaTipo === 'juridica' ? (values.razao_social || null) : null,
+      ie:               pessoaTipo === 'juridica' ? (values.ie           || null) : null,
+      // campos gerenciados fora do form
+      code:             initial?.code          ?? 0,
+      codigo_municipio: initial?.codigo_municipio ?? null,
+      ind_ie_dest:      initial?.ind_ie_dest   ?? 9,   // 9 = não contribuinte (padrão NF-e)
+      contribuinte:     initial?.contribuinte  ?? null,
+    } satisfies Omit<Customer, 'id' | 'created_at'>
 
     try {
       setSaving(true)
