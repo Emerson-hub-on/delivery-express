@@ -1,29 +1,43 @@
 export interface CustomerAddress {
-  cep:          string
-  street:       string
-  number:       string
-  complement?:  string
-  district:     string
-  city:         string
-  state:        string
+  cep:         string
+  street:      string   // → logradouro
+  number:      string   // → numero
+  complement?: string   // → complemento
+  district:    string   // → bairro
+  city:        string   // → municipio
+  state:       string
 }
 
 export type PessoaTipo = 'fisica' | 'juridica'
 
 export interface Customer {
-  id:           string
-  name:         string
-  email:        string
-  phone:        string | null
-  cpf:          string | null
-  cnpj:         string | null
-  razao_social: string | null
-  ie:           string | null
-  pessoa_tipo:  PessoaTipo
-  address:      CustomerAddress | null
-  company_id:   string | null
-  is_guest:     boolean
-  created_at:   string
+  id:              string
+  code:            number        // ← adicionar
+  name:            string
+  email:           string
+  phone:           string | null
+  cpf:             string | null
+  cnpj:            string | null
+  razao_social:    string | null
+  ie:              string | null
+  pessoa_tipo:     PessoaTipo
+  company_id:      string | null
+  is_guest:        boolean
+  created_at:      string
+
+  // Endereço direto (espelhando o banco)
+  logradouro:      string | null
+  numero:          string | null
+  complemento:     string | null
+  bairro:          string | null
+  municipio:       string | null
+  uf:              string | null
+  cep:             string | null
+  codigo_municipio: string | null  // obrigatório na NFC-e quando endereço presente
+
+  // Campos fiscais
+  ind_ie_dest:     0 | 1 | 2 | 9 | null  // era smallint genérico no type
+  contribuinte:    string | null
 }
 
 // ── Regra fiscal por faixa de valor ──────────────────────────────────────────

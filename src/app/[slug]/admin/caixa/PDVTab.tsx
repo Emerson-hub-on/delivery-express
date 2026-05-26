@@ -592,50 +592,98 @@ export function PDVTab({ companyId, cashRegisterId, serie, onError }: PDVProps) 
             </div>
           </div>
 
-          {/* Grade de produtos */}
-          {loading ? (
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: css.txtMuted, fontSize: 13, gap: 8 }}>
-              <div style={{ width: 18, height: 18, border: `2px solid ${css.indigo}`, borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-              Carregando produtos...
-            </div>
-          ) : filtered.length === 0 ? (
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: css.txtMuted, fontSize: 13 }}>
-              Nenhum produto encontrado
-            </div>
-          ) : (
-            <div style={{
-              flex: 1, overflowY: 'auto', display: 'grid',
-              gridTemplateColumns: '1fr 1fr', gap: 8, padding: 12,
-              alignContent: 'start', scrollbarWidth: 'thin', scrollbarColor: `${css.border} transparent`,
-            }}>
-              {filtered.map(p => {
-                const isSelected = selectedProd?.id === p.id
-                return (
-                  <button
-                    key={p.id} onClick={() => setSelectedProd(p)}
-                    style={{
-                      display: 'flex', flexDirection: 'column', gap: 8, padding: 10,
-                      borderRadius: 10,
-                      border: `1.5px solid ${isSelected ? css.indigo : css.border}`,
-                      background: isSelected ? css.indigoBg : css.surface,
-                      cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s',
-                      boxShadow: isSelected ? `0 0 0 3px rgba(99,102,241,0.12)` : 'none',
-                    }}
-                  >
-                    {p.image
-                      ? <img src={p.image} alt={p.name} style={{ width: '100%', height: 56, objectFit: 'cover', borderRadius: 6 }} onError={(e: any) => { e.target.style.display = 'none' }} />
-                      : <div style={{ width: '100%', height: 56, borderRadius: 6, background: css.surfaceAlt, border: `1px dashed ${css.borderMid}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: css.txtMuted }}>Sem Foto</div>
-                    }
-                    <span style={{ fontSize: 12, color: css.txtPrimary, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <span style={{ color: css.accent, fontSize: 13, fontWeight: 700 }}>{fmt(p.price)}</span>
-                      <span style={{ fontSize: 10, color: css.txtMuted }}>#{fmtCode(p.code)}</span>
-                    </div>
-                  </button>
-                )
-              })}
-            </div>
-          )}
+{/* Grade → Tabela de produtos */}
+{loading ? (
+  <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: css.txtMuted, fontSize: 13, gap: 8 }}>
+    <div style={{ width: 18, height: 18, border: `2px solid ${css.indigo}`, borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+    Carregando produtos...
+  </div>
+) : filtered.length === 0 ? (
+  <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: css.txtMuted, fontSize: 13 }}>
+    Nenhum produto encontrado
+  </div>
+) : (
+  <div style={{ flex: 1, overflowY: 'auto', scrollbarWidth: 'thin', scrollbarColor: `${css.border} transparent` }}>
+    {/* Cabeçalho fixo */}
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: '80px 60px 48px 1fr 56px 72px',
+      padding: '6px 12px',
+      borderBottom: `1.5px solid ${css.border}`,
+      background: css.surfaceAlt,
+      position: 'sticky', top: 0, zIndex: 1,
+    }}>
+      {['EAN', 'Código', '', 'Descrição', 'Estoque', 'Preço'].map((h, i) => (
+        <span key={i} style={{
+          fontSize: 10, color: css.txtMuted, fontWeight: 700,
+          textTransform: 'uppercase', letterSpacing: '0.4px',
+          textAlign: i >= 4 ? 'right' : 'left',
+        }}>{h}</span>
+      ))}
+    </div>
+
+    {/* Linhas */}
+    {filtered.map((p, idx) => {
+      const isSelected = selectedProd?.id === p.id
+      const stockLabel = p.stock == null ? '∞' : p.stock <= 0 ? '0' : String(p.stock)
+      const stockColor = p.stock == null ? css.txtMuted : p.stock <= 0 ? css.red : p.stock <= 5 ? css.yellow : css.green
+
+      return (
+        <div
+          key={p.id}
+          onClick={() => setSelectedProd(p)}
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '80px 60px 48px 1fr 56px 72px',
+            alignItems: 'center',
+            padding: '7px 12px',
+            borderBottom: `1px solid ${css.border}`,
+            background: isSelected ? css.indigoBg : idx % 2 === 0 ? css.surface : css.bg,
+            borderLeft: isSelected ? `3px solid ${css.indigo}` : '3px solid transparent',
+            cursor: 'pointer',
+            transition: 'background 0.12s',
+          }}
+          onMouseEnter={e => { if (!isSelected) (e.currentTarget as HTMLElement).style.background = css.surfaceAlt }}
+          onMouseLeave={e => { if (!isSelected) (e.currentTarget as HTMLElement).style.background = idx % 2 === 0 ? css.surface : css.bg }}
+        >
+          {/* EAN */}
+          <span style={{ fontSize: 10, color: css.txtMuted, fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {p.ean || '—'}
+          </span>
+
+          {/* Código */}
+          <span style={{ fontSize: 10, color: css.txtMuted, fontFamily: 'monospace' }}>
+            #{fmtCode(p.code)}
+          </span>
+
+          {/* Imagem */}
+          {p.image
+            ? <img src={p.image} alt="" style={{ width: 36, height: 36, objectFit: 'cover', borderRadius: 6, display: 'block' }}
+                onError={(e: any) => { e.target.style.display = 'none' }} />
+            : <div style={{ width: 36, height: 36, borderRadius: 6, background: css.surfaceAlt, border: `1px dashed ${css.borderMid}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: css.txtMuted }}>
+                S/F
+              </div>
+          }
+
+          {/* Descrição */}
+          <span style={{ fontSize: 12, color: isSelected ? css.indigo : css.txtPrimary, fontWeight: isSelected ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingLeft: 6, paddingRight: 8 }}>
+            {p.name}
+          </span>
+
+          {/* Estoque */}
+          <span style={{ fontSize: 11, color: stockColor, fontWeight: 600, textAlign: 'right' }}>
+            {stockLabel}
+          </span>
+
+          {/* Preço */}
+          <span style={{ fontSize: 12, color: css.accent, fontWeight: 700, textAlign: 'right' }}>
+            {fmt(p.price)}
+          </span>
+        </div>
+      )
+    })}
+  </div>
+)}
 
           {/* Barra inferior: Qtd + Adicionar + Código */}
           <div style={{

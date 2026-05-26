@@ -12,7 +12,10 @@ interface ProductFormProps {
   saving: boolean
   uploading: boolean
   imagePreview: string | null
-  onFieldChange: (field: keyof Omit<Product, 'id' | 'code'>, value: string | number | boolean | null | ProductSize[]) => void
+  onFieldChange: (
+  field: keyof Omit<Product, 'id' | 'code'>,
+  value: string | number | boolean | null | ProductSize[]
+) => void
   onImageChange: (e: React.ChangeEvent<HTMLInputElement>) => void
   onSubmit: () => void
   onCancel: () => void
@@ -413,7 +416,38 @@ export function ProductForm({
                 ))}
               </select>
             </div>
+            {/* Indicador de Escala */}
+            <div>
+              <FieldLabel required>Escala Relevante</FieldLabel>
+              <select
+                value={form.ind_escala ?? 'S'}
+                onChange={e => onFieldChange('ind_escala', e.target.value)}
+                className={inputCls}
+              >
+                <option value="S">S — Produção em escala relevante</option>
+                <option value="N">N — Não produzido em escala (sob encomenda)</option>
+              </select>
+              <p className="text-xs text-gray-400 mt-1">
+                Padrão <strong>S</strong> para a maioria dos produtos
+              </p>
+            </div>
 
+            {/* CNPJ Fabricante — só quando ind_escala = 'N' */}
+            {form.ind_escala === 'N' && (
+              <div>
+                <FieldLabel required>CNPJ do Fabricante</FieldLabel>
+                <input
+                  type="text"
+                  placeholder="Ex: 12345678000195"
+                  maxLength={14}
+                  value={form.cnpj_fabricante ?? ''}
+                  onChange={e =>
+                    onFieldChange('cnpj_fabricante', e.target.value.replace(/\D/g, '').slice(0, 14) || null)
+                  }
+                  className={inputCls}
+                />
+              </div>
+            )}
             {/* Divisor visual */}
             <div className="sm:col-span-2 lg:col-span-3">
               <p className="text-xs font-semibold uppercase tracking-widest text-gray-400">ICMS – Simples Nacional</p>
