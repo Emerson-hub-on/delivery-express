@@ -1,5 +1,5 @@
 'use client'
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import { FileText, Save, Send } from 'lucide-react'
 import { nanoid } from 'nanoid'
 import { supabase } from '@/lib/supabase'
@@ -23,25 +23,26 @@ import type {
   FormaPagamento,
 } from './types'
 
+// ── Tipos ────────────────────────────────────────────────────────────────────
 interface Props {
   companyId: string
   onError?: (msg: string) => void
-  // Dados do emitente vindos do contexto da empresa
-  emitente: {
-    razao_social: string
-    cnpj: string
-    ie: string
-    logradouro: string
-    numero: string
-    bairro: string
-    municipio: string
-    uf: string
-    cep: string
-    fone?: string
-  }
 }
 
-/* ── estado inicial ──────────────────────────────────────────── */
+type Emitente = {
+  razao_social: string
+  cnpj: string
+  ie: string
+  logradouro: string
+  numero: string
+  bairro: string
+  municipio: string
+  uf: string
+  cep: string
+  fone?: string
+}
+
+// ── Estado inicial ────────────────────────────────────────────────────────────
 const DEST_EMPTY: DestinatarioForm = {
   tipo: 'fisica',
   nome: '',
@@ -81,26 +82,67 @@ function emptyForm(): NfSaidaForm {
   }
 }
 
-export function NfSaidaTab({ companyId, onError, emitente }: Props) {
-  const [form, setForm]           = useState<NfSaidaForm>(emptyForm)
+// ── Componente ────────────────────────────────────────────────────────────────
+export function NfSaidaTab({ companyId, onError }: Props) {
+  const [form, setForm]               = useState<NfSaidaForm>(emptyForm)
   const [customTypes, setCustomTypes] = useState<TipoNotaCustom[]>([])
-  const [saving, setSaving]       = useState(false)
-  const [emitting, setEmitting]   = useState(false)
-  const [showDanfe, setShowDanfe] = useState(false)
+  const [saving, setSaving]           = useState(false)
+  const [emitting, setEmitting]       = useState(false)
+  const [showDanfe, setShowDanfe]     = useState(false)
   const [savedNumero, setSavedNumero] = useState<string | undefined>()
 
-  /* ── tipo de nota ─────────────────────────────────────────── */
+  // Emitente buscado internamente via fiscal_config
+  const [emitente, setEmitente]       = useState<Emitente | null>(null)
+  const [loadingEmitente, setLoadingEmitente] = useState(true)
+
+  // ── Busca dados do emitente ──────────────────────────────────────────────
+  useEffect(() => {
+    if (!companyId) return
+
+    async function fetchEmitente() {
+      setLoadingEmitente(true)
+      const { data, error } = await supabase
+        .from('fiscal_config')
+        .select('razao_social, cnpj, ie, logradouro, numero, bairro, municipio, uf, cep, telefone')
+        .eq('company_id', companyId)
+        .single()
+
+      if (error || !data) {
+        onError?.('Configuração fiscal não encontrada. Cadastre os dados do emitente antes de emitir NF-e.')
+        setLoadingEmitente(false)
+        return
+      }
+
+      setEmitente({
+        razao_social: data.razao_social,
+        cnpj:         data.cnpj,
+        ie:           data.ie ?? '',
+        logradouro:   data.logradouro,
+        numero:       data.numero,
+        bairro:       data.bairro,
+        municipio:    data.municipio,
+        uf:           data.uf.trim(), // uf é char(2), pode vir com espaço
+        cep:          data.cep,
+        fone:         data.telefone ?? undefined,
+      })
+      setLoadingEmitente(false)
+    }
+
+    fetchEmitente()
+  }, [companyId])
+
+  // ── Tipo de nota ─────────────────────────────────────────────────────────
   function handleTipoChange(tipo: TipoNota) {
     setForm(prev => ({
       ...prev,
-      tipo_nota: tipo.value,
-      natureza_operacao: tipo.natureza_operacao,
-      cfop_padrao: tipo.cfop,
-      finalidade: tipo.finalidade,
+      tipo_nota:          tipo.value,
+      natureza_operacao:  tipo.natureza_operacao,
+      cfop_padrao:        tipo.cfop,
+      finalidade:         tipo.finalidade,
     }))
   }
 
-  /* ── destinatário ─────────────────────────────────────────── */
+  // ── Destinatário ─────────────────────────────────────────────────────────
   const handleDestChange = useCallback(
     <K extends keyof DestinatarioForm>(k: K, v: DestinatarioForm[K]) => {
       setForm(prev => ({
@@ -111,12 +153,12 @@ export function NfSaidaTab({ companyId, onError, emitente }: Props) {
     []
   )
 
-  /* ── itens ────────────────────────────────────────────────── */
+  // ── Itens ────────────────────────────────────────────────────────────────
   const handleItensChange = useCallback((itens: ItemNota[]) => {
     setForm(prev => ({ ...prev, itens }))
   }, [])
 
-  /* ── totais calculados ────────────────────────────────────── */
+  // ── Totais ───────────────────────────────────────────────────────────────
   const valorProdutos = useMemo(
     () => form.itens.reduce((s, i) => s + (i.valor_total || 0), 0),
     [form.itens]
@@ -134,7 +176,7 @@ export function NfSaidaTab({ companyId, onError, emitente }: Props) {
 
   const showChaveRef = TIPOS_NOTA_REQUEREM_CHAVE_REF.includes(form.tipo_nota)
 
-  /* ── monta payload para o banco ───────────────────────────── */
+  // ── Payload ──────────────────────────────────────────────────────────────
   function buildPayload(status: 'rascunho' | 'pendente') {
     const d = form.destinatario
     return {
@@ -168,8 +210,12 @@ export function NfSaidaTab({ companyId, onError, emitente }: Props) {
     }
   }
 
-  /* ── salvar rascunho → abre DANFE ─────────────────────────── */
+  // ── Salvar rascunho → abre DANFE ─────────────────────────────────────────
   async function handleSaveRascunho() {
+    if (!emitente) {
+      onError?.('Configuração fiscal não encontrada. Cadastre os dados do emitente.')
+      return
+    }
     try {
       setSaving(true)
       const payload = buildPayload('rascunho')
@@ -188,8 +234,12 @@ export function NfSaidaTab({ companyId, onError, emitente }: Props) {
     }
   }
 
-  /* ── emitir NF-e ──────────────────────────────────────────── */
+  // ── Emitir NF-e ──────────────────────────────────────────────────────────
   async function handleEmitir() {
+    if (!emitente) {
+      onError?.('Configuração fiscal não encontrada. Cadastre os dados do emitente.')
+      return
+    }
     try {
       setEmitting(true)
       const payload = buildPayload('pendente')
@@ -211,11 +261,11 @@ export function NfSaidaTab({ companyId, onError, emitente }: Props) {
     }
   }
 
-  /* ── render ───────────────────────────────────────────────── */
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <>
-      {/* Modal DANFE */}
-      {showDanfe && (
+      {/* Modal DANFE — só monta quando emitente está disponível */}
+      {showDanfe && emitente && (
         <DanfePreview
           form={form}
           numero={savedNumero}
@@ -233,6 +283,17 @@ export function NfSaidaTab({ companyId, onError, emitente }: Props) {
             <p className="text-[12px] text-[#7a7f86] mt-0.5">Emissão de NF-e</p>
           </div>
           <div className="flex items-center gap-2">
+            {/* Badge de status do emitente */}
+            {loadingEmitente && (
+              <span className="bg-[#2a2d30] border border-[#141516] rounded-md px-3 py-1.5 text-[12px] text-[#7a7f86] animate-pulse">
+                Carregando emitente…
+              </span>
+            )}
+            {!loadingEmitente && !emitente && (
+              <span className="bg-[#3a1a1a] border border-[#6b2a2a] rounded-md px-3 py-1.5 text-[12px] text-[#f08080]">
+                ⚠ Config. fiscal não encontrada
+              </span>
+            )}
             <span className="bg-[#2a2d30] border border-[#141516] rounded-md px-3 py-1.5 text-[12px] text-[#a0a5ad]">
               Rascunho
             </span>
@@ -289,10 +350,17 @@ export function NfSaidaTab({ companyId, onError, emitente }: Props) {
         <div className="flex items-center justify-between pt-4 border-t border-[#2e3238] mt-1">
           <button
             type="button"
-            onClick={() => setShowDanfe(true)}
+            onClick={() => {
+              if (!emitente) {
+                onError?.('Configuração fiscal não encontrada.')
+                return
+              }
+              setShowDanfe(true)
+            }}
+            disabled={loadingEmitente || !emitente}
             className="flex items-center gap-2 border border-[#3a3d42] rounded-lg
               px-4 py-2 text-[13px] text-[#7a7f86] hover:border-[#5a5f66]
-              hover:text-[#a0a5ad] transition-colors"
+              hover:text-[#a0a5ad] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <FileText size={15} />
             Preview DANFE
@@ -302,10 +370,10 @@ export function NfSaidaTab({ companyId, onError, emitente }: Props) {
             <button
               type="button"
               onClick={handleSaveRascunho}
-              disabled={saving}
+              disabled={saving || loadingEmitente || !emitente}
               className="flex items-center gap-2 bg-[#22262b] border border-[#3a3d42]
                 rounded-lg px-4 py-2 text-[13px] text-[#a0a5ad]
-                hover:bg-[#2e3238] disabled:opacity-50 transition-colors"
+                hover:bg-[#2e3238] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               <Save size={15} />
               {saving ? 'Salvando…' : 'Salvar rascunho'}
@@ -314,10 +382,10 @@ export function NfSaidaTab({ companyId, onError, emitente }: Props) {
             <button
               type="button"
               onClick={handleEmitir}
-              disabled={emitting}
+              disabled={emitting || loadingEmitente || !emitente}
               className="flex items-center gap-2 bg-[#1e4a7a] border border-[#2a6aad]
                 rounded-lg px-4 py-2 text-[13px] font-semibold text-[#90c8f0]
-                hover:bg-[#245c96] disabled:opacity-50 transition-colors"
+                hover:bg-[#245c96] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               <Send size={15} />
               {emitting ? 'Emitindo…' : 'Emitir NF-e'}
