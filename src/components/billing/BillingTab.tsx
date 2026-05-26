@@ -1,8 +1,9 @@
 'use client'
-import { NfEntradaTab } from './nf-entrada/NfEntradaTab'
-import { NfSaidaTab }   from './nf-saida/NfSaidaTab'
+import { NfEntradaTab }       from './nf-entrada/NfEntradaTab'
+import { NfSaidaTab }         from './nf-saida/NfSaidaTab'
+import { NfSaidaGerenciador } from './nf-saida/NfSaidaGerenciador'
 
-type BillingSubTab = 'nf-entrada' | 'nf-saida'
+type BillingSubTab = 'nf-entrada' | 'nf-saida' | 'nf-saida-gerenciador'
 
 interface Props {
   subTab: BillingSubTab
@@ -28,6 +29,12 @@ export function BillingTab({ subTab, onSubTabChange, companyId, onError }: Props
         >
           NF-e Saída / Faturamento
         </SubTabBtn>
+        <SubTabBtn
+          active={subTab === 'nf-saida-gerenciador'}
+          onClick={() => onSubTabChange('nf-saida-gerenciador')}
+        >
+          Gerenciador de NF-e
+        </SubTabBtn>
       </div>
 
       {subTab === 'nf-entrada' && (
@@ -35,6 +42,9 @@ export function BillingTab({ subTab, onSubTabChange, companyId, onError }: Props
       )}
       {subTab === 'nf-saida' && (
         <NfSaidaTab companyId={companyId} onError={onError ?? (() => {})} />
+      )}
+      {subTab === 'nf-saida-gerenciador' && (
+        <NfSaidaGerenciador companyId={companyId} onError={onError} />
       )}
     </div>
   )
