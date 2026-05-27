@@ -1118,7 +1118,7 @@ const handlePularNfce = () => {
                       cursor: 'pointer', fontSize: 13, fontWeight: payMethod === m ? 600 : 400,
                       transition: 'all 0.15s',
                     }}>
-                    {m === 'dinheiro' ? '💵 Dinheiro' : m === 'pix' ? '⚡ Pix' : '💳 Cartão'}
+                    {m === 'dinheiro' ? 'Dinheiro' : m === 'pix' ? 'Pix' : 'Cartão'}
                   </button>
                 ))}
               </div>
@@ -1186,8 +1186,8 @@ const handlePularNfce = () => {
           }}
         >
           {nfceLoading === 'normal'
-            ? <span style={{ fontSize: 16 }}>⏳</span>
-            : <span style={{ fontSize: 20 }}>✅</span>
+            ? <span style={{ fontSize: 16 }}>...</span>
+            : <span style={{ fontSize: 20 }}>S</span>
           }
           <span>Emitir NFC-e</span>
           <span style={{ fontSize: 10, fontWeight: 400, opacity: 0.85 }}>Online · SEFAZ</span>
@@ -1208,8 +1208,8 @@ const handlePularNfce = () => {
           }}
         >
           {nfceLoading === 'contingencia'
-            ? <span style={{ fontSize: 16 }}>⏳</span>
-            : <span style={{ fontSize: 20 }}>📋</span>
+            ? <span style={{ fontSize: 16 }}>...</span>
+            : <span style={{ fontSize: 20 }}>N</span>
           }
           <span>Contingência</span>
           <span style={{ fontSize: 10, fontWeight: 400, opacity: 0.85 }}>Offline · sincronizar depois</span>
