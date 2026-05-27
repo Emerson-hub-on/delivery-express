@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { createPdvSale, finalizarNfce, saveNfceXml } from '@/services/pdv'
 import { emitirNfce } from '@/services/nfce-transmissao'
+import { NfceLogsModal } from '@/components/pdv/NfceLogsModal'
 
 // ─── tipos locais ────────────────────────────────────────────────────────────
 
@@ -155,7 +156,11 @@ export function PDVTab({ companyId, cashRegisterId, serie, onError }: PDVProps) 
   const [nfceModal,  setNfceModal]  = useState(false)
   const [saleResult, setSaleResult] = useState<{ orderId: number; nfceNumero: number; serie: string } | null>(null)
   const [nfceLoading, setNfceLoading] = useState<'normal' | 'contingencia' | null>(null)
+  const [logsModal, setLogsModal] = useState(false)
   const searchCustomers = useCallback(async (term: string) => {
+  
+
+
     setCustomerSearch(term)
     if (!term.trim()) { setCustomerResults([]); return }
     setCustomerSearching(true)
@@ -341,57 +346,75 @@ const confirmVenda = async () => {
 const handleEmitirNfce = async (tipo: 'normal' | 'contingencia') => {
   if (!saleResult) return
   setNfceLoading(tipo)
- 
+
   try {
-    // Monta a lista de itens com campos fiscais
-    // NCM e CFOP padrão — o ideal é vir do cadastro do produto
     const nfceItems = cart.map((item, idx) => ({
       order:        idx + 1,
       product_id:   item.id,
       product_name: item.name,
-      ean:          null,         // passe o EAN do produto se disponível
+      ean:          null,
       quantity:     item.qty,
       unit_price:   item.price,
       discount:     item.discount,
-      ncm:          '99999999',   // substitua pelo NCM real
-      cfop:         '5102',       // venda dentro do estado
-      cst:          '400',        // CSOSN 400 = Simples Nacional sem crédito
+      ncm:          '99999999',
+      cfop:         '5102',
+      cst:          '400',
       unit:         'UN',
     }))
- 
+
     const troco = payMethod === 'dinheiro' && change
       ? Math.max(0, parseFloat(change.replace(',', '.')) - cartTotal)
       : 0
- 
-    // Chama o serviço — todo o processamento pesado ocorre na Edge Function
+
     const result = await emitirNfce({
       companyId,
-      orderId:      saleResult.orderId,
-      nfceNumero:   saleResult.nfceNumero,
-      serie:        saleResult.serie,
-      items:        nfceItems,
+      orderId:       saleResult.orderId,
+      nfceNumero:    saleResult.nfceNumero,
+      serie:         saleResult.serie,
+      items:         nfceItems,
       paymentMethod: payMethod,
-      total:        cartTotal,
+      total:         cartTotal,
       troco,
-      consumer:     consumer?.cpf ? { name: consumer.name, cpf: consumer.cpf } : null,
-      contingencia: tipo === 'contingencia',
+      consumer:      consumer?.cpf ? { name: consumer.name, cpf: consumer.cpf } : null,
+      contingencia:  tipo === 'contingencia',
     })
- 
+
     if (result.ok) {
       const msg = tipo === 'contingencia'
         ? 'Salva em contingência — transmita quando houver conexão'
         : `NFC-e autorizada! Chave: ${result.chaveAcesso?.slice(-8)}`
       showToast(msg, 'ok')
     } else {
-      // Rejeitada pela SEFAZ (cStat != 100) — exibe código + motivo
-      const detail = result.cStat
-        ? `[${result.cStat}] ${result.xMotivo}`
+      // Rejeição SEFAZ — salva no banco em vez de exibir toast
+      const motivo = result.cStat
+        ? `[cStat ${result.cStat}] ${result.xMotivo}`
         : result.error ?? 'Erro desconhecido'
-      showToast(`NFC-e rejeitada: ${detail}`, 'err')
+
+      await supabase
+        .from('orders')
+        .update({
+          nfce_status: 'rejeitado',
+          nfce_motivo: motivo,
+          nfce_cstat:  result.cStat ?? null,
+        })
+        .eq('id', saleResult.orderId)
+
+      showToast('NFC-e rejeitada — consulte F9 para detalhes', 'err')
     }
- 
+
   } catch (e: any) {
-    showToast(e.message, 'err')
+    // Erro na edge function (ex: certificado não configurado) — salva no banco
+    await supabase
+      .from('orders')
+      .update({
+        nfce_status: 'rejeitado',
+        nfce_motivo: e.message ?? 'Erro desconhecido na transmissão',
+        nfce_cstat:  null,
+      })
+      .eq('id', saleResult.orderId)
+
+    showToast('Erro ao emitir NFC-e — consulte F9 para detalhes', 'err')
+
   } finally {
     setNfceLoading(null)
     setNfceModal(false)
@@ -431,6 +454,8 @@ const handlePularNfce = () => {
     { key: 'F6', label: 'Cancelar cupom', fn: handleCancelarCupom,                    danger: true,  highlight: false },
     { key: 'F7', label: 'Desfazer desc.', fn: handleDesfazer,                         danger: false, highlight: false },
     { key: 'F8', label: 'Consumidor',     fn: () => openConsumerModal(false),         danger: false, highlight: true  },
+    { key: 'F9', label: 'Logs NFC-e', fn: () => setLogsModal(true), danger: false, highlight: false },
+
   ]
 
   return (
@@ -1205,6 +1230,42 @@ const handlePularNfce = () => {
       </button>
     </div>
   </div>
+)}
+{logsModal && (
+  <NfceLogsModal
+    companyId={companyId}
+    onClose={() => setLogsModal(false)}
+    onRetentar={async (orderIds) => {
+      try {
+        showToast(
+          orderIds.length === 1
+            ? 'Reemitindo cupom...'
+            : `Reemitindo ${orderIds.length} cupons...`
+        )
+
+        for (const orderId of orderIds) {
+          try {
+            await emitirNfce({
+              companyId,
+              orderId,
+            } as any)
+          } catch (err) {
+            console.error(`Erro ao reemitir pedido ${orderId}:`, err)
+          }
+        }
+
+        showToast(
+          orderIds.length === 1
+            ? 'Cupom reemitido'
+            : `${orderIds.length} cupons processados`,
+          'ok'
+        )
+
+      } catch (e: any) {
+        showToast(e.message || 'Erro ao reemitir NFC-e', 'err')
+      }
+    }}
+  />
 )}
 
       <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>

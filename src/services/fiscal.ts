@@ -3,18 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { Order } from '@/types/product'
 import { FiscalConfig, FiscalConfigPayload, NfceStatus } from '@/types/fiscal'
 
-// ── Configuração do emitente ──────────────────────────────────
-
-export const getFiscalConfig = async (): Promise<FiscalConfig | null> => {
-  const { data, error } = await supabase
-    .from('fiscal_config')
-    .select('*')
-    .limit(1)
-    .maybeSingle()
-
-  if (error) throw new Error(error.message)
-  return data
-}
+// ── Utilitário interno ────────────────────────────────────────
 
 async function getCompanyId(): Promise<string> {
   const { data: { user } } = await supabase.auth.getUser()
@@ -22,23 +11,35 @@ async function getCompanyId(): Promise<string> {
   return user.id
 }
 
+// ── Configuração do emitente ──────────────────────────────────
 
+export const getFiscalConfig = async (): Promise<FiscalConfig | null> => {
+  const company_id = await getCompanyId()
 
-// Substitua o saveFiscalConfig
+  const { data, error } = await supabase
+    .from('fiscal_configs')
+    .select('*')
+    .eq('company_id', company_id)
+    .maybeSingle()
+
+  if (error) throw new Error(error.message)
+  return data
+}
+
 export const saveFiscalConfig = async (
   payload: FiscalConfigPayload
 ): Promise<FiscalConfig> => {
-  const company_id = await getCompanyId()  // ← novo
+  const company_id = await getCompanyId()
 
   const { data: existing } = await supabase
-    .from('fiscal_config')
+    .from('fiscal_configs')
     .select('id')
-    .limit(1)
+    .eq('company_id', company_id)
     .maybeSingle()
 
   if (existing?.id) {
     const { data, error } = await supabase
-      .from('fiscal_config')
+      .from('fiscal_configs')
       .update(payload)
       .eq('id', existing.id)
       .select()
@@ -48,8 +49,8 @@ export const saveFiscalConfig = async (
   }
 
   const { data, error } = await supabase
-    .from('fiscal_config')
-    .insert([{ ...payload, company_id }])  // ← company_id só no insert
+    .from('fiscal_configs')
+    .insert([{ ...payload, company_id }])
     .select()
     .single()
   if (error) throw new Error(error.message)
