@@ -1154,7 +1154,6 @@ const handlePularNfce = () => {
 
       {/* Ícone + título */}
       <div style={{ textAlign: 'center' }}>
-        <div style={{ fontSize: 36, marginBottom: 10 }}>🧾</div>
         <h2 style={{ fontSize: 17, fontWeight: 700, color: css.txtPrimary, marginBottom: 6 }}>
           Deseja emitir o cupom fiscal?
         </h2>
@@ -1236,33 +1235,102 @@ const handlePularNfce = () => {
     companyId={companyId}
     onClose={() => setLogsModal(false)}
     onRetentar={async (orderIds) => {
-      try {
-        showToast(
-          orderIds.length === 1
-            ? 'Reemitindo cupom...'
-            : `Reemitindo ${orderIds.length} cupons...`
-        )
+      showToast(
+        orderIds.length === 1
+          ? 'Reemitindo cupom...'
+          : `Reemitindo ${orderIds.length} cupons...`
+      )
 
-        for (const orderId of orderIds) {
-          try {
-            await emitirNfce({
-              companyId,
-              orderId,
-            } as any)
-          } catch (err) {
-            console.error(`Erro ao reemitir pedido ${orderId}:`, err)
+      let success = 0
+      let fail    = 0
+
+      for (const orderId of orderIds) {
+        try {
+          // 1. Busca os dados completos do pedido no banco
+          const { data: order, error } = await supabase
+            .from('orders')
+            .select('id, nfce_numero, nfce_serie, items, total, payment_method, amount_received, change, consumer_name, cpf_cnpj_consumidor')
+            .eq('id', orderId)
+            .single()
+
+          if (error || !order) {
+            console.error(`Pedido ${orderId} não encontrado:`, error)
+            fail++
+            continue
           }
+
+          // 2. Reconstrói os itens fiscais a partir do jsonb salvo
+          const nfceItems = (order.items as any[]).map((item: any, idx: number) => ({
+            order:        idx + 1,
+            product_id:   item.product_id,
+            product_name: item.product_name,
+            ean:          item.ean ?? null,
+            quantity:     item.quantity,
+            unit_price:   item.unit_price,
+            discount:     item.discount ?? 0,
+            ncm:          item.ncm   ?? '99999999',
+            cfop:         item.cfop  ?? '5102',
+            cst:          item.cst   ?? '400',
+            unit:         item.unit  ?? 'UN',
+          }))
+
+          // 3. Reconstrói troco
+          const totalNum    = Number(order.total ?? 0)
+          const receivedNum = Number(order.amount_received ?? 0)
+          const troco       = order.payment_method === 'dinheiro' && receivedNum > totalNum
+            ? receivedNum - totalNum
+            : 0
+
+          // 4. Chama a transmissão
+          const result = await emitirNfce({
+            companyId,
+            orderId:       order.id,
+            nfceNumero:    order.nfce_numero,
+            serie:         order.nfce_serie ?? serie,
+            items:         nfceItems,
+            paymentMethod: order.payment_method as any,
+            total:         totalNum,
+            troco,
+            consumer:      order.cpf_cnpj_consumidor
+              ? { name: order.consumer_name ?? '', cpf: order.cpf_cnpj_consumidor }
+              : null,
+            contingencia: false,
+          })
+
+          if (result.ok) {
+            success++
+          } else {
+            // Persiste o novo motivo de rejeição
+            const motivo = result.cStat
+              ? `[cStat ${result.cStat}] ${result.xMotivo}`
+              : result.error ?? 'Erro desconhecido'
+
+            await supabase
+              .from('orders')
+              .update({ nfce_status: 'rejeitado', nfce_motivo: motivo, nfce_cstat: result.cStat ?? null })
+              .eq('id', orderId)
+
+            fail++
+          }
+
+        } catch (err: any) {
+          // Persiste erro de exceção (ex: certificado)
+          await supabase
+            .from('orders')
+            .update({ nfce_status: 'rejeitado', nfce_motivo: err.message ?? 'Erro desconhecido', nfce_cstat: null })
+            .eq('id', orderId)
+
+          fail++
         }
+      }
 
-        showToast(
-          orderIds.length === 1
-            ? 'Cupom reemitido'
-            : `${orderIds.length} cupons processados`,
-          'ok'
-        )
-
-      } catch (e: any) {
-        showToast(e.message || 'Erro ao reemitir NFC-e', 'err')
+      // 5. Toast com resumo
+      if (fail === 0) {
+        showToast(success === 1 ? 'NFC-e reemitida com sucesso' : `${success} NFC-e emitidas com sucesso`, 'ok')
+      } else if (success === 0) {
+        showToast(fail === 1 ? 'Falha ao reemitir — consulte F9' : `${fail} falhas — consulte F9`, 'err')
+      } else {
+        showToast(`${success} ok · ${fail} com falha — consulte F9`, 'err')
       }
     }}
   />

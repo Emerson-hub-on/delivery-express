@@ -96,7 +96,7 @@ export function AdminTabs({
         <div className="px-3 mb-6">
           <div className="flex items-center gap-2">
             <span className="text-xl">🚀</span>
-            <span className="text-white font-bold text-base tracking-tight">deliveryExpress</span>
+            <span className="text-white font-bold text-base tracking-tight">webState</span>
           </div>
           <p className="text-[#8faec9] text-[10px] mt-0.5 ml-7">Painel administrativo</p>
         </div>

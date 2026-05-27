@@ -75,40 +75,41 @@ const C = {
 // ─── componente ───────────────────────────────────────────────────────────────
 
 export function NfceLogsModal({ companyId, onClose, onRetentar }: Props) {
-  const today = new Date()
-  const sevenDaysAgo = new Date(today)
-  sevenDaysAgo.setDate(today.getDate() - 7)
+  const sevenDaysAgo = new Date()
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+  sevenDaysAgo.setHours(0, 0, 0, 0)
 
   const [entries,   setEntries]   = useState<NfceLogEntry[]>([])
   const [loading,   setLoading]   = useState(true)
   const [expanded,  setExpanded]  = useState<number | null>(null)
   const [filter,    setFilter]    = useState<'todos' | 'pendente' | 'rejeitado'>('todos')
-  const [dateFrom,  setDateFrom]  = useState(toDateInputValue(sevenDaysAgo))
-  const [dateTo,    setDateTo]    = useState(toDateInputValue(today))
+  const [dateFrom, setDateFrom] = useState(toDateInputValue(sevenDaysAgo))
+  const [dateTo,   setDateTo]   = useState(toDateInputValue(new Date()))
   const [selected,  setSelected]  = useState<Set<number>>(new Set())
   const [retrying,  setRetrying]  = useState(false)
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    setSelected(new Set())
+const load = useCallback(async () => {
+  setLoading(true)
+  setSelected(new Set())
 
-    // Converte dateTo para fim do dia
-    const toEnd = new Date(dateTo)
-    toEnd.setHours(23, 59, 59, 999)
+  // Força horário local em vez de UTC
+  const fromStart = new Date(dateFrom + 'T00:00:00')
+  const toEnd     = new Date(dateTo   + 'T23:59:59.999')
 
-    const { data } = await supabase
-      .from('orders')
-      .select('id, code, nfce_numero, nfce_chave, nfce_status, nfce_motivo, nfce_cstat, total, created_at')
-      .eq('company_id', companyId)
-      .in('nfce_status', ['pendente', 'rejeitado'])
-      .gte('created_at', new Date(dateFrom).toISOString())
-      .lte('created_at', toEnd.toISOString())
-      .order('created_at', { ascending: false })
-      .limit(200)
+  const { data, error } = await supabase
+    .from('orders')
+    .select('id, code, nfce_numero, nfce_chave, nfce_status, nfce_motivo, nfce_cstat, total, created_at')
+    .eq('company_id', companyId)
+    .in('nfce_status', ['pendente', 'rejeitado'])
+    .gte('created_at', fromStart.toISOString())
+    .lte('created_at', toEnd.toISOString())
+    .order('created_at', { ascending: false })
+    .limit(200)
 
-    setEntries((data ?? []) as NfceLogEntry[])
-    setLoading(false)
-  }, [companyId, dateFrom, dateTo])
+  if (error) console.error('NfceLogsModal load error:', error)
+  setEntries((data ?? []) as NfceLogEntry[])
+  setLoading(false)
+}, [companyId, dateFrom, dateTo])
 
   useEffect(() => { load() }, [load])
 
