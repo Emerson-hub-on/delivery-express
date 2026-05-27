@@ -2,7 +2,9 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
-import { createPdvSale } from '@/services/pdv'
+import { createPdvSale, finalizarNfce, saveNfceXml } from '@/services/pdv'
+import { emitirNfce } from '@/services/nfce-transmissao'
+
 // ─── tipos locais ────────────────────────────────────────────────────────────
 
 type CartItem = {
@@ -49,7 +51,33 @@ const maskCpf = (v: string) => {
 function useProducts(companyId: string, onError: (m: string) => void) {
   const [products, setProducts] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  
+  const [customerSearch,   setCustomerSearch]   = useState('')
+  const [customerResults,  setCustomerResults]  = useState<any[]>([])
+  const [customerSearching, setCustomerSearching] = useState(false)
+  const [consumerMode,     setConsumerMode]     = useState<'search' | 'manual'>('search')
+
+  const searchCustomers = useCallback(async (term: string) => {
+    setCustomerSearch(term)
+    if (!term.trim()) { setCustomerResults([]); return }
+    setCustomerSearching(true)
+    try {
+      const digits = term.replace(/\D/g, '')
+      const { data } = await supabase
+        .from('customers')
+        .select('id, code, name, cpf, cnpj, phone, pessoa_tipo')
+        .eq('company_id', companyId)
+        .or(
+          digits.length >= 3
+            ? `cpf.ilike.%${digits}%,cnpj.ilike.%${digits}%,code.eq.${Number(digits) || 0},name.ilike.%${term.trim()}%`
+            : `name.ilike.%${term.trim()}%,code.eq.${Number(digits) || 0}`
+        )
+        .limit(6)
+      setCustomerResults(data ?? [])
+    } finally {
+      setCustomerSearching(false)
+    }
+  }, [companyId])
+
   useEffect(() => {
     if (!companyId) return
     setLoading(true)
@@ -120,7 +148,34 @@ export function PDVTab({ companyId, cashRegisterId, serie, onError }: PDVProps) 
   // ── ALTERAÇÃO 1: estados e busca do operador ──────────────────────────────
   const [operatorId,   setOperatorId]   = useState<string | undefined>()
   const [operatorName, setOperatorName] = useState<string | undefined>()
-
+  const [customerSearch,   setCustomerSearch]   = useState('')
+  const [customerResults,  setCustomerResults]  = useState<any[]>([])
+  const [customerSearching, setCustomerSearching] = useState(false)
+  const [consumerMode,     setConsumerMode]     = useState<'search' | 'manual'>('search')
+  const [nfceModal,  setNfceModal]  = useState(false)
+  const [saleResult, setSaleResult] = useState<{ orderId: number; nfceNumero: number; serie: string } | null>(null)
+  const [nfceLoading, setNfceLoading] = useState<'normal' | 'contingencia' | null>(null)
+  const searchCustomers = useCallback(async (term: string) => {
+    setCustomerSearch(term)
+    if (!term.trim()) { setCustomerResults([]); return }
+    setCustomerSearching(true)
+    try {
+      const digits = term.replace(/\D/g, '')
+      const { data } = await supabase
+        .from('customers')
+        .select('id, code, name, cpf, cnpj, phone, pessoa_tipo')
+        .eq('company_id', companyId)
+        .or(
+          digits.length >= 3
+            ? `cpf.ilike.%${digits}%,cnpj.ilike.%${digits}%,code.eq.${Number(digits) || 0},name.ilike.%${term.trim()}%`
+            : `name.ilike.%${term.trim()}%,code.eq.${Number(digits) || 0}`
+        )
+        .limit(6)
+      setCustomerResults(data ?? [])
+    } finally {
+      setCustomerSearching(false)
+    }
+  }, [companyId])
   useEffect(() => {
     if (!companyId) return
     supabase
@@ -218,6 +273,10 @@ export function PDVTab({ companyId, cashRegisterId, serie, onError }: PDVProps) 
     setConsumerCpf(consumer?.cpf ?? '')
     setConsumerRequired(required)
     setConsumerModal(true)
+    setConsumerMode('search')    // ← adicionar
+    setCustomerSearch('')        // ← adicionar
+    setCustomerResults([])
+    
   }
 
   const saveConsumer = () => {
@@ -244,49 +303,113 @@ export function PDVTab({ companyId, cashRegisterId, serie, onError }: PDVProps) 
   }
 
   // ── ALTERAÇÃO 2: operatorId e operatorName passados ao createPdvSale ──────
-  const confirmVenda = async () => {
-    try {
-      console.log('🛒 Iniciando venda...', { companyId, cashRegisterId, serie, cart })
+const confirmVenda = async () => {
+  try {
+    const result = await createPdvSale({
+      companyId,
+      cashRegisterId,
+      serie,
+      operatorId,
+      operatorName,
+      items: cart.map(i => ({
+        product_id:   i.id,
+        product_name: i.name,
+        quantity:     i.qty,
+        unit_price:   i.price,
+        discount:     i.discount,
+      })),
+      paymentMethod:  payMethod,
+      amountReceived: payMethod === 'dinheiro' && change
+                        ? parseFloat(change.replace(',', '.'))
+                        : undefined,
+      changeAmount:   payMethod === 'dinheiro' && change
+                        ? Math.max(0, parseFloat(change.replace(',', '.')) - cartTotal)
+                        : undefined,
+      consumerName: consumer?.name,
+      consumerCpf:  consumer?.cpf?.replace(/\D/g, ''),
+    })
 
-      const result = await createPdvSale({
-        companyId,
-        cashRegisterId,
-        serie,
-        operatorId,    // ← adicionado
-        operatorName,  // ← adicionado
-        items: cart.map(i => ({
-          product_id:   i.id,
-          product_name: i.name,
-          quantity:     i.qty,
-          unit_price:   i.price,
-          discount:     i.discount,
-        })),
-        paymentMethod:   payMethod,
-        amountReceived:  payMethod === 'dinheiro' && change
-                           ? parseFloat(change.replace(',', '.'))
-                           : undefined,
-        changeAmount:    payMethod === 'dinheiro' && change
-                           ? Math.max(0, parseFloat(change.replace(',', '.')) - cartTotal)
-                           : undefined,
-        consumerName:    consumer?.name,
-        consumerCpf:     consumer?.cpf?.replace(/\D/g, ''),
-      })
-      // ────────────────────────────────────────────────────────────────────
-
-      console.log('✅ Venda criada:', result)
-      showToast(`Venda finalizada — ${fmt(cartTotal)}`)
-      setCart([])
-      setSelectedCartId(null)
-      setConsumer(null)
-      setFinalModal(false)
-    } catch (e: any) {
-      console.error('❌ Erro na venda:', e)
-      showToast(e.message, 'err')
-      onError(e.message)
-      setFinalModal(false)
-    }
+    setSaleResult({ orderId: result.orderId, nfceNumero: result.nfceNumero, serie: result.serie })
+    setFinalModal(false)
+    setNfceModal(true)   // ← abre card de emissão
+  } catch (e: any) {
+    showToast(e.message, 'err')
+    onError(e.message)
+    setFinalModal(false)
   }
+}
+const handleEmitirNfce = async (tipo: 'normal' | 'contingencia') => {
+  if (!saleResult) return
+  setNfceLoading(tipo)
+ 
+  try {
+    // Monta a lista de itens com campos fiscais
+    // NCM e CFOP padrão — o ideal é vir do cadastro do produto
+    const nfceItems = cart.map((item, idx) => ({
+      order:        idx + 1,
+      product_id:   item.id,
+      product_name: item.name,
+      ean:          null,         // passe o EAN do produto se disponível
+      quantity:     item.qty,
+      unit_price:   item.price,
+      discount:     item.discount,
+      ncm:          '99999999',   // substitua pelo NCM real
+      cfop:         '5102',       // venda dentro do estado
+      cst:          '400',        // CSOSN 400 = Simples Nacional sem crédito
+      unit:         'UN',
+    }))
+ 
+    const troco = payMethod === 'dinheiro' && change
+      ? Math.max(0, parseFloat(change.replace(',', '.')) - cartTotal)
+      : 0
+ 
+    // Chama o serviço — todo o processamento pesado ocorre na Edge Function
+    const result = await emitirNfce({
+      companyId,
+      orderId:      saleResult.orderId,
+      nfceNumero:   saleResult.nfceNumero,
+      serie:        saleResult.serie,
+      items:        nfceItems,
+      paymentMethod: payMethod,
+      total:        cartTotal,
+      troco,
+      consumer:     consumer?.cpf ? { name: consumer.name, cpf: consumer.cpf } : null,
+      contingencia: tipo === 'contingencia',
+    })
+ 
+    if (result.ok) {
+      const msg = tipo === 'contingencia'
+        ? 'Salva em contingência — transmita quando houver conexão'
+        : `NFC-e autorizada! Chave: ${result.chaveAcesso?.slice(-8)}`
+      showToast(msg, 'ok')
+    } else {
+      // Rejeitada pela SEFAZ (cStat != 100) — exibe código + motivo
+      const detail = result.cStat
+        ? `[${result.cStat}] ${result.xMotivo}`
+        : result.error ?? 'Erro desconhecido'
+      showToast(`NFC-e rejeitada: ${detail}`, 'err')
+    }
+ 
+  } catch (e: any) {
+    showToast(e.message, 'err')
+  } finally {
+    setNfceLoading(null)
+    setNfceModal(false)
+    setSaleResult(null)
+    setCart([])
+    setSelectedCartId(null)
+    setConsumer(null)
+  }
+}
 
+const handlePularNfce = () => {
+  setNfceModal(false)
+  setSaleResult(null)
+  setCart([])
+  setSelectedCartId(null)
+  setConsumer(null)
+  showToast(`Venda finalizada — ${fmt(cartTotal)}`)
+}
   const handleAddByCode = async () => {
     if (!codeInput.trim()) return
     const p = await getByCode(codeInput.trim())
@@ -311,7 +434,9 @@ export function PDVTab({ companyId, cashRegisterId, serie, onError }: PDVProps) 
   ]
 
   return (
+    
     <div
+    
       style={{
         display: 'flex', flexDirection: 'column', overflow: 'hidden',
         borderRadius: 12, border: `1px solid ${css.border}`,
@@ -776,51 +901,163 @@ export function PDVTab({ companyId, cashRegisterId, serie, onError }: PDVProps) 
         </div>
       )}
 
-      {/* ── Modal Consumidor ───────────────────────────────────────────────── */}
-      {consumerModal && (
-        <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
-          <div style={{ background: css.surface, border: `1.5px solid ${consumerRequired ? '#fde68a' : css.border}`, borderRadius: 16, padding: 24, width: 360, display: 'flex', flexDirection: 'column', gap: 16, boxShadow: '0 8px 32px rgba(0,0,0,0.12)' }}>
-            <div>
-              <h2 style={{ fontSize: 16, fontWeight: 700, color: css.txtPrimary, marginBottom: 4 }}>👤 Identificação do Consumidor</h2>
-              <p style={{ fontSize: 11, color: consumerRequired ? css.yellow : css.txtMuted }}>
-                {consumerRequired ? `⚠️ Obrigatório para compras acima de ${fmt(LIMITE_IDENTIFICACAO)}` : 'Deixe em branco para venda sem identificação'}
-              </p>
-            </div>
-            {consumerRequired && (
-              <div style={{ background: css.yellowBg, border: '1px solid #fde68a', borderRadius: 8, padding: '10px 12px', display: 'flex', gap: 8 }}>
-                <span style={{ fontSize: 16 }}>⚠️</span>
-                <p style={{ fontSize: 12, color: css.yellow, lineHeight: 1.5 }}>
-                  Cupom totaliza <strong>{fmt(cartTotal)}</strong>. Nome e CPF são exigidos para valores acima de {fmt(LIMITE_IDENTIFICACAO)}.
-                </p>
-              </div>
-            )}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <label style={{ fontSize: 11, color: css.txtSecondary, fontWeight: 600 }}>Nome {consumerRequired && <span style={{ color: css.red }}>*</span>}</label>
-              <input autoFocus type="text" value={consumerName} onChange={e => setConsumerName(e.target.value)} onKeyDown={e => e.key === 'Enter' && saveConsumer()} placeholder="Nome completo"
-                style={{ background: css.bg, border: `1.5px solid ${css.border}`, borderRadius: 8, padding: '9px 12px', fontSize: 13, color: css.txtPrimary, outline: 'none', width: '100%', boxSizing: 'border-box' }} />
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <label style={{ fontSize: 11, color: css.txtSecondary, fontWeight: 600 }}>CPF {consumerRequired && <span style={{ color: css.red }}>*</span>}</label>
-              <input type="text" inputMode="numeric" value={consumerCpf} onChange={e => setConsumerCpf(maskCpf(e.target.value))} onKeyDown={e => e.key === 'Enter' && saveConsumer()} placeholder="000.000.000-00"
-                style={{ background: css.bg, border: `1.5px solid ${css.border}`, borderRadius: 8, padding: '9px 12px', fontSize: 13, color: css.txtPrimary, outline: 'none', width: '100%', boxSizing: 'border-box' }} />
-            </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              {!consumerRequired && (
-                <button onClick={() => setConsumerModal(false)} style={{ flex: 1, padding: '10px 0', borderRadius: 8, border: `1px solid ${css.border}`, color: css.txtSecondary, background: css.surface, cursor: 'pointer', fontSize: 13 }}>Cancelar</button>
-              )}
-              <button onClick={saveConsumer} style={{ flex: 2, padding: '10px 0', borderRadius: 8, background: css.indigo, color: '#fff', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>
-                {consumerRequired ? '✓ Salvar e finalizar' : 'Confirmar'}
-              </button>
-            </div>
-            {consumer && !consumerRequired && (
-              <button onClick={() => { setConsumer(null); setConsumerModal(false); showToast('Consumidor removido') }}
-                style={{ background: 'none', border: 'none', color: css.red, fontSize: 11, cursor: 'pointer', textAlign: 'center', textDecoration: 'underline' }}>
-                Remover identificação do cupom
-              </button>
-            )}
-          </div>
+{consumerModal && (
+  <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
+    <div style={{ background: css.surface, border: `1.5px solid ${consumerRequired ? '#fde68a' : css.border}`, borderRadius: 16, padding: 24, width: 400, display: 'flex', flexDirection: 'column', gap: 16, boxShadow: '0 8px 32px rgba(0,0,0,0.12)' }}>
+
+      {/* Cabeçalho */}
+      <div>
+        <h2 style={{ fontSize: 16, fontWeight: 700, color: css.txtPrimary, marginBottom: 4 }}>👤 Identificação do Consumidor</h2>
+        <p style={{ fontSize: 11, color: consumerRequired ? css.yellow : css.txtMuted }}>
+          {consumerRequired ? `⚠️ Obrigatório para compras acima de ${fmt(LIMITE_IDENTIFICACAO)}` : 'Busque um cliente cadastrado ou informe manualmente'}
+        </p>
+      </div>
+
+      {/* Aviso valor */}
+      {consumerRequired && (
+        <div style={{ background: css.yellowBg, border: '1px solid #fde68a', borderRadius: 8, padding: '10px 12px', display: 'flex', gap: 8 }}>
+          <span style={{ fontSize: 16 }}>⚠️</span>
+          <p style={{ fontSize: 12, color: css.yellow, lineHeight: 1.5 }}>
+            Cupom totaliza <strong>{fmt(cartTotal)}</strong>. Identificação exigida acima de {fmt(LIMITE_IDENTIFICACAO)}.
+          </p>
         </div>
       )}
+
+      {/* Abas: busca / manual */}
+      <div style={{ display: 'flex', gap: 4, background: css.surfaceAlt, borderRadius: 8, padding: 3 }}>
+        {(['search', 'manual'] as const).map(mode => (
+          <button key={mode} onClick={() => setConsumerMode(mode)}
+            style={{
+              flex: 1, padding: '6px 0', borderRadius: 6, border: 'none', cursor: 'pointer',
+              fontSize: 12, fontWeight: 600, transition: 'all 0.15s',
+              background: consumerMode === mode ? css.surface : 'transparent',
+              color: consumerMode === mode ? css.txtPrimary : css.txtMuted,
+              boxShadow: consumerMode === mode ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+            }}>
+            {mode === 'search' ? '🔍 Buscar cadastrado' : '✏️ Informar manualmente'}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Modo busca ── */}
+      {consumerMode === 'search' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ position: 'relative' }}>
+            <input
+              autoFocus
+              type="text"
+              value={customerSearch}
+              onChange={e => searchCustomers(e.target.value)}
+              placeholder="Nome, CPF, CNPJ ou código interno..."
+              style={{
+                width: '100%', background: css.bg, border: `1.5px solid ${css.border}`,
+                borderRadius: 8, padding: '9px 36px 9px 12px', fontSize: 13,
+                color: css.txtPrimary, outline: 'none', boxSizing: 'border-box',
+              }}
+            />
+            {customerSearching && (
+              <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)' }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ animation: 'spin 0.8s linear infinite' }}>
+                  <circle cx="12" cy="12" r="10" stroke={css.txtMuted} strokeWidth="4" opacity="0.25"/>
+                  <path fill={css.txtMuted} opacity="0.75" d="M4 12a8 8 0 018-8v8z"/>
+                </svg>
+              </span>
+            )}
+          </div>
+
+          {/* Resultados */}
+          {customerResults.length > 0 && (
+            <div style={{ border: `1px solid ${css.border}`, borderRadius: 8, overflow: 'hidden' }}>
+              {customerResults.map((c, idx) => (
+                <div
+                  key={c.id}
+                  onClick={() => {
+                    const name = c.razao_social ?? c.name
+                    const cpf  = c.cpf ?? c.cnpj ?? ''
+                    setConsumer({ name, cpf })
+                    setConsumerModal(false)
+                    if (consumerRequired) { setConsumerRequired(false); setFinalModal(true); setChange('') }
+                    else showToast(`Consumidor: ${name}`)
+                  }}
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '10px 14px', cursor: 'pointer', transition: 'background 0.12s',
+                    background: idx % 2 === 0 ? css.surface : css.bg,
+                    borderTop: idx > 0 ? `1px solid ${css.border}` : 'none',
+                  }}
+                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = css.indigoBg}
+                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = idx % 2 === 0 ? css.surface : css.bg}
+                >
+                  <div style={{ overflow: 'hidden' }}>
+                    <p style={{ fontSize: 13, color: css.txtPrimary, fontWeight: 600, margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {c.name}
+                    </p>
+                    <p style={{ fontSize: 11, color: css.txtMuted, margin: 0 }}>
+                      {c.cpf ? `CPF: ${c.cpf}` : c.cnpj ? `CNPJ: ${c.cnpj}` : 'Sem documento'}
+                      {' · '}cod. {String(c.code).padStart(4, '0')}
+                    </p>
+                  </div>
+                  <span style={{ fontSize: 10, color: css.indigo, background: css.indigoBg, padding: '2px 8px', borderRadius: 20, marginLeft: 8, flexShrink: 0, fontWeight: 600 }}>
+                    {c.pessoa_tipo === 'juridica' ? 'PJ' : 'PF'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {customerSearch && !customerSearching && customerResults.length === 0 && (
+            <p style={{ fontSize: 12, color: css.txtMuted, textAlign: 'center', padding: '8px 0' }}>
+              Nenhum cliente encontrado —{' '}
+              <button onClick={() => setConsumerMode('manual')} style={{ background: 'none', border: 'none', color: css.indigo, cursor: 'pointer', fontSize: 12, textDecoration: 'underline', padding: 0 }}>
+                informar manualmente
+              </button>
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* ── Modo manual ── */}
+      {consumerMode === 'manual' && (
+        <>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <label style={{ fontSize: 11, color: css.txtSecondary, fontWeight: 600 }}>Nome {consumerRequired && <span style={{ color: css.red }}>*</span>}</label>
+            <input autoFocus type="text" value={consumerName} onChange={e => setConsumerName(e.target.value)} onKeyDown={e => e.key === 'Enter' && saveConsumer()} placeholder="Nome completo"
+              style={{ background: css.bg, border: `1.5px solid ${css.border}`, borderRadius: 8, padding: '9px 12px', fontSize: 13, color: css.txtPrimary, outline: 'none', width: '100%', boxSizing: 'border-box' }} />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <label style={{ fontSize: 11, color: css.txtSecondary, fontWeight: 600 }}>CPF {consumerRequired && <span style={{ color: css.red }}>*</span>}</label>
+            <input type="text" inputMode="numeric" value={consumerCpf} onChange={e => setConsumerCpf(maskCpf(e.target.value))} onKeyDown={e => e.key === 'Enter' && saveConsumer()} placeholder="000.000.000-00"
+              style={{ background: css.bg, border: `1.5px solid ${css.border}`, borderRadius: 8, padding: '9px 12px', fontSize: 13, color: css.txtPrimary, outline: 'none', width: '100%', boxSizing: 'border-box' }} />
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {!consumerRequired && (
+              <button onClick={() => setConsumerModal(false)} style={{ flex: 1, padding: '10px 0', borderRadius: 8, border: `1px solid ${css.border}`, color: css.txtSecondary, background: css.surface, cursor: 'pointer', fontSize: 13 }}>Cancelar</button>
+            )}
+            <button onClick={saveConsumer} style={{ flex: 2, padding: '10px 0', borderRadius: 8, background: css.indigo, color: '#fff', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>
+              {consumerRequired ? '✓ Salvar e finalizar' : 'Confirmar'}
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* Botão cancelar (modo busca sem obrigatoriedade) */}
+      {consumerMode === 'search' && !consumerRequired && (
+        <button onClick={() => setConsumerModal(false)}
+          style={{ padding: '9px 0', borderRadius: 8, border: `1px solid ${css.border}`, color: css.txtSecondary, background: css.surface, cursor: 'pointer', fontSize: 13 }}>
+          Cancelar
+        </button>
+      )}
+
+      {/* Remover identificação */}
+      {consumer && !consumerRequired && (
+        <button onClick={() => { setConsumer(null); setConsumerModal(false); showToast('Consumidor removido') }}
+          style={{ background: 'none', border: 'none', color: css.red, fontSize: 11, cursor: 'pointer', textAlign: 'center', textDecoration: 'underline' }}>
+          Remover identificação do cupom
+        </button>
+      )}
+    </div>
+  </div>
+)}
 
       {/* ── Modal Finalizar venda ──────────────────────────────────────────── */}
       {finalModal && (
@@ -885,6 +1122,90 @@ export function PDVTab({ companyId, cashRegisterId, serie, onError }: PDVProps) 
           </div>
         </div>
       )}
+      {/* ── Modal NFC-e ──────────────────────────────────────────────── */}
+{nfceModal && saleResult && (
+  <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 60 }}>
+    <div style={{ background: css.surface, borderRadius: 18, padding: 28, width: 420, display: 'flex', flexDirection: 'column', gap: 20, boxShadow: '0 12px 40px rgba(0,0,0,0.18)', border: `1px solid ${css.border}` }}>
+
+      {/* Ícone + título */}
+      <div style={{ textAlign: 'center' }}>
+        <div style={{ fontSize: 36, marginBottom: 10 }}>🧾</div>
+        <h2 style={{ fontSize: 17, fontWeight: 700, color: css.txtPrimary, marginBottom: 6 }}>
+          Deseja emitir o cupom fiscal?
+        </h2>
+        <p style={{ fontSize: 12, color: css.txtMuted, lineHeight: 1.6 }}>
+          NFC-e nº <strong style={{ color: css.txtSecondary }}>{String(saleResult.nfceNumero).padStart(6, '0')}</strong>
+          {' '}· Série <strong style={{ color: css.txtSecondary }}>{saleResult.serie}</strong>
+        </p>
+      </div>
+
+      {/* Resumo da venda */}
+      <div style={{ background: css.surfaceAlt, borderRadius: 10, padding: '12px 16px', border: `1px solid ${css.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ fontSize: 13, color: css.txtSecondary }}>Total da venda</span>
+        <span style={{ fontSize: 20, fontWeight: 800, color: css.accent }}>{fmt(cartTotal)}</span>
+      </div>
+
+      {/* Botões principais */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+        {/* Emitir NFC-e */}
+        <button
+          onClick={() => handleEmitirNfce('normal')}
+          disabled={nfceLoading !== null}
+          style={{
+            padding: '14px 10px', borderRadius: 10, border: 'none', cursor: 'pointer',
+            background: nfceLoading === 'normal' ? '#15803d' : css.green,
+            color: '#fff', fontSize: 13, fontWeight: 700,
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5,
+            opacity: nfceLoading !== null && nfceLoading !== 'normal' ? 0.5 : 1,
+            transition: 'all 0.15s', boxShadow: '0 2px 8px rgba(22,163,74,0.25)',
+          }}
+        >
+          {nfceLoading === 'normal'
+            ? <span style={{ fontSize: 16 }}>⏳</span>
+            : <span style={{ fontSize: 20 }}>✅</span>
+          }
+          <span>Emitir NFC-e</span>
+          <span style={{ fontSize: 10, fontWeight: 400, opacity: 0.85 }}>Online · SEFAZ</span>
+        </button>
+
+        {/* Contingência */}
+        <button
+          onClick={() => handleEmitirNfce('contingencia')}
+          disabled={nfceLoading !== null}
+          style={{
+            padding: '14px 10px', borderRadius: 10,
+            border: `1.5px solid ${css.yellow}`,
+            cursor: 'pointer', background: css.yellowBg,
+            color: css.yellow, fontSize: 13, fontWeight: 700,
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5,
+            opacity: nfceLoading !== null && nfceLoading !== 'contingencia' ? 0.5 : 1,
+            transition: 'all 0.15s',
+          }}
+        >
+          {nfceLoading === 'contingencia'
+            ? <span style={{ fontSize: 16 }}>⏳</span>
+            : <span style={{ fontSize: 20 }}>📋</span>
+          }
+          <span>Contingência</span>
+          <span style={{ fontSize: 10, fontWeight: 400, opacity: 0.85 }}>Offline · sincronizar depois</span>
+        </button>
+      </div>
+
+      {/* Pular */}
+      <button
+        onClick={handlePularNfce}
+        disabled={nfceLoading !== null}
+        style={{
+          background: 'none', border: 'none', color: css.txtMuted,
+          fontSize: 12, cursor: 'pointer', textDecoration: 'underline',
+          textAlign: 'center', padding: '4px 0',
+        }}
+      >
+        Não emitir agora
+      </button>
+    </div>
+  </div>
+)}
 
       <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
     </div>

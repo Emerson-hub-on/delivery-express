@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase'
 export type PdvSalePayload = {
   companyId:       string
   cashRegisterId:  string
-  serie:           string        // vem do cash_register
+  serie:           string
   operatorId?:     string
   operatorName?:   string
   items: {
@@ -12,13 +12,13 @@ export type PdvSalePayload = {
     product_name: string
     quantity:     number
     unit_price:   number
-    discount:     number         // percentual
+    discount:     number
   }[]
-  paymentMethod:  'dinheiro' | 'pix' | 'cartao'
-  amountReceived?: number        // só dinheiro
+  paymentMethod:   'dinheiro' | 'pix' | 'cartao'
+  amountReceived?: number
   changeAmount?:   number
   consumerName?:   string
-  consumerCpf?:    string        // somente dígitos
+  consumerCpf?:    string
 }
 
 export type PdvSaleResult = {
@@ -28,54 +28,23 @@ export type PdvSaleResult = {
   serie:      string
 }
 
+export type NfceEmissaoTipo = 'normal' | 'contingencia'
+
 export async function createPdvSale(payload: PdvSalePayload): Promise<PdvSaleResult> {
-  // ── 1. Próximo número NFC-e da série ──────────────────────
+  // 1. Próximo número NFC-e
   const { data: seqData, error: seqError } = await supabase
     .rpc('next_nfce_numero', {
       p_company_id: payload.companyId,
       p_serie:      payload.serie,
     })
-
   if (seqError) throw new Error(`Sequência NFC-e: ${seqError.message}`)
   const nfceNumero = seqData as number
-
-  // ── 2. Monta itens (jsonb + normalizado) ──────────────────
-  const itemsJson = payload.items.map(i => ({
-    product_id:   i.product_id,
-    product_name: i.product_name,
-    quantity:     i.quantity,
-    unit_price:   i.unit_price,
-  }))
 
   const total = payload.items.reduce(
     (s, i) => s + i.unit_price * (1 - i.discount / 100) * i.quantity, 0
   )
 
-  // ── 3. Cria o pedido em orders ────────────────────────────
-  const { data: order, error: orderError } = await supabase
-    .from('orders')
-    .insert([{
-      company_id:           payload.companyId,
-      order_type:           'pdv',
-      status:               'completed',
-      total,
-      items:                itemsJson,          // jsonb legado
-      payment_method:       payload.paymentMethod,
-      customer:             payload.consumerName ?? null,
-      cpf_cnpj_consumidor:  payload.consumerCpf  ?? null,
-      change:               payload.changeAmount  ?? null,
-      nfce_serie:           payload.serie,
-      nfce_numero:          nfceNumero,
-      nfce_status:          'pendente',          // emissão assíncrona
-    }])
-    .select('id, code')
-    .single()
-
-  if (orderError) throw new Error(`Criar pedido: ${orderError.message}`)
-
-  // ── 4. Insere itens normalizados em order_items ───────────
-  const orderItemsRows = payload.items.map(i => ({
-    order_id:     order.id,
+  const itemsJson = payload.items.map(i => ({
     product_id:   i.product_id,
     product_name: i.product_name,
     quantity:     i.quantity,
@@ -83,33 +52,86 @@ export async function createPdvSale(payload: PdvSalePayload): Promise<PdvSaleRes
     discount:     i.discount,
   }))
 
+  // 2. Cria o pedido — sem order_pdv (foi consolidado em orders)
+  const { data: order, error: orderError } = await supabase
+    .from('orders')
+    .insert([{
+      company_id:          payload.companyId,
+      order_type:          'pdv',
+      status:              'completed',
+      total,
+      items:               itemsJson,
+      payment_method:      payload.paymentMethod,
+      payment_methods:     [{ method: payload.paymentMethod, amount: total }],
+      customer:            payload.consumerName   ?? null,
+      consumer_name:       payload.consumerName   ?? null,
+      cpf_cnpj_consumidor: payload.consumerCpf    ?? null,
+      change:              payload.changeAmount    ?? null,
+      amount_received:     payload.amountReceived  ?? null,
+      cash_register_id:    payload.cashRegisterId,
+      operator_id:         payload.operatorId      ?? null,
+      operator_name:       payload.operatorName    ?? null,
+      nfce_serie:          payload.serie,
+      nfce_numero:         nfceNumero,
+      nfce_status:         null,   // usuário decide se emite
+    }])
+    .select('id, code')
+    .single()
+
+  if (orderError) throw new Error(`Criar pedido: ${orderError.message}`)
+
+  // 3. Itens normalizados
   const { error: itemsError } = await supabase
     .from('order_items')
-    .insert(orderItemsRows)
+    .insert(payload.items.map(i => ({
+      order_id:     order.id,
+      product_id:   i.product_id,
+      product_name: i.product_name,
+      quantity:     i.quantity,
+      unit_price:   i.unit_price,
+      discount:     i.discount,
+    })))
 
   if (itemsError) throw new Error(`Itens: ${itemsError.message}`)
 
-  // ── 5. Satélite PDV ───────────────────────────────────────
-  const { error: pdvError } = await supabase
-    .from('order_pdv')
-    .insert([{
-      order_id:         order.id,
-      cash_register_id: payload.cashRegisterId,
-      operator_id:      payload.operatorId   ?? null,
-      operator_name:    payload.operatorName ?? null,
-      payment_methods:  [{ method: payload.paymentMethod, amount: total }],
-      amount_received:  payload.amountReceived ?? null,
-      change_amount:    payload.changeAmount   ?? null,
-      consumer_name:    payload.consumerName   ?? null,
-      consumer_cpf:     payload.consumerCpf?.replace(/\D/g, '') ?? null,
-    }])
+  return { orderId: order.id, orderCode: order.code, nfceNumero, serie: payload.serie }
+}
 
-  if (pdvError) throw new Error(`Satélite PDV: ${pdvError.message}`)
+// Salva o XML no Supabase Storage: nfce-xml/{companyId}/{serie}-{numero}.xml
+export async function saveNfceXml(
+  companyId: string,
+  serie: string,
+  numero: number,
+  xml: string
+): Promise<string> {
+  const path    = `${companyId}/${serie}-${String(numero).padStart(9, '0')}.xml`
+  const blob    = new Blob([xml], { type: 'application/xml' })
 
-  return {
-    orderId:    order.id,
-    orderCode:  order.code,
-    nfceNumero,
-    serie:      payload.serie,
-  }
+  const { error } = await supabase.storage
+    .from('nfce-xml')
+    .upload(path, blob, { upsert: true, contentType: 'application/xml' })
+
+  if (error) throw new Error(`Storage XML: ${error.message}`)
+
+  const { data } = supabase.storage.from('nfce-xml').getPublicUrl(path)
+  return data.publicUrl
+}
+
+// Atualiza o pedido após emissão (normal ou contingência)
+export async function finalizarNfce(
+  orderId: number,
+  tipo: NfceEmissaoTipo,
+  xmlUrl: string
+) {
+  const { error } = await supabase
+    .from('orders')
+    .update({
+      nfce_status:     tipo === 'normal' ? 'emitido' : 'pendente',
+      nfce_xml:        xmlUrl,
+      nfce_emitido_at: new Date().toISOString(),
+      nfce_ambiente:   tipo === 'contingencia' ? 2 : 1,
+    })
+    .eq('id', orderId)
+
+  if (error) throw new Error(`Finalizar NFC-e: ${error.message}`)
 }
