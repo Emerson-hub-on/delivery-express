@@ -48,6 +48,7 @@ const TAB_ICONS: Record<Tab, string> = {
   settings:   '⚙',
   ifood:      '⬢',
   customers:  '◉',
+  operators:  '👤',
 }
 
 const REPORT_SUB_TABS: { id: ReportSubTab; label: string; icon: string }[] = [
