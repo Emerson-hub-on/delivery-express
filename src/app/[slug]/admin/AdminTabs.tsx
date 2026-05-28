@@ -21,7 +21,7 @@ const BILLING_SUB_TABS: { id: BillingSubTab; label: string; icon: string }[] = [
   { id: 'nf-saida-gerenciador', label: 'Gerenciador de NF-e',  icon: '☰' },
 ]
 
-const CADASTRO_TABS: Tab[] = ['products', 'categories', 'motoboys', 'customers']
+const CADASTRO_TABS: Tab[] = ['products', 'categories', 'motoboys', 'customers', 'operators']
 
 const TAB_LABELS: Record<Tab, string> = {
   products:   'Produtos',
@@ -34,6 +34,7 @@ const TAB_LABELS: Record<Tab, string> = {
   settings:   'Configurações',
   ifood:      'iFood Sync',
   customers:  'Clientes',
+  operators: 'Operadores',
 }
 
 const TAB_ICONS: Record<Tab, string> = {
