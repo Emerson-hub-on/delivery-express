@@ -21,9 +21,7 @@ import { ReportsTab } from './reports/ReportsTab'
 import { MotoboyTab } from '@/components/motoboy/motoboy-tab'
 import { FiscalTab } from './fiscal/FiscalTab'
 import { SettingsTab } from '@/settings/SettingsTab'
-import { CashTab } from './cash/CashTab'
 import { CustomersTab } from './customers/CustomersTab'
-import { PDVTab } from './caixa/PDVTab'
 import { BillingTab } from '@/components/billing/BillingTab'
 import type { BillingSubTab } from '@/types/billing'
 
@@ -39,13 +37,7 @@ function todayLocalISO() {
 export default function AdminPage() {
   const params = useParams<{ slug: string }>()
   const router = useRouter()
-  const [activeCashRegister, setActiveCashRegister] = useState<{
-  id: string
-  serie: string
-} | null>(null)
   const [billingSubTab, setBillingSubTab] = useState<BillingSubTab>('nf-entrada')
-
-  
 
   // ── Auth guard ──────────────────────────────────────────────────────────────
   const [authReady,  setAuthReady]  = useState(false)
@@ -157,22 +149,13 @@ export default function AdminPage() {
   const fetchOrdersRef = useRef(fetchOrders)
   useEffect(() => { fetchOrdersRef.current = fetchOrders }, [fetchOrders])
 
-useEffect(() => {
-  if (!authReady) return
-  if (tab === 'orders' || tab === 'reports') {
-    fetchOrdersRef.current()
-    if (allOrders.length === 0) fetchAllOrders()
-  }
-  if (tab === 'pdv' && companyId) {          // ← adicionar este bloco
-    supabase
-      .from('cash_registers')
-      .select('id, serie')
-      .eq('company_id', companyId)
-      .eq('status', 'open')
-      .maybeSingle()
-      .then(({ data }) => setActiveCashRegister(data ?? null))
-  }
-}, [tab, authReady])
+  useEffect(() => {
+    if (!authReady) return
+    if (tab === 'orders' || tab === 'reports') {
+      fetchOrdersRef.current()
+      if (allOrders.length === 0) fetchAllOrders()
+    }
+  }, [tab, authReady])
 
   // ── Realtime orders ─────────────────────────────────────────────────────────
   const dateFromRef = useRef(dateFrom)
@@ -240,41 +223,7 @@ useEffect(() => {
     )
   }
 
-  // ── PDV: layout especial — sem padding, sem fundo branco ────────────────────
-  // O PDV precisa ocupar toda a área ao lado da sidebar, sem o px-8 py-8
-  // e sem o bg-gray-50 do container pai.
-if (tab === 'pdv') {
-  return (
-    <div className="min-h-screen text-black flex items-stretch" style={{ background: '#0a1520' }}>
-      <AdminTabs
-        tab={tab}
-        onChange={handleTabChange}
-        reportSubTab={reportSubTab}
-        onReportSubTabChange={setReportSubTab}
-        billingSubTab={billingSubTab}
-        onBillingSubTabChange={setBillingSubTab}
-      />
-      <div className="flex-1 flex flex-col overflow-hidden" style={{ background: '#0a1520' }}>
-        {activeCashRegister ? (
-          <PDVTab
-            companyId={companyId}
-            cashRegisterId={activeCashRegister.id}
-            serie={activeCashRegister.serie ?? '001'}
-            onError={setError}
-          />
-        ) : (
-          <div className="flex-1 flex flex-col items-center justify-center gap-3 text-gray-400">
-            <span style={{ fontSize: 40 }}>🔒</span>
-            <p className="text-sm font-medium">Nenhum caixa aberto</p>
-            <p className="text-xs">Abra o caixa na aba <strong>Caixa</strong> antes de usar o PDV</p>
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-  // ── Main render (demais abas) ───────────────────────────────────────────────
+  // ── Main render ─────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gray-50 text-black flex items-stretch">
       <AdminTabs
@@ -395,8 +344,8 @@ if (tab === 'pdv') {
             onError={setError}
           />
         )}
-        {tab === 'fiscal'   && <FiscalTab   onError={setError} />}
-        {tab === 'billing' && (
+        {tab === 'fiscal'   && <FiscalTab onError={setError} companyId={companyId} />}
+        {tab === 'billing'  && (
           <BillingTab
             subTab={billingSubTab}
             onSubTabChange={setBillingSubTab}
@@ -405,7 +354,6 @@ if (tab === 'pdv') {
           />
         )}
         {tab === 'settings' && <SettingsTab onError={setError} />}
-        {tab === 'cash'     && <CashTab />}
         {tab === 'ifood'    && <IfoodSync />}
       </div>
     </div>

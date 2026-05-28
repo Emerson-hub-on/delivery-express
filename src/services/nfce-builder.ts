@@ -45,8 +45,17 @@ const tPagMap: Record<string, string> = {
   pix:      '17',
 }
 
+// Mapeamento UF → código IBGE (cUF)
+const cUFMap: Record<string, string> = {
+  AC: '12', AL: '27', AM: '13', AP: '16', BA: '29',
+  CE: '23', DF: '53', ES: '32', GO: '52', MA: '21',
+  MG: '31', MS: '50', MT: '51', PA: '15', PB: '25',
+  PE: '26', PI: '22', PR: '41', RJ: '33', RN: '24',
+  RO: '11', RR: '14', RS: '43', SC: '42', SE: '28',
+  SP: '35', TO: '17',
+}
+
 // Calcula impostos simples (Simples Nacional / CSOSN 400 = sem destaque)
-// Para regime normal, implemente ICMS, PIS, COFINS completos
 function calcItem(item: NfceItem) {
   const unitLiq  = item.unit_price * (1 - item.discount / 100)
   const vProd    = parseFloat((unitLiq * item.quantity).toFixed(2))
@@ -57,14 +66,21 @@ function calcItem(item: NfceItem) {
 export function buildNfceXml(p: NfceBuildPayload): string {
   const now        = new Date()
   const dhEmi      = fmtDate(now)
-  const cNF        = String(p.nfceNumero).padStart(8, '0')
+
+  // ── cNF: código numérico aleatório de 8 dígitos (≠ nNF) ──────────────────
+  // A SEFAZ exige que cNF seja gerado aleatoriamente para evitar duplicidade.
+  // Nunca deve ser igual ao nNF.
+  const randomBuffer = new Uint32Array(1)
+  crypto.getRandomValues(randomBuffer)
+  const cNF = String(randomBuffer[0] % 99999999 + 1).padStart(8, '0')
+
   const nNF        = String(p.nfceNumero).padStart(9, '0')
   const mod        = '65'   // NFC-e
   const tpNF       = '1'    // saída
   const indFinal   = '1'    // consumidor final
   const indPres    = '1'    // presencial
   const tpAmb      = p.config.ambiente === 1 ? '1' : '2'
-  const tpEmis     = p.contingencia ? '9' : '1'  // 9=contingência offline
+  const tpEmis     = p.contingencia ? '9' : '1'
 
   // Totais
   let vProdTotal = 0
@@ -121,22 +137,15 @@ export function buildNfceXml(p: NfceBuildPayload): string {
   vDescTotal = parseFloat(vDescTotal.toFixed(2))
   const vNF  = parseFloat((vProdTotal - vDescTotal).toFixed(2))
 
-  // Chave de acesso (44 dígitos) — sem dígito verificador aqui,
-  // a Edge Function calcula o dígito e assina
-  const cUF     = p.config.uf === 'SP' ? '35' :
-                  p.config.uf === 'RJ' ? '33' :
-                  p.config.uf === 'MG' ? '31' :
-                  p.config.uf === 'RS' ? '43' :
-                  p.config.uf === 'PR' ? '41' :
-                  p.config.uf === 'SC' ? '42' :
-                  p.config.uf === 'BA' ? '29' :
-                  p.config.uf === 'PE' ? '26' :
-                  p.config.uf === 'CE' ? '23' :
-                  p.config.uf === 'PB' ? '25' : '35'
+  // ── Chave de acesso base (43 dígitos) ─────────────────────────────────────
+  // Estrutura: cUF(2) + YYMM(4) + CNPJ(14) + mod(2) + serie(3) + nNF(9) + tpEmis(1) + cNF(8)
+  // Total: 2+4+14+2+3+9+1+8 = 43 dígitos
+  // O dígito verificador (1 dígito) é calculado pela Edge Function
+  const cUF  = cUFMap[p.config.uf] ?? '35'
+  // YYMM: 2 últimos dígitos do ano + mês com 2 dígitos
+  const yymm = `${String(now.getFullYear()).slice(-2)}${String(now.getMonth()+1).padStart(2,'0')}`
 
-  const aamm    = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}`
-  // chave sem dígito verificador (43 dígitos) — Edge Function completa
-  const chaveBase = `${cUF}${aamm}${p.config.cnpj}${mod}${p.serie.padStart(3,'0')}${nNF}${tpEmis}${cNF}`
+  const chaveBase43 = `${cUF}${yymm}${p.config.cnpj}${mod}${p.serie.padStart(3,'0')}${nNF}${tpEmis}${cNF}`
 
   const consumerXml = p.consumer?.cpf
     ? `<dest>
@@ -151,7 +160,7 @@ export function buildNfceXml(p: NfceBuildPayload): string {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <nfeProc versao="4.00" xmlns="http://www.portalfiscal.inf.br/nfe">
 <NFe xmlns="http://www.portalfiscal.inf.br/nfe">
-<infNFe versao="4.00" Id="NFe${chaveBase}0">
+<infNFe versao="4.00" Id="NFe${chaveBase43}0">
   <ide>
     <cUF>${cUF}</cUF>
     <cNF>${cNF}</cNF>

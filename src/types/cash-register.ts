@@ -29,4 +29,5 @@ export type CashRegister = {
   total_cancelled?: number
   checklist?: string[]
   created_at: string
+  nfce_serie?: string
 }

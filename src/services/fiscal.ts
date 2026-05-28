@@ -133,8 +133,15 @@ export const updateOrderNfce = async (
 
 // ── Próximo número da NFC-e ───────────────────────────────────
 
-export const nextNfceNumero = async (): Promise<number> => {
-  const { data, error } = await supabase.rpc('next_nfce_numero')
+// services/fiscal.ts
+export const nextNfceNumero = async (
+  companyId: string,
+  serie: string
+): Promise<number> => {
+  const { data, error } = await supabase.rpc('next_nfce_numero', {
+    p_company_id: companyId,
+    p_serie: serie,
+  })
   if (error) throw new Error(error.message)
   return data as number
 }

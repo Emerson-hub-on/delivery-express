@@ -158,7 +158,9 @@ export function PDVTab({ companyId, cashRegisterId, serie, onError }: PDVProps) 
   const [nfceLoading, setNfceLoading] = useState<'normal' | 'contingencia' | null>(null)
   const [logsModal, setLogsModal] = useState(false)
   const searchCustomers = useCallback(async (term: string) => {
-  
+
+
+
 
 
     setCustomerSearch(term)
@@ -1233,6 +1235,7 @@ const handlePularNfce = () => {
 {logsModal && (
   <NfceLogsModal
     companyId={companyId}
+    serie={serie} 
     onClose={() => setLogsModal(false)}
     onRetentar={async (orderIds) => {
       showToast(

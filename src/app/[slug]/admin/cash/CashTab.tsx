@@ -9,10 +9,10 @@ import { OperatorsView } from '../tabs/OperatorsView'
 type CashSubTab = 'register' | 'operators'
 
 export function CashTab() {
-  const [subTab, setSubTab] = useState<CashSubTab>('register')
-  const [openCash, setOpenCash] = useState<CashRegister | null | undefined>(undefined)
+  const [subTab,      setSubTab]      = useState<CashSubTab>('register')
+  const [openCash,    setOpenCash]    = useState<CashRegister | null | undefined>(undefined)
   const [openingTime, setOpeningTime] = useState('08:00')
-  const [loading, setLoading] = useState(true)
+  const [loading,     setLoading]     = useState(true)
 
   const load = async () => {
     try {
@@ -22,7 +22,7 @@ export function CashTab() {
       ])
       setOpenCash(cash)
       setOpeningTime(time)
-    } catch (e) {
+    } catch {
       setOpenCash(null)
     } finally {
       setLoading(false)
@@ -40,7 +40,7 @@ export function CashTab() {
       {/* Sub-tabs */}
       <div className="flex gap-1 bg-gray-100 p-1 rounded-xl mb-6 w-fit">
         {([
-          { id: 'register' as CashSubTab, label: '🏪 Abertura / Fechamento' },
+          { id: 'register'  as CashSubTab, label: '🏪 Abertura / Fechamento' },
           { id: 'operators' as CashSubTab, label: '👥 Operadores' },
         ]).map(t => (
           <button
@@ -68,6 +68,19 @@ export function CashTab() {
             </span>
           </div>
 
+          {/* Link para o PDV */}
+          {openCash && (
+            <a
+              href={`${typeof window !== 'undefined' ? `/${window.location.pathname.split('/')[1]}/pdv` : '/pdv'}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 mb-6 text-sm font-medium text-orange-600 bg-orange-50 border border-orange-200 rounded-lg px-4 py-2 hover:bg-orange-100 transition-colors"
+            >
+              ◧ Abrir PDV
+              <span className="text-xs text-orange-400">↗ nova aba</span>
+            </a>
+          )}
+
           {openCash ? (
             <CashClosingView
               cashRegister={openCash}
@@ -82,9 +95,7 @@ export function CashTab() {
         </>
       )}
 
-      {subTab === 'operators' && (
-        <OperatorsView />
-      )}
+      {subTab === 'operators' && <OperatorsView />}
     </div>
   )
 }

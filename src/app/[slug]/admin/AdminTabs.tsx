@@ -32,8 +32,6 @@ const TAB_LABELS: Record<Tab, string> = {
   fiscal:     'Fiscal',
   billing:    'Faturamento',
   settings:   'Configurações',
-  cash:       'Caixa',
-  pdv:        'PDV',
   ifood:      'iFood Sync',
   customers:  'Clientes',
 }
@@ -47,8 +45,6 @@ const TAB_ICONS: Record<Tab, string> = {
   fiscal:     '◫',
   billing:    '☰',
   settings:   '⚙',
-  cash:       '⌂',
-  pdv:        '◧',
   ifood:      '⬢',
   customers:  '◉',
 }
@@ -136,19 +132,17 @@ export function AdminTabs({
           <span className="text-base">{TAB_ICONS.orders}</span>{TAB_LABELS.orders}
         </button>
 
-        {/* Caixa */}
-        <button onClick={() => handleChange('cash')}
-          className={`flex items-center gap-3 text-sm px-3 py-2.5 rounded-lg transition-colors font-medium w-full text-left
-            ${tab === 'cash' ? `${ACTIVE_BG} ${ACTIVE_TEXT}` : `${TEXT_DEFAULT} ${TEXT_HOVER} ${BG_HOVER}`}`}>
-          <span className="text-base">{TAB_ICONS.cash}</span>{TAB_LABELS.cash}
-        </button>
-
-        {/* PDV */}
-        <button onClick={() => handleChange('pdv')}
-          className={`flex items-center gap-3 text-sm px-3 py-2.5 rounded-lg transition-colors font-medium w-full text-left
-            ${tab === 'pdv' ? `${ACTIVE_BG} ${ACTIVE_TEXT}` : `${TEXT_DEFAULT} ${TEXT_HOVER} ${BG_HOVER}`}`}>
-          <span className="text-base">{TAB_ICONS.pdv}</span>{TAB_LABELS.pdv}
-        </button>
+        {/* PDV — link externo para a nova rota */}
+        <a
+          href={`/${typeof window !== 'undefined' ? window.location.pathname.split('/')[1] : ''}/pdv`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={`flex items-center gap-3 text-sm px-3 py-2.5 rounded-lg transition-colors font-medium w-full text-left ${TEXT_DEFAULT} ${TEXT_HOVER} ${BG_HOVER}`}
+        >
+          <span className="text-base">◧</span>
+          PDV
+          <span className="ml-auto text-[10px] text-[#4a6a8a]">↗</span>
+        </a>
 
         {/* Relatórios */}
         <div>

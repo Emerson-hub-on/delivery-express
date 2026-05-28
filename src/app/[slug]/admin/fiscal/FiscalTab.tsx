@@ -15,6 +15,7 @@ import { FiscalConfigForm } from './FiscalConfigForm'
 import { FiscalOrderCard } from './FiscalOrderCard'
 import { FiscalEmitidoCard } from './FiscalEmitidoCard'
 import { FiscalXmlTab } from './FiscalXmlTab'
+import { supabase } from '@/lib/supabase'
 
 function todayLocalISO() {
   const d = new Date()
@@ -24,6 +25,7 @@ function todayLocalISO() {
 type SubTab = 'pendentes' | 'emitidos' | 'xml' | 'config'
 
 interface FiscalTabProps {
+  companyId: string
   onError: (msg: string | null) => void
 }
 
@@ -34,8 +36,7 @@ const SUB_TAB_LABELS: Record<SubTab, string> = {
   config:    'Configuração',
 }
 
-export function FiscalTab({ onError }: FiscalTabProps) {
-  const [subTab, setSubTab] = useState<SubTab>('pendentes')
+export function FiscalTab({ onError, companyId }: FiscalTabProps) {  const [subTab, setSubTab] = useState<SubTab>('pendentes')
   const [config, setConfig] = useState<FiscalConfig | null>(null)
   const [loadingConfig, setLoadingConfig] = useState(true)
   const [showConfigForm, setShowConfigForm] = useState(false)
@@ -111,8 +112,10 @@ export function FiscalTab({ onError }: FiscalTabProps) {
     try {
       setEmittingId(order.id)
       onError(null)
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return onError('Não autenticado')
 
-      const numero = await nextNfceNumero()
+      const numero = await nextNfceNumero(user.id, config.nfce_serie)
 
       // ── Substitua pelo retorno real da sua API fiscal ──
       const resultado = await simularEmissao(order, numero, config)
@@ -364,6 +367,7 @@ export function FiscalTab({ onError }: FiscalTabProps) {
       {subTab === 'config' && (
         <FiscalConfigForm
           config={config}
+          companyId={companyId} 
           onSaved={(saved) => {
             setConfig(saved)
             setShowConfigForm(false)
@@ -380,7 +384,7 @@ export function FiscalTab({ onError }: FiscalTabProps) {
 async function simularEmissao(
   order: Order,
   numero: number,
-  config: FiscalConfig
+  _config: FiscalConfig
 ): Promise<{
   autorizado: boolean
   chave?: string

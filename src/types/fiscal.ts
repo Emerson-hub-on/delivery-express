@@ -11,11 +11,10 @@ export type CRT = 1 | 2 | 3
 
 export type FiscalConfig = {
   id: number
+  company_id: string
   razao_social: string
   nome_fantasia?: string | null
-  /** 14 dígitos sem formatação */
   cnpj: string
-  /** 11 dígitos sem formatação — usado para consulta DFe em testes com e-CPF */
   cpf?: string | null
   ie?: string | null
   crt: CRT
@@ -25,14 +24,12 @@ export type FiscalConfig = {
   bairro: string
   municipio: string
   uf: string
-  /** 8 dígitos sem formatação */
   cep: string
-  /** Código IBGE do município — 7 dígitos */
   codigo_ibge: string
   telefone?: string | null
   ambiente: AmbienteSEFAZ
   cert_pfx_base64?: string | null
-  cert_cpf_pfx_base64?: string | null   // ← e-CPF para testes
+  cert_cpf_pfx_base64?: string | null
   cert_cpf_senha?: string | null
   cert_senha?: string | null
   cert_validade?: string | null
@@ -43,4 +40,5 @@ export type FiscalConfig = {
   updated_at: string
 }
 
-export type FiscalConfigPayload = Omit<FiscalConfig, 'id' | 'created_at' | 'updated_at'>
+// company_id é injetado pelo backend via auth — não faz parte do payload
+export type FiscalConfigPayload = Omit<FiscalConfig, 'id' | 'company_id' | 'created_at' | 'updated_at'>

@@ -1,10 +1,12 @@
 'use client'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { FiscalConfig, FiscalConfigPayload, CRT, AmbienteSEFAZ } from '@/types/fiscal'
 import { saveFiscalConfig } from '@/services/fiscal'
+import { supabase } from '@/lib/supabase'
 
 interface FiscalConfigFormProps {
   config: FiscalConfig | null
+  companyId: string  
   onSaved: (config: FiscalConfig) => void
   onError: (msg: string | null) => void
 }
@@ -47,13 +49,53 @@ function Field({ label, required, hint, children }: {
   )
 }
 
-export function FiscalConfigForm({ config, onSaved, onError }: FiscalConfigFormProps) {
+export function FiscalConfigForm({ config, companyId, onSaved, onError }: FiscalConfigFormProps) {
+
   const [form, setForm] = useState<FiscalConfigPayload>(
     config ? (({ id, created_at, updated_at, nfce_ambiente, ...rest }) => rest)(config as any) : EMPTY
   )
   const [saving, setSaving] = useState(false)
   const [certFile, setCertFile] = useState<string | null>(null)
   const [certCpfFile, setCertCpfFile] = useState<string | null>(null)
+  const [numeroInicial, setNumeroInicial] = useState<number>(1)
+  const [caixas, setCaixas] = useState<{ id: string; name: string; nfce_serie: string }[]>([])
+  const [loadingCaixas, setLoadingCaixas] = useState(false)
+  const [seqMap, setSeqMap] = useState<Record<string, number>>({})
+
+  useEffect(() => {
+      if (!companyId) return          // ← guard simples
+        const load = async () => {
+        setLoadingCaixas(true)
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { setLoadingCaixas(false); return }
+
+      // 3. Usar companyId no useEffect em vez de user.id
+      const [{ data: regs }, { data: seqs }] = await Promise.all([
+        supabase
+          .from('cash_registers')
+          .select('id, name, nfce_serie')
+          .eq('company_id', companyId)   // ← era user.id
+          .order('name'),
+        supabase
+          .from('nfce_numero_seq')
+          .select('serie, ultimo')
+          .eq('company_id', companyId),  // ← era user.id
+      ])
+
+      setCaixas(regs ?? [])
+      setSeqMap(Object.fromEntries((seqs ?? []).map(s => [s.serie, s.ultimo])))
+      setLoadingCaixas(false)
+    }
+    load()
+ }, [companyId]) 
+
+  const updateCaixaSerie = async (id: string, novaSerie: string) => {
+    setCaixas(prev => prev.map(c => c.id === id ? { ...c, nfce_serie: novaSerie } : c))
+    await supabase
+      .from('cash_registers')
+      .update({ nfce_serie: novaSerie })
+      .eq('id', id)
+  }
 
   const handleCpfCertUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -106,6 +148,20 @@ export function FiscalConfigForm({ config, onSaved, onError }: FiscalConfigFormP
       setSaving(true)
       onError(null)
       const saved = await saveFiscalConfig(form)
+
+      if (numeroInicial > 0) {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) throw new Error('Não autenticado')
+
+        await supabase
+          .from('nfce_numero_seq')
+          .upsert({
+            company_id: user.id,
+            serie: form.nfce_serie,
+            ultimo: numeroInicial,
+          }, { onConflict: 'company_id,serie' })
+      }
+
       onSaved(saved)
     } catch (e: any) {
       onError('Erro ao salvar configuração: ' + e.message)
@@ -249,11 +305,46 @@ export function FiscalConfigForm({ config, onSaved, onError }: FiscalConfigFormP
           </select>
         </Field>
 
-        <Field label="Série NFC-e" required>
+        <SectionTitle>Caixas / PDVs</SectionTitle>
+
+        <div className="sm:col-span-2 lg:col-span-3 flex flex-col gap-3">
+          {loadingCaixas ? (
+            <p className="text-xs text-gray-400">Carregando caixas...</p>
+          ) : caixas.length === 0 ? (
+            <p className="text-xs text-gray-400">
+              Nenhum caixa cadastrado. Crie um na aba <strong>Caixa</strong> primeiro.
+            </p>
+          ) : (
+            caixas.map(cr => (
+              <div key={cr.id} className="flex items-center gap-4 bg-gray-50 border border-gray-100 rounded-lg px-4 py-3">
+                <span className="text-sm font-medium text-gray-700 flex-1">{cr.name}</span>
+                <div className="flex items-center gap-2">
+                  <label className="text-xs text-gray-500">Série NFC-e</label>
+                  <input
+                    type="text"
+                    maxLength={3}
+                    value={cr.nfce_serie}
+                    onChange={e => updateCaixaSerie(cr.id, e.target.value)}
+                    className={`border border-gray-200 rounded-lg px-3 py-1.5 text-sm 
+                      focus:outline-none focus:ring-2 focus:ring-black w-20 text-center`}
+                  />
+                </div>
+                <span className="text-xs text-gray-400 w-28 text-right">
+                  Último nº: {seqMap[cr.nfce_serie] ?? 0}
+                </span>
+              </div>
+            ))
+          )}
+        </div>
+        <Field
+          label="Último número usado no sistema anterior"
+          hint="Ex: se o sistema anterior emitiu até o nº 368, coloque 368. O próximo será 369."
+        >
           <input
-            type="text" maxLength={3}
-            value={form.nfce_serie}
-            onChange={e => set('nfce_serie', e.target.value)}
+            type="number"
+            min={0}
+            value={numeroInicial}
+            onChange={e => setNumeroInicial(parseInt(e.target.value) || 0)}
             className={inputCls}
           />
         </Field>

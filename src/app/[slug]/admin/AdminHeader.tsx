@@ -6,15 +6,15 @@ interface AdminHeaderProps {
   productCount:   number
   categoryCount:  number
   motoboyCount:   number
-  customerCount:  number          // ← novo
+  customerCount:  number
   onNewProduct:   () => void
   onNewCategory:  () => void
   onNewMotoboy:   () => void
-  onNewCustomer:  () => void      // ← novo
+  onNewCustomer:  () => void
   showProductForm:  boolean
   showCategoryForm: boolean
   showMotoboyForm:  boolean
-  showCustomerForm: boolean       // ← novo
+  showCustomerForm: boolean
   orderSearch?: string
   onOrderSearchChange?: (v: string) => void
 }
@@ -36,20 +36,17 @@ export function AdminHeader({
   orderSearch = '',
   onOrderSearchChange,
 }: AdminHeaderProps) {
-
-  const subtitle: Record<Tab, string | null> = {
-    products: `${productCount} produtos cadastrados`,
+  const subtitle: Partial<Record<Tab, string | null>> = {
+    products:   `${productCount} produtos cadastrados`,
     categories: `${categoryCount} categorias cadastradas`,
-    motoboys: `${motoboyCount} motoboys cadastrados`,
-    customers: `${customerCount} clientes cadastrados`, // ← novo
-    orders: null,
-    reports: null,
-    fiscal: 'Emita e gerencie cupons fiscais (NFC-e)',
-    billing: 'Gerencie notas fiscais de entrada e saída',
-    settings: 'Personalize o visual da sua loja',
-    cash: 'Abertura e fechamento de caixa',
-    ifood: null,
-    pdv: null
+    motoboys:   `${motoboyCount} motoboys cadastrados`,
+    customers:  `${customerCount} clientes cadastrados`,
+    orders:     null,
+    reports:    null,
+    fiscal:     'Emita e gerencie cupons fiscais (NFC-e)',
+    billing:    'Gerencie notas fiscais de entrada e saída',
+    settings:   'Personalize o visual da sua loja',
+    ifood:      null,
   }
 
   return (
@@ -59,9 +56,7 @@ export function AdminHeader({
           <p className="text-sm text-gray-500 mt-1">{subtitle[tab]}</p>
         )}
       </div>
-
       <div className="md:ml-auto mt-3 md:mt-0 flex items-center gap-2">
-
         {/* Busca de pedido */}
         {tab === 'orders' && (
           <div className="relative">
@@ -82,7 +77,6 @@ export function AdminHeader({
             )}
           </div>
         )}
-
         {tab === 'products'   && !showProductForm  && (
           <button onClick={onNewProduct}
             className="bg-black text-white text-sm px-4 py-2 rounded-lg hover:bg-gray-800 transition-colors">
@@ -101,13 +95,12 @@ export function AdminHeader({
             + Novo motoboy
           </button>
         )}
-        {tab === 'customers'  && !showCustomerForm && (   // ← novo
+        {tab === 'customers'  && !showCustomerForm && (
           <button onClick={onNewCustomer}
             className="bg-black text-white text-sm px-4 py-2 rounded-lg hover:bg-gray-800 transition-colors">
             + Novo cliente
           </button>
         )}
-
       </div>
     </div>
   )
