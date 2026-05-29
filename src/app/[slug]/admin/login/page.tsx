@@ -178,7 +178,7 @@ export default function AdminLoginPage() {
           <h1 className="text-[32px] md:text-[38px] font-bold leading-[1.15] tracking-tight text-white mb-4">
             Painel<br />Administrativo
           </h1>
-          <p className="text-[14px] text-white/60 leading-relaxed mb-10 max-w-[260px] hidden md:block">
+          <p className="text-[14px] text-white/60 leading-relaxed mb-10 max-w-65 hidden md:block">
             Gerencie sua operação com eficiência e segurança em um único lugar.
           </p>
 
