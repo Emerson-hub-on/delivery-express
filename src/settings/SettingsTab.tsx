@@ -411,7 +411,7 @@ export function FiscalTab({ onError }: FiscalTabProps) {
                       : 'border-gray-200 bg-white hover:border-gray-300'
                   }`}
                 >
-                  <div className={`mt-0.5 w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                  <div className={`mt-0.5 w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${
                     form.ambiente === amb
                       ? amb === 1 ? 'border-green-500' : 'border-amber-500'
                       : 'border-gray-300'
