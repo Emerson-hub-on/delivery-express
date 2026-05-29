@@ -26,6 +26,7 @@ import { BillingTab } from '@/components/billing/BillingTab'
 import type { BillingSubTab } from '@/types/billing'
 import { OperatorsView } from './tabs/OperatorsView'
 import { CashTab } from './cash/CashTab'
+import { StoreTab } from '@/settings/StoreTab'
 
 function todayLocalISO() {
   const d = new Date()
@@ -387,6 +388,7 @@ export default function AdminPage() {
         )}
         {tab === 'settings' && <FiscalTab onError={setError} />}
         {tab === 'ifood'    && <IfoodSync />}
+        
       </div>
     </div>
   )

@@ -32,7 +32,7 @@ const CardapioPage = ({ companyId, slug, companyName, bannerUrl, logoUrl, minOrd
           <ProductSelect companyId={companyId} />
         </Suspense>
       </div>
-      <Footer />
+      <Footer slug={slug} />
     </div>
   )
 }

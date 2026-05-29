@@ -138,19 +138,23 @@ export function FiscalTab({ onError }: FiscalTabProps) {
     }
   }
 
-  const handleSave = async () => {
-    setSaving(true)
-    setSaved(false)
-    try {
-      await saveFiscalConfig(form)
-      setSaved(true)
-      setTimeout(() => setSaved(false), 3000)
-    } catch (e: any) {
-      onError(e.message)
-    } finally {
-      setSaving(false)
+const handleSave = async () => {
+  setSaving(true)
+  setSaved(false)
+  try {
+    const payload = {
+      ...form,
+      nfce_serie: (form.nfce_serie ?? '').padStart(3, '0') || '001',
     }
+    await saveFiscalConfig(payload)
+    setSaved(true)
+    setTimeout(() => setSaved(false), 3000)
+  } catch (e: any) {
+    onError(e.message)
+  } finally {
+    setSaving(false)
   }
+}
 
   const inputCls = 'w-full h-10 px-3 text-sm border border-gray-200 rounded-lg bg-white text-gray-800 outline-none focus:border-[#1a4a8a] focus:ring-2 focus:ring-[#1a4a8a]/10 transition-all placeholder-gray-300 disabled:opacity-50'
   const labelCls = 'block text-xs font-medium text-gray-500 mb-1'
@@ -450,7 +454,7 @@ export function FiscalTab({ onError }: FiscalTabProps) {
                 <input
                   className={inputCls}
                   value={form.nfce_serie}
-                  onChange={e => set('nfce_serie', e.target.value.replace(/\D/g, '').slice(0, 3).padStart(3, '0'))}
+                  onChange={e => set('nfce_serie', e.target.value.replace(/\D/g, '').slice(0, 3))}
                   placeholder="001"
                   maxLength={3}
                 />
