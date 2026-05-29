@@ -5,7 +5,15 @@ import { CashRegister, Operator } from '@/types/cash-register'
 async function getCompanyId(): Promise<string> {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Não autenticado')
-  return user.id
+
+  const { data: company, error } = await supabase
+    .from('companies')
+    .select('id')
+    .eq('owner_id', user.id)
+    .single()
+
+  if (error || !company) throw new Error('Empresa não encontrada')
+  return company.id
 }
 
 // ── Operadores ────────────────────────────────────────────────

@@ -40,7 +40,7 @@ export default function PDVLoginPage() {
   // ── busca empresa + operadores ────────────────────────────────────────
   useEffect(() => {
     if (!params?.slug) return
-    ;(async () => {
+    (async () => {
       const { data: co } = await supabase
         .from('companies')
         .select('id, name, slug')

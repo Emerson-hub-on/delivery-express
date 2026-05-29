@@ -44,20 +44,32 @@ export function CashHistoryView() {
 
   useEffect(() => { load() }, [dateFrom, dateTo])
 
-  const load = async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      // Busca todos os caixas (abertos e fechados) no período
-      const { data: registers, error: regErr } = await supabase
-        .from('cash_registers')
-        .select('*')
-        .gte('opening_at', `${dateFrom}T00:00:00`)
-        .lte('opening_at', `${dateTo}T23:59:59`)
-        .order('opening_at', { ascending: false })
+const load = async () => {
+  setLoading(true)
+  setError(null)
+  try {
+    // ── busca company_id do usuário autenticado ──────────────────────
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw new Error('Não autenticado')
 
-      if (regErr) throw regErr
-      if (!registers?.length) { setSessions([]); return }
+    const { data: company, error: coErr } = await supabase
+      .from('companies')
+      .select('id')
+      .eq('owner_id', user.id)
+      .single()
+    if (coErr || !company) throw new Error('Empresa não encontrada')
+
+    // ── busca caixas filtrados pela empresa ──────────────────────────
+    const { data: registers, error: regErr } = await supabase
+      .from('cash_registers')
+      .select('*')
+      .eq('company_id', company.id)          // ← adicionar
+      .gte('opening_at', `${dateFrom}T00:00:00`)
+      .lte('opening_at', `${dateTo}T23:59:59`)
+      .order('opening_at', { ascending: false })
+
+    if (regErr) throw regErr
+    if (!registers?.length) { setSessions([]); return }
 
       // Busca pedidos de todos os caixas de uma vez
       const registerIds = registers.map(r => r.id)

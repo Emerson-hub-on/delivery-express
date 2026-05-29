@@ -243,7 +243,7 @@ export function CashOpeningView({ openingTime, onOpened }: Props) {
       <div className="flex gap-3 justify-end">
         <button
           onClick={() => setChecklist({})}
-          className="text-sm px-5 py-2.5 rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors"
+          className="text-sm px-5 py-2.5 rounded-xl border bg-gray-200 border-gray-700 hover:bg-gray-700 transition-colors"
         >
           Cancelar
         </button>

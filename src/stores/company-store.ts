@@ -11,7 +11,6 @@ interface Company {
   isOpen?: boolean
 }
 
-// stores/company-store.ts
 interface CompanyStore {
   companyId: string
   company: Company | null

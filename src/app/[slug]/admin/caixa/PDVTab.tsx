@@ -28,6 +28,9 @@ type PDVProps = {
   cashRegisterId: string
   serie: string
   onError: (msg: string) => void
+  onCloseCash?: () => void   // ← adicionar
+  onLogout?: () => void      // ← adicionar
+  operatorName?: string      // ← adicionar
 }
 
 // ─── utilitários ─────────────────────────────────────────────────────────────
@@ -143,12 +146,12 @@ const css = {
 
 // ─── componente principal ────────────────────────────────────────────────────
 
-export function PDVTab({ companyId, cashRegisterId, serie, onError }: PDVProps) {
+export function PDVTab({ companyId, cashRegisterId, serie, onError, onCloseCash, onLogout, operatorName }: PDVProps) {
+
   const { products, loading, getByCode } = useProducts(companyId, onError)
 
   // ── ALTERAÇÃO 1: estados e busca do operador ──────────────────────────────
   const [operatorId,   setOperatorId]   = useState<string | undefined>()
-  const [operatorName, setOperatorName] = useState<string | undefined>()
   const [customerSearch,   setCustomerSearch]   = useState('')
   const [customerResults,  setCustomerResults]  = useState<any[]>([])
   const [customerSearching, setCustomerSearching] = useState(false)
@@ -195,7 +198,6 @@ export function PDVTab({ companyId, cashRegisterId, serie, onError }: PDVProps) 
       .then(({ data }) => {
         if (!data) return
         setOperatorId(data.id)
-        setOperatorName(data.name)
       })
   }, [companyId])
   // ─────────────────────────────────────────────────────────────────────────
@@ -462,6 +464,7 @@ const handlePularNfce = () => {
 
   return (
     
+    
     <div
     
       style={{
@@ -479,13 +482,8 @@ const handlePularNfce = () => {
         borderBottom: `1px solid ${css.border}`, flexShrink: 0, overflowX: 'auto',
         background: css.surface,
       }}>
-        {/* Logo */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginRight: 12 }}>
-          <span style={{ fontSize: 18 }}>🚀</span>
-          <span style={{ fontWeight: 700, fontSize: 14, color: css.txtPrimary, letterSpacing: '-0.3px' }}>PDV</span>
-        </div>
 
-        {fkeys.map(({ key, label, fn, danger, highlight }) => (
+          {fkeys.map(({ key, label, fn, danger, highlight }) => (
           <button
             key={key}
             onClick={fn}
@@ -504,6 +502,51 @@ const handlePularNfce = () => {
               (e.currentTarget as HTMLElement).style.background = danger ? '#fff5f5' : highlight ? '#eef2ff' : css.surface
             }}
           >
+            {/* Espaço flexível para empurrar botões para direita */}
+            <div style={{ flex: 1 }} />
+
+            {/* Nome do operador */}
+            {operatorName && (
+              <span style={{
+                fontSize: 11, color: css.txtMuted,
+                display: 'flex', alignItems: 'center', gap: 4,
+              }}>
+                👤 {operatorName}
+              </span>
+            )}
+
+            {/* Fechar caixa */}
+            {onCloseCash && (
+              <button
+                onClick={onCloseCash}
+                style={{
+                  fontSize: 11, color: '#f97316',
+                  background: 'rgba(249,115,22,0.08)',
+                  border: '1px solid rgba(249,115,22,0.2)',
+                  borderRadius: 8, padding: '5px 12px',
+                  cursor: 'pointer', fontWeight: 600,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                Fechar caixa
+              </button>
+            )}
+
+            {/* Sair */}
+            {onLogout && (
+              <button
+                onClick={onLogout}
+                style={{
+                  fontSize: 11, color: '#ef4444',
+                  background: 'rgba(239,68,68,0.08)',
+                  border: '1px solid rgba(239,68,68,0.2)',
+                  borderRadius: 8, padding: '5px 12px',
+                  cursor: 'pointer', fontWeight: 600,
+                }}
+              >
+                Sair
+              </button>
+            )}
             <span style={{
               fontWeight: 700, fontSize: 10, letterSpacing: '0.5px',
               color: danger ? css.red : highlight ? css.indigo : css.indigo,
