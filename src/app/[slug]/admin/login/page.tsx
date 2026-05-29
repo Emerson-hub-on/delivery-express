@@ -144,7 +144,7 @@ export default function AdminLoginPage() {
     <div className="min-h-screen flex flex-col md:flex-row">
 
       {/* ── Left panel ── */}
-      <aside className="relative w-full md:w-[44%] min-h-65 md:min-h-screen bg-gradient-to-br from-[#0f2d5e] via-[#1a4a8a] to-[#1d5ca8] flex flex-col justify-between px-7 py-9 md:px-12 md:py-12 overflow-hidden text-white">
+      <aside className="relative w-full md:w-[44%] min-h-65 md:min-h-screen bg-linear-to-br from-[#0f2d5e] via-[#1a4a8a] to-[#1d5ca8] flex flex-col justify-between px-7 py-9 md:px-12 md:py-12 overflow-hidden text-white">
 
         {/* Dot-grid overlay */}
         <div
