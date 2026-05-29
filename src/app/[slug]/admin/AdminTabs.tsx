@@ -183,7 +183,7 @@ export function AdminTabs({
           <button onClick={() => handleChange('caixa')}
             className={`flex items-center gap-2.5 text-[13px] px-3 py-2.5 rounded-xl transition-all duration-150 font-semibold w-full text-left
               ${tab === 'caixa'
-                ? 'bg-gradient-to-r from-orange-500 to-orange-400 text-white shadow-md shadow-orange-500/25'
+                ? 'bg-linear-to-r from-orange-500 to-orange-400 text-white shadow-md shadow-orange-500/25'
                 : 'text-white/50 hover:text-white/80 hover:bg-white/[0.07]'}`}>
             <Icon path={TAB_ICONS.caixa} />
             {TAB_LABELS.caixa}
@@ -194,7 +194,7 @@ export function AdminTabs({
             <button onClick={handleReportsClick}
               className={`flex items-center justify-between w-full px-3 py-2.5 rounded-xl text-[13px] font-semibold transition-all duration-150
                 ${tab === 'reports'
-                  ? 'bg-white/[0.12] text-white'
+                  ? 'bg-white/12 text-white'
                   : 'text-white/50 hover:text-white/80 hover:bg-white/[0.07]'}`}>
               <div className="flex items-center gap-2.5">
                 <Icon path={TAB_ICONS.reports} />
@@ -218,7 +218,7 @@ export function AdminTabs({
             )}
           </div>
 
-          <div className="border-t border-white/[0.08] my-2" />
+          <div className="border-t border-white/8 my-2" />
 
           {/* iFood */}
           <button onClick={() => handleChange('ifood')}
@@ -230,14 +230,14 @@ export function AdminTabs({
             {TAB_LABELS.ifood}
           </button>
 
-          <div className="border-t border-white/[0.08] my-2" />
+          <div className="border-t border-white/8 my-2" />
 
           {/* Faturamento */}
           <div>
             <button onClick={() => { onChange('billing'); setBillingOpen(o => !o) }}
               className={`flex items-center justify-between w-full px-3 py-2.5 rounded-xl text-[13px] font-semibold transition-all duration-150
                 ${tab === 'billing'
-                  ? 'bg-white/[0.12] text-white'
+                  ? 'bg-white/12 text-white'
                   : 'text-white/50 hover:text-white/80 hover:bg-white/[0.07]'}`}>
               <div className="flex items-center gap-2.5">
                 <Icon path={TAB_ICONS.billing} />
@@ -275,8 +275,8 @@ export function AdminTabs({
         </div>
 
         {/* Footer */}
-        <div className="shrink-0 border-t border-white/[0.08] pt-4 px-1 mt-3">
-          <p className="text-[10px] text-white/20 text-center">© 2026 deliveryExpress</p>
+        <div className="shrink-0 border-t border-white/8 pt-4 px-1 mt-3">
+          <p className="text-[10px] text-white/20 text-center">© 2026 webState</p>
         </div>
       </div>
     </div>
@@ -304,8 +304,8 @@ export function AdminTabs({
       {/* Sidebar mobile */}
       <aside className={`
         fixed top-0 left-0 h-screen w-60 z-50 overflow-hidden
-        bg-gradient-to-br from-[#0f2d5e] via-[#1a4a8a] to-[#1d5ca8]
-        border-r border-white/[0.08] transition-transform duration-300 ease-in-out md:hidden
+        bg-linear-to-br from-[#0f2d5e] via-[#1a4a8a] to-[#1d5ca8]
+        border-r border-white/8 transition-transform duration-300 ease-in-out md:hidden
         ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}
       `}>
         <div className="flex items-center justify-between px-5 pt-5 pb-2 shrink-0 relative z-10">
@@ -320,9 +320,9 @@ export function AdminTabs({
       </aside>
 
       {/* Sidebar desktop */}
-      <aside className="hidden md:flex w-56 h-screen sticky top-0 shrink-0 overflow-hidden relative
+      <aside className="hidden md:flex w-56 h-screen sticky top-0 shrink-0 overflow-hidden
         bg-linear-to-br from-[#0f2d5e] via-[#1a4a8a] to-[#1d5ca8]
-        border-r border-white/[0.08]">
+        border-r border-white/8">
         {sidebarContent}
       </aside>
     </>
