@@ -171,7 +171,7 @@ export default function AdminLoginPage() {
                 <circle cx="14" cy="12" r="2.5" fill="white" />
               </svg>
             </div>
-            <span className="text-[17px] font-bold tracking-tight">GestãoPro</span>
+            <span className="text-[17px] font-bold tracking-tight">WebState Sistema</span>
           </div>
 
           {/* Hero text */}

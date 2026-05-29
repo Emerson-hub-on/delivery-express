@@ -19,8 +19,8 @@ import { CategoriesTab } from './categories/CategoriesTab'
 import { OrdersTab } from './orders/OrdersTab'
 import { ReportsTab } from './reports/ReportsTab'
 import { MotoboyTab } from '@/components/motoboy/motoboy-tab'
-import { FiscalTab } from './fiscal/FiscalTab'
-import { SettingsTab } from '@/settings/SettingsTab'
+
+import { FiscalTab } from '@/settings/SettingsTab'
 import { CustomersTab } from './customers/CustomersTab'
 import { BillingTab } from '@/components/billing/BillingTab'
 import type { BillingSubTab } from '@/types/billing'
@@ -377,7 +377,6 @@ export default function AdminPage() {
           />
         )}
         {tab === 'caixa' && <CashTab />}
-        {tab === 'fiscal'   && <FiscalTab onError={setError} companyId={companyId} />}
         {tab === 'billing'  && (
           <BillingTab
             subTab={billingSubTab}
@@ -386,7 +385,7 @@ export default function AdminPage() {
             onError={setError}
           />
         )}
-        {tab === 'settings' && <SettingsTab onError={setError} />}
+        {tab === 'settings' && <FiscalTab onError={setError} />}
         {tab === 'ifood'    && <IfoodSync />}
       </div>
     </div>

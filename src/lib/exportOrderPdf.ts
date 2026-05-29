@@ -102,7 +102,7 @@ const dottedLine = () => {
   // ── Cabeçalho ────────────────────────────────────────────────
   y = 18
 
-  text('deliveryExpress', { size: 13, bold: true, align: 'center' })
+  text('WebState Sistema', { size: 13, bold: true, align: 'center' })
   y += 2
   text('Cupom de Pedido', { size: 8, color: [100, 100, 100], align: 'center' })
   y += 5
@@ -276,7 +276,7 @@ const dottedLine = () => {
   y += 4
   text('Obrigado pela preferência!', { size: 8, bold: true, align: 'center', color: [80, 80, 80] })
   y += 3
-  text('deliveryExpress © 2026', { size: 7, color: [160, 160, 160], align: 'center' })
+  text('webState © 2026', { size: 7, color: [160, 160, 160], align: 'center' })
   y += 12
 
 doc.save(`pedido-${order.code ?? order.id}.pdf`)
