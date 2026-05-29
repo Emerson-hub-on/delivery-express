@@ -108,8 +108,8 @@ export function AdminTabs({
       />
 
       {/* ── Círculos decorativos ── */}
-      <div className="absolute w-48 h-48 rounded-full bg-white/[0.04] -bottom-10 -right-16 pointer-events-none z-0" aria-hidden="true" />
-      <div className="absolute w-24 h-24 rounded-full bg-white/[0.05] top-20 -right-8 pointer-events-none z-0" aria-hidden="true" />
+      <div className="absolute w-48 h-48 rounded-full bg-white/4 -bottom-10 -right-16 pointer-events-none z-0" aria-hidden="true" />
+      <div className="absolute w-24 h-24 rounded-full bg-white/5 top-20 -right-8 pointer-events-none z-0" aria-hidden="true" />
 
       {/* ── Conteúdo ── */}
       <div className="relative z-10 flex flex-col h-full py-6 px-3 overflow-hidden">
@@ -117,7 +117,7 @@ export function AdminTabs({
         {/* Logo */}
         <div className="px-3 mb-7">
           <div className="flex items-center gap-3 mb-1">
-            <div className="w-9 h-9 rounded-[9px] bg-white/[0.13] flex items-center justify-center shrink-0">
+            <div className="w-9 h-9 rounded-[9px] bg-white/13 flex items-center justify-center shrink-0">
               <svg width="20" height="20" viewBox="0 0 28 28" fill="none">
                 <rect width="28" height="28" rx="7" fill="white" fillOpacity="0.15" />
                 <path d="M7 21L14 7l7 14H7z" fill="white" fillOpacity="0.9" />
@@ -131,7 +131,7 @@ export function AdminTabs({
           </div>
         </div>
 
-        <div className="border-t border-white/[0.08] mb-4" />
+        <div className="border-t border-white/8 mb-4" />
 
         {/* Nav */}
         <div className="flex-1 overflow-y-auto flex flex-col gap-0.5 pr-0.5
@@ -143,7 +143,7 @@ export function AdminTabs({
               onClick={() => setCadastroOpen(o => !o)}
               className={`flex items-center justify-between w-full px-3 py-2.5 rounded-xl text-[13px] font-semibold transition-all duration-150
                 ${CADASTRO_TABS.includes(tab)
-                  ? 'bg-white/[0.12] text-white'
+                  ? 'bg-white/12 text-white'
                   : 'text-white/50 hover:text-white/80 hover:bg-white/[0.07]'}`}
             >
               <div className="flex items-center gap-2.5">
@@ -154,7 +154,7 @@ export function AdminTabs({
             </button>
 
             {cadastroOpen && (
-              <div className="mt-1 ml-3 flex flex-col gap-0.5 border-l border-white/[0.08] pl-3">
+              <div className="mt-1 ml-3 flex flex-col gap-0.5 border-l border-white/8 pl-3">
                 {CADASTRO_TABS.map(t => (
                   <button key={t} onClick={() => handleChange(t)}
                     className={`flex items-center gap-2.5 text-[13px] px-3 py-2 rounded-xl transition-all duration-150 font-medium w-full text-left
