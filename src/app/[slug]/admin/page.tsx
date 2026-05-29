@@ -25,6 +25,7 @@ import { CustomersTab } from './customers/CustomersTab'
 import { BillingTab } from '@/components/billing/BillingTab'
 import type { BillingSubTab } from '@/types/billing'
 import { OperatorsView } from './tabs/OperatorsView'
+import { CashTab } from './cash/CashTab'
 
 function todayLocalISO() {
   const d = new Date()
@@ -375,6 +376,7 @@ export default function AdminPage() {
             onCountChange={fetchOperatorCount}
           />
         )}
+        {tab === 'caixa' && <CashTab />}
         {tab === 'fiscal'   && <FiscalTab onError={setError} companyId={companyId} />}
         {tab === 'billing'  && (
           <BillingTab

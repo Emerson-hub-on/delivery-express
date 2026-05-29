@@ -5,8 +5,9 @@ import { getOpenCashRegister, getCompanyOpeningTime } from '@/services/cash-regi
 import { CashOpeningView } from '../tabs/CashOpeningView'
 import { CashClosingView } from '../tabs/CashClosingView'
 import { OperatorsView } from '../tabs/OperatorsView'
+import { CashHistoryView } from '../tabs/CashHistoryView'
 
-type CashSubTab = 'register' | 'operators'
+type CashSubTab = 'register' | 'operators' | 'history'
 
 export function CashTab() {
   const [subTab,      setSubTab]      = useState<CashSubTab>('register')
@@ -43,6 +44,8 @@ export function CashTab() {
         {([
           { id: 'register'  as CashSubTab, label: '🏪 Abertura / Fechamento' },
           { id: 'operators' as CashSubTab, label: '👥 Operadores' },
+          { id: 'history' as CashSubTab, label: '📋 Histórico de Turnos' },
+
         ]).map(t => (
           <button
             key={t.id}
@@ -102,6 +105,9 @@ export function CashTab() {
           setShowForm={setShowOperatorForm}
         />
       )}
+
+      {subTab === 'history' && <CashHistoryView />}
+
     </div>
   )
 }

@@ -54,6 +54,7 @@ export function AdminHeader({
     settings:   'Personalize o visual da sua loja',
     ifood:      null,
     operators: `${operatorCount} operadores cadastrados`,
+    caixa: 'Abertura, fechamento e histórico de turnos',
   }
 
   return (

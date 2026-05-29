@@ -35,6 +35,7 @@ const TAB_LABELS: Record<Tab, string> = {
   ifood:      'iFood Sync',
   customers:  'Clientes',
   operators: 'Operadores',
+  caixa: 'Caixa / PDV',
 }
 
 const TAB_ICONS: Record<Tab, string> = {
@@ -49,6 +50,7 @@ const TAB_ICONS: Record<Tab, string> = {
   ifood:      '⬢',
   customers:  '◉',
   operators:  '👤',
+  caixa: '◧',
 }
 
 const REPORT_SUB_TABS: { id: ReportSubTab; label: string; icon: string }[] = [
@@ -135,16 +137,12 @@ export function AdminTabs({
         </button>
 
         {/* PDV — link externo para a nova rota */}
-        <a
-          href={`/${typeof window !== 'undefined' ? window.location.pathname.split('/')[1] : ''}/pdv`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className={`flex items-center gap-3 text-sm px-3 py-2.5 rounded-lg transition-colors font-medium w-full text-left ${TEXT_DEFAULT} ${TEXT_HOVER} ${BG_HOVER}`}
-        >
-          <span className="text-base">◧</span>
-          PDV
-          <span className="ml-auto text-[10px] text-[#4a6a8a]">↗</span>
-        </a>
+
+      <button onClick={() => handleChange('caixa')}
+        className={`flex items-center gap-3 text-sm px-3 py-2.5 rounded-lg transition-colors font-medium w-full text-left
+          ${tab === 'caixa' ? `${ACTIVE_BG} ${ACTIVE_TEXT}` : `${TEXT_DEFAULT} ${TEXT_HOVER} ${BG_HOVER}`}`}>
+        <span className="text-base">◧</span>{TAB_LABELS.caixa}
+      </button>
 
         {/* Relatórios */}
         <div>
