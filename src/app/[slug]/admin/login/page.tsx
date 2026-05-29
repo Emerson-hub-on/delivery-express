@@ -212,7 +212,7 @@ export default function AdminLoginPage() {
 
       {/* ── Right panel ── */}
       <main className="flex-1 bg-[#f4f6f9] flex items-center justify-center px-6 py-10 md:px-10">
-        <div className="w-full max-w-[380px]">
+        <div className="w-full max-w-95">
 
           {/* Badge */}
           <div className="inline-flex items-center gap-1.5 bg-[#1a4a8a]/10 text-[#1a4a8a] text-[11px] font-semibold rounded-full px-3 py-1 mb-6">
