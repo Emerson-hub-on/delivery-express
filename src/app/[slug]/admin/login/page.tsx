@@ -318,7 +318,7 @@ export default function AdminLoginPage() {
               type="submit"
               disabled={loading}
               aria-busy={loading}
-              className="w-full h-[46px] mt-1 bg-linear-to-br from-[#1a4a8a] to-[#2563eb] text-white rounded-[10px] text-[15px] font-semibold flex items-center justify-center gap-2 transition-all duration-150 hover:opacity-90 active:scale-[0.99] disabled:opacity-55 disabled:cursor-not-allowed cursor-pointer"
+              className="w-full h-11.5 mt-1 bg-linear-to-br from-[#1a4a8a] to-[#2563eb] text-white rounded-[10px] text-[15px] font-semibold flex items-center justify-center gap-2 transition-all duration-150 hover:opacity-90 active:scale-[0.99] disabled:opacity-55 disabled:cursor-not-allowed cursor-pointer"
             >
               {loading ? (
                 <>
