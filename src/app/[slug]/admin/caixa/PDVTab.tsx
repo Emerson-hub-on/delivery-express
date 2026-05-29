@@ -476,95 +476,97 @@ const handlePularNfce = () => {
         boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
       }}
     >
-      {/* ── Barra F-keys ──────────────────────────────────────────────────── */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 6, padding: '10px 14px',
-        borderBottom: `1px solid ${css.border}`, flexShrink: 0, overflowX: 'auto',
-        background: css.surface,
+{/* ── Barra F-keys ──────────────────────────────────────────────────── */}
+<div style={{
+  display: 'flex', alignItems: 'center', gap: 6, padding: '10px 14px',
+  borderBottom: `1px solid ${css.border}`, flexShrink: 0, overflowX: 'auto',
+  background: css.surface,
+}}>
+
+  {/* Botões F1–F9 */}
+  {fkeys.map(({ key, label, fn, danger, highlight }) => (
+    <button
+      key={key}
+      onClick={fn}
+      style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'center',
+        minWidth: 62, padding: '6px 8px', borderRadius: 8,
+        border: `1.5px solid ${danger ? '#fecaca' : highlight ? '#c7d2fe' : css.border}`,
+        background: danger ? '#fff5f5' : highlight ? '#eef2ff' : css.surface,
+        cursor: 'pointer', transition: 'all 0.15s', position: 'relative',
+        userSelect: 'none',
+      }}
+      onMouseEnter={e => {
+        (e.currentTarget as HTMLElement).style.background = danger ? '#fee2e2' : highlight ? '#e0e7ff' : css.surfaceAlt
+      }}
+      onMouseLeave={e => {
+        (e.currentTarget as HTMLElement).style.background = danger ? '#fff5f5' : highlight ? '#eef2ff' : css.surface
+      }}
+    >
+      <span style={{
+        fontWeight: 700, fontSize: 10, letterSpacing: '0.5px',
+        color: danger ? css.red : css.indigo,
+        marginBottom: 2,
+      }}>{key}</span>
+      <span style={{
+        fontSize: 10, color: danger ? '#b91c1c' : highlight ? '#4338ca' : css.txtSecondary,
+        textAlign: 'center', lineHeight: 1.2, whiteSpace: 'nowrap',
+      }}>{label}</span>
+      {key === 'F8' && consumer && (
+        <span style={{
+          position: 'absolute', top: -3, right: -3, width: 8, height: 8,
+          borderRadius: '50%', background: css.green, border: `2px solid ${css.surface}`,
+        }} />
+      )}
+    </button>
+  ))}
+
+  {/* ── Espaçador + grupo operador (FORA do map) ── */}
+  <div style={{ flex: 1 }} />
+
+  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+    {operatorName && (
+      <span style={{
+        fontSize: 11, color: css.txtMuted,
+        display: 'flex', alignItems: 'center', gap: 4,
       }}>
+        👤 {operatorName}
+      </span>
+    )}
+    {onCloseCash && (
+      <button
+        onClick={onCloseCash}
+        style={{
+          fontSize: 11, color: '#f97316',
+          background: 'rgba(249,115,22,0.08)',
+          border: '1px solid rgba(249,115,22,0.2)',
+          borderRadius: 8, padding: '5px 12px',
+          cursor: 'pointer', fontWeight: 600,
+          whiteSpace: 'nowrap',
+        }}
+      >
+        Fechar caixa
+      </button>
+    )}
+    {onLogout && (
+      <button
+        onClick={onLogout}
+        style={{
+          fontSize: 11, color: '#ef4444',
+          background: 'rgba(239,68,68,0.08)',
+          border: '1px solid rgba(239,68,68,0.2)',
+          borderRadius: 8, padding: '5px 12px',
+          cursor: 'pointer', fontWeight: 600,
+        }}
+      >
+        Sair
+      </button>
+    )}
+  </div>
 
-          {fkeys.map(({ key, label, fn, danger, highlight }) => (
-          <button
-            key={key}
-            onClick={fn}
-            style={{
-              display: 'flex', flexDirection: 'column', alignItems: 'center',
-              minWidth: 62, padding: '6px 8px', borderRadius: 8,
-              border: `1.5px solid ${danger ? '#fecaca' : highlight ? '#c7d2fe' : css.border}`,
-              background: danger ? '#fff5f5' : highlight ? '#eef2ff' : css.surface,
-              cursor: 'pointer', transition: 'all 0.15s', position: 'relative',
-              userSelect: 'none',
-            }}
-            onMouseEnter={e => {
-              (e.currentTarget as HTMLElement).style.background = danger ? '#fee2e2' : highlight ? '#e0e7ff' : css.surfaceAlt
-            }}
-            onMouseLeave={e => {
-              (e.currentTarget as HTMLElement).style.background = danger ? '#fff5f5' : highlight ? '#eef2ff' : css.surface
-            }}
-          >
-            {/* Espaço flexível para empurrar botões para direita */}
-            <div style={{ flex: 1 }} />
+</div>
 
-            {/* Nome do operador */}
-            {operatorName && (
-              <span style={{
-                fontSize: 11, color: css.txtMuted,
-                display: 'flex', alignItems: 'center', gap: 4,
-              }}>
-                👤 {operatorName}
-              </span>
-            )}
-
-            {/* Fechar caixa */}
-            {onCloseCash && (
-              <button
-                onClick={onCloseCash}
-                style={{
-                  fontSize: 11, color: '#f97316',
-                  background: 'rgba(249,115,22,0.08)',
-                  border: '1px solid rgba(249,115,22,0.2)',
-                  borderRadius: 8, padding: '5px 12px',
-                  cursor: 'pointer', fontWeight: 600,
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                Fechar caixa
-              </button>
-            )}
-
-            {/* Sair */}
-            {onLogout && (
-              <button
-                onClick={onLogout}
-                style={{
-                  fontSize: 11, color: '#ef4444',
-                  background: 'rgba(239,68,68,0.08)',
-                  border: '1px solid rgba(239,68,68,0.2)',
-                  borderRadius: 8, padding: '5px 12px',
-                  cursor: 'pointer', fontWeight: 600,
-                }}
-              >
-                Sair
-              </button>
-            )}
-            <span style={{
-              fontWeight: 700, fontSize: 10, letterSpacing: '0.5px',
-              color: danger ? css.red : highlight ? css.indigo : css.indigo,
-              marginBottom: 2,
-            }}>{key}</span>
-            <span style={{
-              fontSize: 10, color: danger ? '#b91c1c' : highlight ? '#4338ca' : css.txtSecondary,
-              textAlign: 'center', lineHeight: 1.2, whiteSpace: 'nowrap',
-            }}>{label}</span>
-            {key === 'F8' && consumer && (
-              <span style={{
-                position: 'absolute', top: -3, right: -3, width: 8, height: 8,
-                borderRadius: '50%', background: css.green, border: `2px solid ${css.surface}`,
-              }} />
-            )}
-          </button>
-        ))}
-      </div>
+      
 
       {/* ── Grid principal ────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
