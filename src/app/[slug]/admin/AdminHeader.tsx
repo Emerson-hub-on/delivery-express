@@ -17,6 +17,9 @@ interface AdminHeaderProps {
   showCustomerForm: boolean
   orderSearch?: string
   onOrderSearchChange?: (v: string) => void
+  operatorCount:   number          // ← adicionar
+  onNewOperator:   () => void      // ← adicionar
+  showOperatorForm: boolean
 }
 
 export function AdminHeader({
@@ -35,6 +38,9 @@ export function AdminHeader({
   showCustomerForm,
   orderSearch = '',
   onOrderSearchChange,
+  operatorCount,       // ← adicionar
+  onNewOperator,       // ← adicionar
+  showOperatorForm,    // ← adicionar
 }: AdminHeaderProps) {
   const subtitle: Partial<Record<Tab, string | null>> = {
     products:   `${productCount} produtos cadastrados`,
@@ -47,6 +53,7 @@ export function AdminHeader({
     billing:    'Gerencie notas fiscais de entrada e saída',
     settings:   'Personalize o visual da sua loja',
     ifood:      null,
+    operators: `${operatorCount} operadores cadastrados`,
   }
 
   return (
@@ -99,6 +106,12 @@ export function AdminHeader({
           <button onClick={onNewCustomer}
             className="bg-black text-white text-sm px-4 py-2 rounded-lg hover:bg-gray-800 transition-colors">
             + Novo cliente
+          </button>
+        )}
+        {tab === 'operators' && !showOperatorForm && (
+          <button onClick={onNewOperator}
+            className="bg-black text-white text-sm px-4 py-2 rounded-lg hover:bg-gray-800 transition-colors">
+            + Novo operador
           </button>
         )}
       </div>

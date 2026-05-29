@@ -24,6 +24,7 @@ import { SettingsTab } from '@/settings/SettingsTab'
 import { CustomersTab } from './customers/CustomersTab'
 import { BillingTab } from '@/components/billing/BillingTab'
 import type { BillingSubTab } from '@/types/billing'
+import { OperatorsView } from './tabs/OperatorsView'
 
 function todayLocalISO() {
   const d = new Date()
@@ -90,10 +91,20 @@ export default function AdminPage() {
   const [customers,        setCustomers]        = useState<Customer[]>([])
   const [loadingCustomers, setLoadingCustomers] = useState(false)
   const [showCustomerForm, setShowCustomerForm] = useState(false)
+  const [showOperatorForm, setShowOperatorForm] = useState(false)
+  const [operatorCount, setOperatorCount] = useState(0)
+
 
   // ── Fetch inicial (após auth) ───────────────────────────────────────────────
   useEffect(() => {
     if (!authReady) return
+    fetchOperatorCount()
+    supabase
+      .from('operators')
+      .select('id', { count: 'exact', head: true })
+      .eq('company_id', companyId)
+      .then(({ count }) => setOperatorCount(count ?? 0))
+
     const run = async <T,>(
       setLoading: (v: boolean) => void,
       setter: (v: T) => void,
@@ -140,6 +151,15 @@ export default function AdminPage() {
       setLoadingOrders(false)
     }
   }, [dateFrom, dateTo])
+
+  const fetchOperatorCount = useCallback(() => {
+  if (!companyId) return
+  supabase
+    .from('operators')
+    .select('id', { count: 'exact', head: true })
+    .eq('company_id', companyId)
+    .then(({ count }) => setOperatorCount(count ?? 0))
+}, [companyId])
 
   const fetchAllOrders = useCallback(async () => {
     try { setAllOrders(await getAllOrders()) }
@@ -202,6 +222,7 @@ export default function AdminPage() {
     setShowCatForm(false)
     setShowMotoboyForm(false)
     setShowCustomerForm(false)
+    setShowOperatorForm(false)
   }
 
   const handleClearFilter = () => {
@@ -252,6 +273,9 @@ export default function AdminPage() {
           showCustomerForm={showCustomerForm}
           orderSearch={orderSearch}
           onOrderSearchChange={v => { setOrderSearch(v); if (!v) setSearchedOrder(null) }}
+          operatorCount={operatorCount}              // ou buscar do banco se quiser
+          onNewOperator={() => setShowOperatorForm(true)}
+          showOperatorForm={showOperatorForm}
         />
 
         {error && (
@@ -342,6 +366,13 @@ export default function AdminPage() {
             setShowForm={setShowCustomerForm}
             companyId={companyId}
             onError={setError}
+          />
+        )}
+        {tab === 'operators' && (
+          <OperatorsView
+            showForm={showOperatorForm}
+            setShowForm={setShowOperatorForm}
+            onCountChange={fetchOperatorCount}
           />
         )}
         {tab === 'fiscal'   && <FiscalTab onError={setError} companyId={companyId} />}

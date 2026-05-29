@@ -13,6 +13,7 @@ export function CashTab() {
   const [openCash,    setOpenCash]    = useState<CashRegister | null | undefined>(undefined)
   const [openingTime, setOpeningTime] = useState('08:00')
   const [loading,     setLoading]     = useState(true)
+  const [showOperatorForm, setShowOperatorForm] = useState(false)
 
   const load = async () => {
     try {
@@ -95,7 +96,12 @@ export function CashTab() {
         </>
       )}
 
-      {subTab === 'operators' && <OperatorsView />}
+      {subTab === 'operators' && (
+        <OperatorsView
+          showForm={showOperatorForm}
+          setShowForm={setShowOperatorForm}
+        />
+      )}
     </div>
   )
 }

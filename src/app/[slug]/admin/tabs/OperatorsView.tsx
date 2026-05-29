@@ -32,23 +32,28 @@ async function getCompanyId(): Promise<string> {
   if (!co) throw new Error('Empresa não encontrada')
   return co.id
 }
-
+interface OperatorsViewProps {
+  showForm?: boolean
+  setShowForm?: (v: boolean) => void
+  onCountChange?: () => void
+}
 // ── componente ─────────────────────────────────────────────────────────────
-export function OperatorsView() {
+export function OperatorsView({ showForm: showFormProp, setShowForm: setShowFormProp, onCountChange }: OperatorsViewProps) {
+  const [internalShow, setInternalShow] = useState(false)
   const [companyId, setCompanyId] = useState<string>('')
   const [operators, setOperators] = useState<Operator[]>([])
   const [loading,   setLoading]   = useState(true)
   const [saving,    setSaving]    = useState(false)
   const [error,     setError]     = useState<string | null>(null)
-
-  const [showForm,  setShowForm]  = useState(false)
   const [editing,   setEditing]   = useState<Operator | null>(null)
   const [form,      setForm]      = useState<FormState>(EMPTY_FORM)
   const [showPin,   setShowPin]   = useState(false)
+  const showForm    = showFormProp    ?? internalShow
+  const setShowForm = setShowFormProp ?? setInternalShow
 
   // ── load ───────────────────────────────────────────────────────────────
   useEffect(() => {
-    ;(async () => {
+    (async () => {
       try {
         const cid = await getCompanyId()
         setCompanyId(cid)
@@ -69,6 +74,7 @@ export function OperatorsView() {
       .order('name', { ascending: true })
     if (error) throw error
     setOperators(data ?? [])
+    onCountChange?.()   // ← adicionar aqui
   }
 
   // ── abrir form ─────────────────────────────────────────────────────────
@@ -140,14 +146,6 @@ export function OperatorsView() {
             Cadastre os operadores que acessarão o PDV com nome e PIN.
           </p>
         </div>
-        {!showForm && (
-          <button
-            onClick={openCreate}
-            className="bg-black text-white text-sm px-4 py-2 rounded-lg hover:bg-gray-800 transition-colors"
-          >
-            + Novo operador
-          </button>
-        )}
       </div>
 
       {error && (
