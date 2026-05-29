@@ -156,8 +156,8 @@ export default function AdminLoginPage() {
         />
 
         {/* Decorative circles */}
-        <div className="absolute w-[280px] h-[280px] rounded-full bg-white/5 -bottom-16 -right-20 pointer-events-none" aria-hidden="true" />
-        <div className="absolute w-[150px] h-[150px] rounded-full bg-white/[0.06] top-10 -right-8 pointer-events-none" aria-hidden="true" />
+        <div className="absolute w-70 h-70 rounded-full bg-white/5 -bottom-16 -right-20 pointer-events-none" aria-hidden="true" />
+        <div className="absolute w-[150px] h-37.5 rounded-full bg-white/[0.06] top-10 -right-8 pointer-events-none" aria-hidden="true" />
         <div className="absolute w-[60px] h-[60px] rounded-full bg-white/[0.08] top-44 right-14 pointer-events-none" aria-hidden="true" />
 
         {/* Content */}
