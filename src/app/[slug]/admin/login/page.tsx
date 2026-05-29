@@ -164,7 +164,7 @@ export default function AdminLoginPage() {
         <div className="relative z-10">
           {/* Brand */}
           <div className="flex items-center gap-3 mb-12 md:mb-16">
-            <div className="w-10 h-10 rounded-[10px] bg-white/[0.13] flex items-center justify-center" aria-hidden="true">
+            <div className="w-10 h-10 rounded-[10px] bg-white/13 flex items-center justify-center" aria-hidden="true">
               <svg width="22" height="22" viewBox="0 0 28 28" fill="none">
                 <rect width="28" height="28" rx="7" fill="white" fillOpacity="0.15" />
                 <path d="M7 21L14 7l7 14H7z" fill="white" fillOpacity="0.9" />
