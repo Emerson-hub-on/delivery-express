@@ -291,7 +291,7 @@ export const Footer = ({ slug }: FooterProps) => {
           >
             <span>© {new Date().getFullYear()} webState. Todos os direitos reservados.</span>
             <span>
-              Desenvolvido com 🩵 por{' '}
+              Desenvolvido por{' '}
               <span className="font-medium" style={{ color: 'rgba(255,255,255,0.35)' }}>Emerson</span>
             </span>
           </div>
