@@ -203,7 +203,7 @@ export function AdminTabs({
               <ChevronIcon open={reportsOpen} />
             </button>
             {reportsOpen && tab === 'reports' && (
-              <div className="mt-1 ml-3 flex flex-col gap-0.5 border-l border-white/[0.08] pl-3">
+              <div className="mt-1 ml-3 flex flex-col gap-0.5 border-l border-white/8 pl-3">
                 {REPORT_SUB_TABS.map(s => (
                   <button key={s.id} onClick={() => { onReportSubTabChange(s.id); setMobileOpen(false) }}
                     className={`flex items-center gap-2.5 text-[13px] px-3 py-2 rounded-xl transition-all duration-150 font-medium w-full text-left
@@ -246,7 +246,7 @@ export function AdminTabs({
               <ChevronIcon open={billingOpen} />
             </button>
             {billingOpen && tab === 'billing' && (
-              <div className="mt-1 ml-3 flex flex-col gap-0.5 border-l border-white/[0.08] pl-3">
+              <div className="mt-1 ml-3 flex flex-col gap-0.5 border-l border-white/8 pl-3">
                 {BILLING_SUB_TABS.map(s => (
                   <button key={s.id} onClick={() => { onBillingSubTabChange(s.id); setMobileOpen(false) }}
                     className={`flex items-center gap-2.5 text-[13px] px-3 py-2 rounded-xl transition-all duration-150 font-medium w-full text-left
