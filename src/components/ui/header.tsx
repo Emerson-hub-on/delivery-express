@@ -7,7 +7,7 @@ import { signOut } from '@/services/auth'
 import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import { AuthModal } from '@/components/auth/AuthModal'
-import { X, Menu, Search, Clock, ShoppingBag } from 'lucide-react'
+import { X, Search, Clock, ShoppingBag, UserCircle2 } from 'lucide-react'
 import { useCompanyStore } from '@/stores/company-store'
 import { getProductsByCompany } from '@/services/product'
 import { Product } from '@/types/product'
@@ -114,9 +114,32 @@ export const Header = ({ slug, companyId }: HeaderProps) => {
           border-b border-zinc-200/80 dark:border-zinc-800 sticky top-0 z-40 shadow-sm">
           <div className="w-full max-w-7xl mx-auto px-6 flex items-center gap-4">
 
-            <button onClick={() => setMenuOpen(v => !v)}
-              className="p-2 rounded-lg text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors">
-              {menuOpen ? <X size={18} /> : <Menu size={18} />}
+            {/* Profile button */}
+            <button
+              onClick={() => loading ? null : user ? setMenuOpen(v => !v) : setShowAuth(true)}
+              className="relative w-9 h-9 rounded-full overflow-hidden border-2 border-zinc-200 dark:border-zinc-700
+                hover:border-red-400 dark:hover:border-red-500 transition-all shrink-0 bg-zinc-100 dark:bg-zinc-800
+                flex items-center justify-center"
+              title={user ? 'Minha conta' : 'Entrar'}
+            >
+              {user?.user_metadata?.avatar_url ? (
+                <img
+                  src={`https://www.gravatar.com/avatar/${btoa(user.email ?? '')}?d=mp&s=72`}
+                  alt="Avatar"
+                  className="w-full h-full object-cover"
+                  onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+                />
+              ) : null}
+              {/* Fallback icon always rendered underneath */}
+              <UserCircle2
+                size={22}
+                className={`absolute text-zinc-400 dark:text-zinc-500 ${user ? 'opacity-0' : 'opacity-100'}`}
+              />
+              {user && !user?.user_metadata?.avatar_url && (
+                <span className="text-xs font-bold text-zinc-600 dark:text-zinc-300 uppercase">
+                  {(user.email ?? '?')[0]}
+                </span>
+              )}
             </button>
 
             <div className="flex-1" />
@@ -151,13 +174,6 @@ export const Header = ({ slug, companyId }: HeaderProps) => {
               <span className={`w-1.5 h-1.5 rounded-full ${company?.isOpen ? 'bg-green-500' : 'bg-red-400'}`} />
               {company?.isOpen ? 'Aberto agora' : 'Fechado'}
             </span>
-
-            {!loading && !user && (
-              <button onClick={() => setShowAuth(true)}
-                className="text-sm text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors px-2">
-                Entrar
-              </button>
-            )}
 
             <CartSidebar />
           </div>
@@ -214,33 +230,38 @@ export const Header = ({ slug, companyId }: HeaderProps) => {
         </div>
 
         {/* Dropdown menu */}
-        {menuOpen && (
-          <div className="fixed top-14 left-4 w-64 bg-white dark:bg-zinc-900 shadow-xl border border-zinc-100 dark:border-zinc-800 rounded-2xl z-50 p-4 flex flex-col gap-4">
+        {menuOpen && user && (
+          <div className="fixed top-14 left-4 w-56 bg-white dark:bg-zinc-900 shadow-xl border border-zinc-100 dark:border-zinc-800 rounded-2xl z-50 p-4 flex flex-col gap-3">
+            {/* User info */}
+            <div className="flex items-center gap-2.5 pb-1">
+              <div className="w-8 h-8 rounded-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 flex items-center justify-center shrink-0 overflow-hidden">
+                <span className="text-xs font-bold text-zinc-600 dark:text-zinc-300 uppercase">
+                  {(user.email ?? '?')[0]}
+                </span>
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-zinc-800 dark:text-zinc-100 truncate">
+                  {user.user_metadata?.full_name?.split(' ')[0]
+                    ?? user.user_metadata?.name?.split(' ')[0]
+                    ?? user.email?.split('@')[0]}
+                </p>
+                <p className="text-[11px] text-zinc-400 truncate">{user.email}</p>
+              </div>
+            </div>
+            <div className="h-px bg-zinc-100 dark:bg-zinc-800" />
             <div className="flex items-center justify-between">
               <span className="text-sm text-zinc-600 dark:text-zinc-400">Tema</span>
               <ThemeToggle />
             </div>
+            <Link href={`/${slug}/meus-pedidos`} onClick={() => setMenuOpen(false)}
+              className="text-sm text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors">
+              Meus pedidos
+            </Link>
             <div className="h-px bg-zinc-100 dark:bg-zinc-800" />
-            {!loading && user && (
-              <div className="flex flex-col gap-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-green-500" />
-                  <span className="text-sm text-green-600 font-medium truncate">
-                    {user.user_metadata?.full_name?.split(' ')[0]
-                      ?? user.user_metadata?.name?.split(' ')[0]
-                      ?? user.email?.split('@')[0]}
-                  </span>
-                </div>
-                <Link href={`/${slug}/meus-pedidos`} onClick={() => setMenuOpen(false)}
-                  className="text-sm text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors">
-                  Meus pedidos
-                </Link>
-                <button onClick={handleLogout}
-                  className="text-left text-sm text-red-500 hover:text-red-600 transition-colors">
-                  Sair
-                </button>
-              </div>
-            )}
+            <button onClick={handleLogout}
+              className="text-left text-sm text-red-500 hover:text-red-600 transition-colors">
+              Sair da conta
+            </button>
           </div>
         )}
       </div>
