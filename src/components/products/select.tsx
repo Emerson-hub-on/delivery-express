@@ -128,6 +128,13 @@ export const ProductSelect = ({ companyId, layout = 'mobile' }: Props) => {
         {/* ── Left sidebar ── */}
         <aside className="w-56 shrink-0">
           <div className="sticky top-24 space-y-1">
+            {/* Label */}
+            {!loading && categories.length > 0 && (
+              <p className="text-[11px] font-bold uppercase tracking-widest text-zinc-800 dark:text-zinc-800 px-3 pb-2 pt-1">
+                Categorias
+              </p>
+            )}
+
             {/* Category list */}
             {!loading && !isSearching && categories.map(cat => (
               <button
@@ -136,14 +143,14 @@ export const ProductSelect = ({ companyId, layout = 'mobile' }: Props) => {
                 className={`
                   w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150
                   ${activeCategory === cat.name
-                    ? 'bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 font-semibold'
-                    : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800/60'
+                    ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-semibold'
+                    : 'text-zinc-500 dark:text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50/60 dark:hover:bg-blue-950/20'
                   }
                 `}
               >
                 <span className={`
                   inline-block w-1.5 h-1.5 rounded-full mr-2.5 mb-0.5 transition-colors
-                  ${activeCategory === cat.name ? 'bg-red-500' : 'bg-zinc-300 dark:bg-zinc-600'}
+                  ${activeCategory === cat.name ? 'bg-blue-500' : 'bg-zinc-300 dark:bg-zinc-600'}
                 `} />
                 {cat.label}
               </button>

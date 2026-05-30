@@ -1,7 +1,6 @@
 'use client'
 import { CartSidebar } from "../cart/sidebar"
 import { Logo } from "./logo"
-import { ThemeToggle } from "./theme-toggle"
 import { useAuth } from "@/hooks/useAuth"
 import { signOut } from '@/services/auth'
 import { useState, useRef, useEffect } from 'react'
@@ -249,10 +248,6 @@ export const Header = ({ slug, companyId }: HeaderProps) => {
               </div>
             </div>
             <div className="h-px bg-zinc-100 dark:bg-zinc-800" />
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-zinc-600 dark:text-zinc-400">Tema</span>
-              <ThemeToggle />
-            </div>
             <Link href={`/${slug}/meus-pedidos`} onClick={() => setMenuOpen(false)}
               className="text-sm text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors">
               Meus pedidos
