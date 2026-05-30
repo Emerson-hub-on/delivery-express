@@ -25,13 +25,24 @@ const CardapioPage = ({ companyId, slug, companyName, bannerUrl, logoUrl, minOrd
   }, [companyId])
 
   return (
-    <div className="w-full min-h-screen flex flex-col">
+    <div className="w-full min-h-screen flex flex-col bg-zinc-50 dark:bg-zinc-950">
       <Header slug={slug} companyId={companyId} />
-      <div className="flex-1 w-full max-w-2xl mx-auto px-4 pb-4">
+
+      {/* ── Desktop: two-column layout ── */}
+      <div className="hidden md:flex flex-1 w-full max-w-7xl mx-auto px-6 gap-8 py-8">
+        {/* Left sidebar — sticky category nav rendered inside ProductSelect */}
         <Suspense fallback={<TabsSkeleton />}>
-          <ProductSelect companyId={companyId} />
+          <ProductSelect companyId={companyId} layout="desktop" />
         </Suspense>
       </div>
+
+      {/* ── Mobile: single column ── */}
+      <div className="md:hidden flex-1 w-full px-4 pb-24">
+        <Suspense fallback={<TabsSkeleton />}>
+          <ProductSelect companyId={companyId} layout="mobile" />
+        </Suspense>
+      </div>
+
       <Footer slug={slug} />
     </div>
   )
