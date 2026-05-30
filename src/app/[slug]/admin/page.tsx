@@ -387,6 +387,7 @@ export default function AdminPage() {
           />
         )}
         {tab === 'settings' && <FiscalTab onError={setError} />}
+        {tab === 'store' && <StoreTab onError={setError} companyId={companyId} />}
         {tab === 'ifood'    && <IfoodSync />}
         
       </div>

@@ -1,5 +1,5 @@
 export type Tab =
   | 'products' | 'categories' | 'orders' | 'reports'
-  | 'motoboys' | 'fiscal' | 'settings'
+  | 'motoboys' | 'settings'
   | 'ifood' | 'customers'
-  | 'billing' | 'operators' | 'caixa' 
+  | 'billing' | 'operators' | 'caixa' | 'store'

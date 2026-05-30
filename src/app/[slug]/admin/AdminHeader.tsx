@@ -17,8 +17,8 @@ interface AdminHeaderProps {
   showCustomerForm: boolean
   orderSearch?: string
   onOrderSearchChange?: (v: string) => void
-  operatorCount:   number          // ← adicionar
-  onNewOperator:   () => void      // ← adicionar
+  operatorCount:    number
+  onNewOperator:    () => void
   showOperatorForm: boolean
 }
 
@@ -38,23 +38,23 @@ export function AdminHeader({
   showCustomerForm,
   orderSearch = '',
   onOrderSearchChange,
-  operatorCount,       // ← adicionar
-  onNewOperator,       // ← adicionar
-  showOperatorForm,    // ← adicionar
+  operatorCount,
+  onNewOperator,
+  showOperatorForm,
 }: AdminHeaderProps) {
   const subtitle: Partial<Record<Tab, string | null>> = {
     products:   `${productCount} produtos cadastrados`,
     categories: `${categoryCount} categorias cadastradas`,
     motoboys:   `${motoboyCount} motoboys cadastrados`,
     customers:  `${customerCount} clientes cadastrados`,
+    operators:  `${operatorCount} operadores cadastrados`,
     orders:     null,
     reports:    null,
-    fiscal:     'Emita e gerencie cupons fiscais (NFC-e)',
     billing:    'Gerencie notas fiscais de entrada e saída',
-    settings:   'Personalize o visual da sua loja',
+    settings:   'Configurações fiscais para emissão de NFC-e e NF-e',
+    store:      'Informações exibidas no site e no rodapé',
     ifood:      null,
-    operators: `${operatorCount} operadores cadastrados`,
-    caixa: 'Abertura, fechamento e histórico de turnos',
+    caixa:      'Abertura, fechamento e histórico de turnos',
   }
 
   return (
@@ -65,7 +65,6 @@ export function AdminHeader({
         )}
       </div>
       <div className="md:ml-auto mt-3 md:mt-0 flex items-center gap-2">
-        {/* Busca de pedido */}
         {tab === 'orders' && (
           <div className="relative">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>

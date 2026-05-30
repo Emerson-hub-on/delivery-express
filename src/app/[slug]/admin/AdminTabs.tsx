@@ -22,31 +22,33 @@ const BILLING_SUB_TABS: { id: BillingSubTab; label: string }[] = [
 
 const CADASTRO_TABS: Tab[] = ['products', 'categories', 'motoboys', 'customers', 'operators']
 
+// Abas do grupo Configurações
+const CONFIG_TABS: Tab[] = ['store', 'settings']
+
 const TAB_LABELS: Record<Tab, string> = {
   products:   'Produtos',
   categories: 'Categorias',
   orders:     'Pedidos',
   reports:    'Relatórios',
   motoboys:   'Motoboys',
-  fiscal:     'Fiscal',
   billing:    'Faturamento',
-  settings:   'Configurações',
+  settings:   'Config. Fiscal',
+  store:      'Perfil da Loja',
   ifood:      'iFood Sync',
   customers:  'Clientes',
   operators:  'Operadores',
   caixa:      'Caixa / PDV',
 }
 
-// SVG paths para cada aba
 const TAB_ICONS: Record<Tab, string> = {
   products:   'M20 7H4a2 2 0 00-2 2v10a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2zM4 5h16M9 3h6',
   categories: 'M4 6h16M4 10h16M4 14h16M4 18h16',
   orders:     'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2',
   reports:    'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z',
   motoboys:   'M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0',
-  fiscal:     'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z',
   billing:    'M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z',
   settings:   'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z',
+  store:      'M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2V9z M9 22V12h6v10',
   ifood:      'M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9',
   customers:  'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z',
   operators:  'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z',
@@ -54,10 +56,10 @@ const TAB_ICONS: Record<Tab, string> = {
 }
 
 const REPORT_SUB_TABS: { id: ReportSubTab; label: string; path: string }[] = [
-  { id: 'overview',   label: 'Visão Geral',            path: 'M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z' },
-  { id: 'products',   label: 'Mais vendidos',           path: 'M13 7h8m0 0v8m0-8l-8 8-4-4-6 6' },
-  { id: 'categories', label: 'Por Categoria',           path: 'M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z' },
-  { id: 'inventory',  label: 'Inventário',              path: 'M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4' },
+  { id: 'overview',   label: 'Visão Geral',  path: 'M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z' },
+  { id: 'products',   label: 'Mais vendidos', path: 'M13 7h8m0 0v8m0-8l-8 8-4-4-6 6' },
+  { id: 'categories', label: 'Por Categoria', path: 'M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z' },
+  { id: 'inventory',  label: 'Inventário',    path: 'M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4' },
 ]
 
 function Icon({ path, size = 16 }: { path: string; size?: number }) {
@@ -89,6 +91,7 @@ export function AdminTabs({
   const [cadastroOpen, setCadastroOpen] = useState(() => CADASTRO_TABS.includes(tab))
   const [reportsOpen,  setReportsOpen]  = useState(() => tab === 'reports')
   const [billingOpen,  setBillingOpen]  = useState(() => tab === 'billing')
+  const [configOpen,   setConfigOpen]   = useState(() => CONFIG_TABS.includes(tab))
 
   const handleChange = (t: Tab) => { onChange(t); setMobileOpen(false) }
 
@@ -97,21 +100,27 @@ export function AdminTabs({
     else setReportsOpen(o => !o)
   }
 
+  const handleConfigClick = () => {
+    if (!CONFIG_TABS.includes(tab)) {
+      onChange('store')
+      setConfigOpen(true)
+    } else {
+      setConfigOpen(o => !o)
+    }
+  }
+
   const sidebarContent = (
     <div className="flex flex-col h-full overflow-hidden">
 
-      {/* ── Dot-grid overlay ── */}
+      {/* Dot-grid overlay */}
       <div className="absolute inset-0 pointer-events-none z-0" aria-hidden="true"
         style={{
           backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z' fill='%23fff' fill-opacity='0.03'/%3E%3C/svg%3E")`,
         }}
       />
-
-      {/* ── Círculos decorativos ── */}
       <div className="absolute w-48 h-48 rounded-full bg-white/4 -bottom-10 -right-16 pointer-events-none z-0" aria-hidden="true" />
       <div className="absolute w-24 h-24 rounded-full bg-white/5 top-20 -right-8 pointer-events-none z-0" aria-hidden="true" />
 
-      {/* ── Conteúdo ── */}
       <div className="relative z-10 flex flex-col h-full py-6 px-3 overflow-hidden">
 
         {/* Logo */}
@@ -137,7 +146,7 @@ export function AdminTabs({
         <div className="flex-1 overflow-y-auto flex flex-col gap-0.5 pr-0.5
           scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
 
-          {/* Cadastros (grupo colapsável) */}
+          {/* Cadastros */}
           <div>
             <button
               onClick={() => setCadastroOpen(o => !o)}
@@ -179,7 +188,7 @@ export function AdminTabs({
             {TAB_LABELS.orders}
           </button>
 
-          {/* Caixa / PDV — destaque laranja */}
+          {/* Caixa / PDV */}
           <button onClick={() => handleChange('caixa')}
             className={`flex items-center gap-2.5 text-[13px] px-3 py-2.5 rounded-xl transition-all duration-150 font-semibold w-full text-left
               ${tab === 'caixa'
@@ -261,17 +270,38 @@ export function AdminTabs({
             )}
           </div>
 
-          {/* Fiscal + Configurações */}
-          {(['fiscal', 'settings'] as Tab[]).map(t => (
-            <button key={t} onClick={() => handleChange(t)}
-              className={`flex items-center gap-2.5 text-[13px] px-3 py-2.5 rounded-xl transition-all duration-150 font-semibold w-full text-left
-                ${tab === t
-                  ? 'bg-[#1a4a8a] text-white shadow-sm'
-                  : 'text-white/50 hover:text-white/80 hover:bg-white/[0.07]'}`}>
-              <Icon path={TAB_ICONS[t]} />
-              {TAB_LABELS[t]}
+          {/* ── Configurações (grupo colapsável) ── */}
+          <div>
+            <button
+              onClick={handleConfigClick}
+              className={`flex items-center justify-between w-full px-3 py-2.5 rounded-xl text-[13px] font-semibold transition-all duration-150
+                ${CONFIG_TABS.includes(tab)
+                  ? 'bg-white/12 text-white'
+                  : 'text-white/50 hover:text-white/80 hover:bg-white/[0.07]'}`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Icon path={TAB_ICONS.settings} />
+                Configurações
+              </div>
+              <ChevronIcon open={configOpen} />
             </button>
-          ))}
+
+            {configOpen && (
+              <div className="mt-1 ml-3 flex flex-col gap-0.5 border-l border-white/8 pl-3">
+                {CONFIG_TABS.map(t => (
+                  <button key={t} onClick={() => handleChange(t)}
+                    className={`flex items-center gap-2.5 text-[13px] px-3 py-2 rounded-xl transition-all duration-150 font-medium w-full text-left
+                      ${tab === t
+                        ? 'bg-[#1a4a8a] text-white shadow-sm'
+                        : 'text-white/50 hover:text-white/80 hover:bg-white/[0.07]'}`}>
+                    <Icon path={TAB_ICONS[t]} />
+                    {TAB_LABELS[t]}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
         </div>
 
         {/* Footer */}
