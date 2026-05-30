@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import {
   Save, Upload, CheckCircle2, Loader2, ImageIcon,
-  Clock, Globe, Phone, Mail, MapPin, Facebook, Instagram, Twitter
+  Clock, Globe, Phone, Mail, MapPin, Facebook, Instagram, Twitter, MessageCircle
 } from 'lucide-react'
 
 interface StoreProfile {
@@ -18,6 +18,7 @@ interface StoreProfile {
   facebook_url: string | null
   instagram_url: string | null
   twitter_url: string | null
+  whatsapp: string | null
   is_open: boolean
   min_order: number
 }
@@ -34,6 +35,7 @@ const EMPTY: StoreProfile = {
   facebook_url: null,
   instagram_url: null,
   twitter_url: null,
+  whatsapp: null,
   is_open: true,
   min_order: 0,
 }
@@ -103,6 +105,7 @@ export function StoreTab({ onError, companyId }: StoreTabProps) {
             facebook_url:  data.facebook_url  ?? null,
             instagram_url: data.instagram_url ?? null,
             twitter_url:   data.twitter_url   ?? null,
+            whatsapp:      data.whatsapp       ?? null,
             is_open:       data.is_open       ?? true,
             min_order:     data.min_order      ?? 0,
           })
@@ -157,6 +160,7 @@ export function StoreTab({ onError, companyId }: StoreTabProps) {
         facebook_url:  form.facebook_url || null,
         instagram_url: form.instagram_url || null,
         twitter_url:   form.twitter_url  || null,
+        whatsapp:      form.whatsapp?.replace(/\D/g, '') || null,
         is_open:       form.is_open,
         min_order:     form.min_order,
         updated_at:    new Date().toISOString(),
@@ -410,7 +414,7 @@ export function StoreTab({ onError, companyId }: StoreTabProps) {
           <Globe size={14} className="text-gray-400" /> Redes Sociais
         </h3>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div>
             <label className={labelCls}>Facebook</label>
             <div className="relative">
@@ -448,6 +452,23 @@ export function StoreTab({ onError, companyId }: StoreTabProps) {
                 placeholder="https://x.com/sualoja"
               />
             </div>
+          </div>
+
+          <div>
+            <label className={labelCls}>WhatsApp</label>
+            <div className="relative">
+              <MessageCircle size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#25D366]" />
+              <input
+                className={`${inputCls} pl-8`}
+                value={form.whatsapp ?? ''}
+                onChange={e => set('whatsapp', e.target.value.replace(/\D/g, '').slice(0, 13))}
+                placeholder="5511999999999"
+                maxLength={13}
+              />
+            </div>
+            <p className="text-[10px] text-gray-400 mt-1">
+              Só o número com DDD e código do país (ex: 5511999999999)
+            </p>
           </div>
         </div>
       </div>
