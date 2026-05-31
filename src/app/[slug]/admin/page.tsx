@@ -46,21 +46,17 @@ export default function AdminPage() {
   const [authReady,  setAuthReady]  = useState(false)
   const [companyId,  setCompanyId]  = useState<string>('')
 
-  useEffect(() => {
-    supabase.auth.getSession().then(async ({ data, error }) => {
-      if (error || !data.session) {
-        router.replace(`/${params?.slug}/admin/login`)
-        return
-      }
-      const { data: company } = await supabase
-        .from('companies')
-        .select('id')
-        .eq('slug', params.slug)
-        .single()
-      if (company) setCompanyId(company.id)
-      setAuthReady(true)
-    })
-  }, [])
+// ✅ Adicione o filtro do usuário autenticado
+useEffect(() => {
+  supabase.auth.getSession().then(async ({ data, error }) => {
+    if (error || !data.session) {
+      router.replace(`/${params?.slug}/admin/login`)
+      return
+    }
+    setCompanyId(data.session.user.id) // ← direto, sem query extra
+    setAuthReady(true)
+  })
+}, [])
 
   // ── Tabs & UI state ─────────────────────────────────────────────────────────
   const [tab,   setTab]   = useState<Tab>('products')
@@ -124,7 +120,7 @@ export default function AdminPage() {
     run(setLoadingProducts, setProducts, getAllProducts)
     run(setLoadingCats,     setCategories, getAllCategories)
     run(setLoadingMotoboys, setMotoboys, getAllMotoboys)
-    run(setLoadingCustomers, setCustomers, () => getAllCustomers(companyId))
+    run(setLoadingCustomers, setCustomers, getAllCustomers)
   }, [authReady])
 
   // ── Busca de pedido por código ──────────────────────────────────────────────
@@ -189,7 +185,7 @@ export default function AdminPage() {
     if (!authReady) return
     const channel = supabase
       .channel('admin-orders-realtime')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' },
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders', filter: `company_id=eq.${companyId}` },
         (payload) => {
           const newOrder  = payload.new as Order
           const orderDate = newOrder.created_at
@@ -202,7 +198,7 @@ export default function AdminPage() {
           setAllOrders(prev => prev.some(o => o.id === newOrder.id) ? prev : [newOrder, ...prev])
         }
       )
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders' },
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders',filter: `company_id=eq.${companyId}` },
         (payload) => {
           const incoming = payload.new as Order
           const patch    = (prev: Order[]) => prev.map(o => o.id !== incoming.id ? o : { ...o, ...incoming })

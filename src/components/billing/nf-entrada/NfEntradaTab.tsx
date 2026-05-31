@@ -2,7 +2,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { VincularItensCard } from './VincularItensCard'
-import { NotaCard } from './NotaCard'
+import { NfEntradaDetalhe } from './NfEntradaDetalhe'
 import {
   type NfEntrada,
   type ItemNota,
@@ -15,6 +15,18 @@ import {
 interface Props {
   companyId: string
   onError: (msg: string) => void
+}
+
+function fmtMoney(v: number) {
+  return v.toLocaleString('pt-BR', { minimumFractionDigits: 2 })
+}
+
+function fmtDate(iso: string) {
+  return new Date(iso + 'T00:00:00').toLocaleDateString('pt-BR')
+}
+
+function fmtCnpj(v: string) {
+  return v.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5')
 }
 
 export function NfEntradaTab({ companyId, onError }: Props) {
@@ -30,13 +42,15 @@ export function NfEntradaTab({ companyId, onError }: Props) {
   const [cardsDescartados, setCardsDescartados]   = useState<Set<string>>(new Set())
   const [excluindo, setExcluindo] = useState<string | null>(null)
 
+  // ── Detalhe ────────────────────────────────────────────────
+  const [notaDetalhe, setNotaDetalhe] = useState<NfEntrada | null>(null)
+
   const xmlInputRef = useRef<HTMLInputElement>(null)
 
   // ── Config ─────────────────────────────────────────────────
-
   useEffect(() => {
     supabase
-      .from('fiscal_config')
+      .from('fiscal_configs')
       .select('cpf')
       .eq('company_id', companyId)
       .single()
@@ -44,7 +58,6 @@ export function NfEntradaTab({ companyId, onError }: Props) {
   }, [companyId])
 
   // ── Carregamento de notas ──────────────────────────────────
-
   const loadNotas = useCallback(async () => {
     setLoading(true)
     try {
@@ -87,7 +100,6 @@ export function NfEntradaTab({ companyId, onError }: Props) {
   useEffect(() => { loadNotas() }, [loadNotas])
 
   // ── Sync SEFAZ ─────────────────────────────────────────────
-
   const handleSync = async () => {
     setSyncing(true)
     try {
@@ -109,7 +121,6 @@ export function NfEntradaTab({ companyId, onError }: Props) {
   }
 
   // ── Importar XML ───────────────────────────────────────────
-
   const handleImportXml = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? [])
     if (!files.length) return
@@ -129,8 +140,6 @@ export function NfEntradaTab({ companyId, onError }: Props) {
           body: JSON.stringify({ companyId, xmlContent }),
         })
         if (!res.ok) {
-          const err = await res.json()
-          console.error(`Erro em ${file.name}:`, err.message)
           erros++
         } else {
           const result = await res.json() as {
@@ -173,46 +182,7 @@ export function NfEntradaTab({ companyId, onError }: Props) {
     setImporting(false)
   }
 
-  // ── Manifestação ───────────────────────────────────────────
-
-  const handleManifestar = async (chave: string, evento: Evento) => {
-    const confirmMsg = CONFIRM_MESSAGES[evento]
-    if (confirmMsg && !window.confirm(`${confirmMsg} Esta ação pode ser desfeita reabrindo a nota.`)) return
-    try {
-      const res = await fetch('/api/fiscal/nf-entrada/manifestar', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ companyId, chave, evento }),
-      })
-      if (!res.ok) throw new Error('Erro ao manifestar')
-      await loadNotas()
-    } catch (e) {
-      onError(e instanceof Error ? e.message : 'Erro ao manifestar')
-    }
-  }
-
-  // ── Exclusão ───────────────────────────────────────────────
-
-  const handleExcluir = async (chave: string) => {
-    if (!window.confirm('Tem certeza que deseja excluir esta nota permanentemente? Esta ação não pode ser desfeita.')) return
-    setExcluindo(chave)
-    try {
-      const res = await fetch('/api/fiscal/nf-entrada/excluir', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ companyId, chave }),
-      })
-      if (!res.ok) throw new Error('Erro ao excluir nota')
-      await loadNotas()
-    } catch (e) {
-      onError(e instanceof Error ? e.message : 'Erro ao excluir')
-    } finally {
-      setExcluindo(null)
-    }
-  }
-
-  // ── Cards de vinculação ────────────────────────────────────
-
+  // ── Handlers de vinculação ─────────────────────────────────
   const handleDismissCard = (chave: string) =>
     setCardsDescartados(prev => new Set([...prev, chave]))
 
@@ -223,8 +193,18 @@ export function NfEntradaTab({ companyId, onError }: Props) {
 
   const cardsVisiveis = notasParaVincular.filter(n => !cardsDescartados.has(n.chave))
 
-  // ── Filtros ────────────────────────────────────────────────
+  // ── Detalhe: updated / deleted ─────────────────────────────
+  const handleNotaUpdated = (updated: NfEntrada) => {
+    setNotas(prev => prev.map(n => n.chave === updated.chave ? updated : n))
+    setNotaDetalhe(updated)
+  }
 
+  const handleNotaDeleted = (chave: string) => {
+    setNotas(prev => prev.filter(n => n.chave !== chave))
+    setNotaDetalhe(null)
+  }
+
+  // ── Filtros ────────────────────────────────────────────────
   const filtered = notas.filter(n => {
     const matchStatus = statusFilter === 'todas' || n.status === statusFilter
     const q = search.toLowerCase()
@@ -239,8 +219,21 @@ export function NfEntradaTab({ companyId, onError }: Props) {
 
   const totalValor = filtered.reduce((s, n) => s + n.valor_total, 0)
 
-  // ── Render ─────────────────────────────────────────────────
+  // ── Vista de detalhe ───────────────────────────────────────
+  if (notaDetalhe) {
+    return (
+      <NfEntradaDetalhe
+        nota={notaDetalhe}
+        companyId={companyId}
+        onBack={() => setNotaDetalhe(null)}
+        onUpdated={handleNotaUpdated}
+        onDeleted={handleNotaDeleted}
+        onError={onError}
+      />
+    )
+  }
 
+  // ── Vista de lista ─────────────────────────────────────────
   return (
     <div className="space-y-5">
 
@@ -249,7 +242,7 @@ export function NfEntradaTab({ companyId, onError }: Props) {
         <div>
           <h2 className="text-lg font-semibold text-gray-800">Entrada de Nota Fiscal</h2>
           <p className="text-xs text-gray-400 mt-0.5">
-            Notas fiscais recebidas (NF-e / NFC-e) destinadas à empresa
+            Notas fiscais recebidas (NF-e) destinadas à empresa
           </p>
         </div>
         <div className="flex flex-col sm:flex-row sm:items-center gap-2">
@@ -314,7 +307,7 @@ export function NfEntradaTab({ companyId, onError }: Props) {
               <>{importResult.erros} arquivo{importResult.erros !== 1 ? 's' : ''} com erro.</>
             )}
           </span>
-          <button onClick={() => setImportResult(null)} className="text-xs opacity-60 hover:opacity-100 transition-opacity shrink-0">✕</button>
+          <button onClick={() => setImportResult(null)} className="text-xs opacity-60 hover:opacity-100 shrink-0">✕</button>
         </div>
       )}
 
@@ -350,7 +343,7 @@ export function NfEntradaTab({ companyId, onError }: Props) {
           { label: 'Total encontradas', value: notas.length,                                              color: 'text-gray-700' },
           { label: 'Pendentes',         value: notas.filter(n => n.status === 'pendente').length,         color: 'text-yellow-600' },
           { label: 'Confirmadas',       value: notas.filter(n => n.status === 'confirmada').length,       color: 'text-green-600' },
-          { label: 'Valor filtrado',    value: `R$ ${totalValor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, color: 'text-blue-600' },
+          { label: 'Valor filtrado',    value: `R$ ${fmtMoney(totalValor)}`,                              color: 'text-blue-600' },
         ] as const).map(card => (
           <div key={card.label} className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
             <p className="text-xs text-gray-400">{card.label}</p>
@@ -370,13 +363,13 @@ export function NfEntradaTab({ companyId, onError }: Props) {
           <span className="text-4xl">📥</span>
           <p className="text-sm font-medium">Nenhuma nota encontrada</p>
           <p className="text-xs text-center px-4">
-            Clique em &ldquo;Consultar SEFAZ&rdquo; para buscar notas destinadas à empresa,
-            ou em &ldquo;Importar XML&rdquo; para carregar arquivos manualmente
+            Clique em "Consultar SEFAZ" para buscar notas destinadas à empresa,
+            ou em "Importar XML" para carregar arquivos manualmente
           </p>
         </div>
       ) : (
         <>
-          {/* Tabela — desktop */}
+          {/* Tabela desktop */}
           <div className="hidden md:block bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -392,7 +385,11 @@ export function NfEntradaTab({ companyId, onError }: Props) {
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {filtered.map(nota => (
-                    <tr key={nota.chave} className="hover:bg-gray-50 transition-colors">
+                    <tr
+                      key={nota.chave}
+                      className="hover:bg-gray-50 transition-colors cursor-pointer"
+                      onClick={() => setNotaDetalhe(nota)}
+                    >
                       <td className="px-4 py-3">
                         <p className="font-medium text-gray-800">Nº {nota.numero} / {nota.serie}</p>
                         <p className="text-[10px] text-gray-400 font-mono mt-0.5 truncate max-w-[10rem]" title={nota.chave}>
@@ -401,56 +398,30 @@ export function NfEntradaTab({ companyId, onError }: Props) {
                       </td>
                       <td className="px-4 py-3">
                         <p className="font-medium text-gray-800 truncate max-w-[12rem]">{nota.emitente_razao}</p>
-                        <p className="text-xs text-gray-400">
-                          {nota.emitente_cnpj.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5')}
-                        </p>
+                        <p className="text-xs text-gray-400">{fmtCnpj(nota.emitente_cnpj)}</p>
                       </td>
                       <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
-                        {new Date(nota.data_emissao).toLocaleDateString('pt-BR')}
+                        {fmtDate(nota.data_emissao)}
                       </td>
                       <td className="px-4 py-3 text-right font-medium text-gray-800 whitespace-nowrap">
-                        R$ {nota.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        R$ {fmtMoney(nota.valor_total)}
                       </td>
                       <td className="px-4 py-3 text-center">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLOR[nota.status]}`}>
                           {STATUS_LABEL[nota.status]}
                         </span>
+                        {nota.requer_revisao && (
+                          <span className="ml-1 text-[10px] text-orange-600">⚠</span>
+                        )}
                       </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center justify-center gap-1.5 flex-wrap">
-                          {nota.status === 'pendente' && (
-                            <>
-                              <button onClick={() => handleManifestar(nota.chave, 'ciencia')}
-                                className="text-xs px-2 py-1 rounded bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors">Ciência</button>
-                              <button onClick={() => handleManifestar(nota.chave, 'confirmacao')}
-                                className="text-xs px-2 py-1 rounded bg-green-50 text-green-600 hover:bg-green-100 transition-colors">Confirmar</button>
-                              <button onClick={() => handleManifestar(nota.chave, 'recusa')}
-                                className="text-xs px-2 py-1 rounded bg-red-50 text-red-600 hover:bg-red-100 transition-colors">Recusar</button>
-                              <button onClick={() => handleManifestar(nota.chave, 'cancelamento')}
-                                className="text-xs px-2 py-1 rounded bg-orange-50 text-orange-600 hover:bg-orange-100 transition-colors">Cancelar</button>
-                            </>
-                          )}
-                          {nota.status === 'confirmada' && (
-                            <button onClick={() => handleManifestar(nota.chave, 'cancelamento')}
-                              className="text-xs px-2 py-1 rounded bg-orange-50 text-orange-600 hover:bg-orange-100 transition-colors">Cancelar</button>
-                          )}
-                          {(nota.status === 'recusada' || nota.status === 'cancelada') && (
-                            <button onClick={() => handleManifestar(nota.chave, 'reabrir')}
-                              className="text-xs px-2 py-1 rounded bg-yellow-50 text-yellow-600 hover:bg-yellow-100 transition-colors">Reabrir</button>
-                          )}
-                          {nota.xml_url && (
-                            <a href={nota.xml_url} target="_blank" rel="noopener noreferrer"
-                              className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors">XML</a>
-                          )}
-                          <button
-                            onClick={() => handleExcluir(nota.chave)}
-                            disabled={excluindo === nota.chave}
-                            className="text-xs px-2 py-1 rounded bg-red-50 text-red-500 hover:bg-red-100
-                              transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                          >
-                            {excluindo === nota.chave ? '...' : 'Excluir'}
-                          </button>
-                        </div>
+                      <td className="px-4 py-3 text-center" onClick={e => e.stopPropagation()}>
+                        <button
+                          onClick={() => setNotaDetalhe(nota)}
+                          className="text-xs px-3 py-1 rounded-lg bg-gray-100 text-gray-600
+                            hover:bg-gray-200 transition-colors"
+                        >
+                          Ver detalhes →
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -462,16 +433,32 @@ export function NfEntradaTab({ companyId, onError }: Props) {
             </div>
           </div>
 
-          {/* Cards — mobile */}
+          {/* Cards mobile */}
           <div className="md:hidden space-y-3">
             {filtered.map(nota => (
-              <NotaCard
+              <button
                 key={nota.chave}
-                nota={nota}
-                excluindo={excluindo}
-                onManifestar={handleManifestar}
-                onExcluir={handleExcluir}
-              />
+                onClick={() => setNotaDetalhe(nota)}
+                className="w-full text-left bg-white rounded-xl border border-gray-100 shadow-sm p-4 space-y-3 hover:border-gray-300 transition-colors"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-gray-800 text-sm">Nº {nota.numero} / {nota.serie}</p>
+                    <p className="text-[10px] text-gray-400 font-mono mt-0.5 truncate">{nota.chave}</p>
+                  </div>
+                  <span className={`shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLOR[nota.status]}`}>
+                    {STATUS_LABEL[nota.status]}
+                  </span>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-700 font-medium truncate">{nota.emitente_razao}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">{fmtCnpj(nota.emitente_cnpj)}</p>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-500 text-xs">{fmtDate(nota.data_emissao)}</span>
+                  <span className="font-semibold text-gray-800 text-sm">R$ {fmtMoney(nota.valor_total)}</span>
+                </div>
+              </button>
             ))}
             <p className="text-xs text-gray-400 text-center pb-2">
               {filtered.length} nota{filtered.length !== 1 ? 's' : ''} exibida{filtered.length !== 1 ? 's' : ''}

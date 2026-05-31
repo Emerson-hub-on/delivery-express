@@ -169,7 +169,7 @@ export async function POST(req: NextRequest) {
 
     // 1. Busca configuração fiscal
     const { data: cfg, error: cfgError } = await supabase
-      .from('fiscal_config')
+      .from('fiscal_configs')
       .select(`
         cnpj,
         cpf,

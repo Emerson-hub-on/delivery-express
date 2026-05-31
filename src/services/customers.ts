@@ -30,15 +30,12 @@ async function parseSupabaseError(
   return error.message ?? 'Erro desconhecido.'
 }
 
-export async function getAllCustomers(companyId?: string): Promise<Customer[]> {
-  let q = supabase
+export async function getAllCustomers(): Promise<Customer[]> {
+  const { data, error } = await supabase
     .from('customers')
     .select('*')
     .order('created_at', { ascending: false })
 
-  if (companyId) q = q.eq('company_id', companyId)
-
-  const { data, error } = await q
   if (error) throw error
   return data as Customer[]
 }

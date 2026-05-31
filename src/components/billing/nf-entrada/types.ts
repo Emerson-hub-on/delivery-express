@@ -11,6 +11,11 @@ export interface NfEntrada {
   xml_url?: string | null
   itens_nota?: ItemNota[]
   created_at?: string
+  // campos adicionais do banco
+  requer_revisao?: boolean
+  finalidade?: string | null
+  itens_convertidos?: unknown | null
+  xml_raw?: string | null
 }
 
 export interface ItemNota {
@@ -23,6 +28,8 @@ export interface ItemNota {
   valor_total: number
   produto_id: number | null
   produto_nome: string | null
+  cfop: string   
+  cst: string | number
 }
 
 export interface ProdutoBusca {

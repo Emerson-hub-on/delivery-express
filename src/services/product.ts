@@ -1,20 +1,37 @@
 import { supabase } from '@/lib/supabase'
 import { CategoryItem, Product } from '@/types/product'
 
+// ✅ Busca o company_id real a partir do user
 async function getCompanyId(): Promise<string> {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Não autenticado')
-  return user.id
+
+  const { data: company, error } = await supabase
+    .from('companies')
+    .select('id')
+    .eq('user_id', user.id)
+    .single()
+
+  if (error || !company) throw new Error('Empresa não encontrada')
+  return company.id  // ← company.id, não user.id
 }
 
 export const getAllProducts = async (): Promise<Product[]> => {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return []
 
+  const { data: company } = await supabase
+    .from('companies')
+    .select('id')
+    .eq('user_id', user.id)
+    .single()
+
+  if (!company) return []
+
   const { data, error } = await supabase
     .from('products')
     .select('*')
-    .eq('company_id', user.id)
+    .eq('company_id', company.id)  // ← company.id
     .order('created_at', { ascending: false })
 
   if (error) throw new Error(error.message)

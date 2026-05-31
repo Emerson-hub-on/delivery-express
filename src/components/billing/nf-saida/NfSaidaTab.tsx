@@ -115,7 +115,7 @@ export function NfSaidaTab({ companyId, onError }: Props) {
     async function fetchEmitente() {
       setLoadingEmitente(true)
       const { data, error } = await supabase
-        .from('fiscal_config')
+        .from('fiscal_configs')
         .select('razao_social, cnpj, ie, logradouro, numero, bairro, municipio, uf, cep, telefone')
         .eq('company_id', companyId)
         .single()

@@ -1,80 +1,132 @@
-// lib/fiscal/conversao-cfop-cst.ts
-
 import { createClient } from '@supabase/supabase-js'
+
+export type Finalidade =
+  | 'revenda'
+  | 'uso_consumo'
+  | 'ativo'
+  | 'industrializacao'
+  | 'devolucao'
+  | 'bonificacao'
+  | 'outros'
+
+export type ItemParaConverter = {
+  cfop: string
+  cst: string
+}
+
+export type ItemConvertido = {
+  cfop_origem: string
+  cst_origem: string
+  finalidade: Finalidade
+  cfop_entrada: string
+  cst_entrada: string
+  convertido: boolean
+}
+
+type RegraConversao = {
+  cfop_origem: string
+  cst_origem: string
+  crt: number
+  cfop_entrada: string
+  cst_entrada: string
+  finalidade: string
+}
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-export type Finalidade =
-  'revenda' | 'uso_consumo' | 'ativo_imobilizado' | 'bonificacao' | 'outros'
-
-export interface ConversaoItem {
-  cfop_origem:  string
-  cst_origem:   string
-  cfop_entrada: string
-  cst_entrada:  string
-  finalidade:   Finalidade
-  convertido:   boolean  // false = usou fallback automático
-}
-
-/** Converte CFOP automaticamente pelo dígito (5→1, 6→2, 7→3) */
-function converteCfopFallback(cfop: string): string {
-  const map: Record<string, string> = { '5': '1', '6': '2', '7': '3' }
-  return (map[cfop[0]] ?? cfop[0]) + cfop.slice(1)
-}
-
-export async function converterCfopCst({
-  companyId,
-  itens,
-  finalidade = 'revenda',
-}: {
-  companyId: string
-  itens: Array<{ cfop: string; cst: string }>
-  finalidade?: Finalidade
-}): Promise<ConversaoItem[]> {
-
-  // Busca o CRT da empresa
-  const { data: cfg } = await supabaseAdmin
-    .from('fiscal_config')
+/**
+ * Busca o CRT da empresa para selecionar as regras corretas.
+ * CRT 1 = Simples Nacional, CRT 3 = Regime Normal (Lucro Real/Presumido).
+ */
+async function getCrtEmpresa(companyId: string): Promise<number> {
+  const { data } = await supabaseAdmin
+    .from('companies')
     .select('crt')
-    .eq('company_id', companyId)
-    .single()
+    .eq('id', companyId)
+    .single<{ crt: number }>()
 
-  const crt = cfg?.crt ?? 1
+  return data?.crt ?? 3
+}
 
-  // Busca todas as conversões disponíveis para esse CRT
-  const { data: conversoes } = await supabaseAdmin
+/**
+ * Busca todas as regras de conversão para o CRT e finalidade informados.
+ * Carrega uma vez e aplica para todos os itens da nota.
+ */
+async function buscarRegras(
+  crt: number,
+  finalidade: Finalidade
+): Promise<RegraConversao[]> {
+  const { data, error } = await supabaseAdmin
     .from('cfop_cst_conversao')
-    .select('*')
+    .select('cfop_origem, cst_origem, crt, cfop_entrada, cst_entrada, finalidade')
     .eq('crt', crt)
     .eq('finalidade', finalidade)
 
-  return itens.map(item => {
-    const regra = conversoes?.find(
-      c => c.cfop_origem === item.cfop && c.cst_origem === item.cst
-    )
+  if (error) throw new Error(`Erro ao buscar regras de conversão: ${error.message}`)
+  return (data ?? []) as RegraConversao[]
+}
 
-    if (regra) {
+/**
+ * Converte uma lista de pares CFOP/CST de saída para os equivalentes de entrada,
+ * conforme as regras cadastradas na tabela cfop_cst_conversao.
+ *
+ * Lógica de match (prioridade decrescente):
+ *   1. cfop_origem + cst_origem exatos
+ *   2. cfop_origem + cst_origem vazio/curinga ('*' ou '')
+ *
+ * Se nenhuma regra for encontrada, retorna os valores originais e marca convertido=false.
+ */
+export async function converterCfopCst(params: {
+  companyId: string
+  itens: ItemParaConverter[]
+  finalidade: Finalidade
+}): Promise<ItemConvertido[]> {
+  const { companyId, itens, finalidade } = params
+
+  if (itens.length === 0) return []
+
+  const crt = await getCrtEmpresa(companyId)
+  const regras = await buscarRegras(crt, finalidade)
+
+  // Indexa para lookup O(1): "cfop_origem|cst_origem" -> regra
+  const mapaExato = new Map<string, RegraConversao>()
+  const mapaCuringa = new Map<string, RegraConversao>() // só cfop, cst vazio/*
+
+  for (const r of regras) {
+    if (r.cst_origem && r.cst_origem !== '*') {
+      mapaExato.set(`${r.cfop_origem}|${r.cst_origem}`, r)
+    } else {
+      mapaCuringa.set(r.cfop_origem, r)
+    }
+  }
+
+  return itens.map((item): ItemConvertido => {
+    const regra =
+      mapaExato.get(`${item.cfop}|${item.cst}`) ??
+      mapaCuringa.get(item.cfop) ??
+      null
+
+    if (!regra) {
       return {
-        cfop_origem:  item.cfop,
-        cst_origem:   item.cst,
-        cfop_entrada: regra.cfop_entrada,
-        cst_entrada:  regra.cst_entrada,
+        cfop_origem: item.cfop,
+        cst_origem:  item.cst,
         finalidade,
-        convertido:   true,
+        cfop_entrada: item.cfop,
+        cst_entrada:  item.cst,
+        convertido:   false,
       }
     }
 
-    // Fallback: converte só o CFOP automaticamente, mantém CST
     return {
       cfop_origem:  item.cfop,
       cst_origem:   item.cst,
-      cfop_entrada: converteCfopFallback(item.cfop),
-      cst_entrada:  item.cst,
       finalidade,
-      convertido:   false,  // sinaliza que precisa de revisão manual
+      cfop_entrada: regra.cfop_entrada,
+      cst_entrada:  regra.cst_entrada,
+      convertido:   true,
     }
   })
 }
