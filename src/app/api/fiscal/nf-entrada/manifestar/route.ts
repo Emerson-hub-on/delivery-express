@@ -16,11 +16,17 @@ const STATUS_MAP: Record<Evento, 'pendente' | 'confirmada' | 'recusada' | 'cance
   reabrir:      'pendente',
 }
 
+type ItemNota = {
+  produto_id: number | null
+  quantidade: number
+}
+
 export async function POST(req: NextRequest) {
-  const { companyId, chave, evento } = await req.json() as {
+  const { companyId, chave, evento, fatores } = await req.json() as {
     companyId: string
     chave: string
     evento: Evento
+    fatores?: Record<number, number> // idx → fator
   }
 
   if (!companyId || !chave || !evento) {
@@ -41,6 +47,46 @@ export async function POST(req: NextRequest) {
       .eq('chave', chave)
 
     if (error) throw error
+
+    // Atualiza estoque apenas na confirmação
+    if (evento === 'confirmacao' && fatores) {
+      // Busca os itens da nota
+      const { data: nota, error: notaError } = await supabaseAdmin
+        .from('nf_entrada')
+        .select('itens_nota')
+        .eq('company_id', companyId)
+        .eq('chave', chave)
+        .single<{ itens_nota: ItemNota[] }>()
+
+      if (notaError || !nota) throw new Error('Nota não encontrada')
+
+      const itens = nota.itens_nota ?? []
+
+      await Promise.all(
+        itens.map(async (item, idx) => {
+          if (!item.produto_id) return
+
+          const fator = fatores[idx] ?? 1
+          const qtdFinal = item.quantidade * fator
+
+          // Busca estoque atual
+          const { data: produto } = await supabaseAdmin
+            .from('products')
+            .select('stock')
+            .eq('id', item.produto_id)
+            .eq('company_id', companyId)
+            .single<{ stock: number }>()
+
+          if (!produto) return
+
+          await supabaseAdmin
+            .from('products')
+            .update({ stock: (produto.stock ?? 0) + qtdFinal })
+            .eq('id', item.produto_id)
+            .eq('company_id', companyId)
+        })
+      )
+    }
 
     return NextResponse.json({ ok: true, status: novoStatus })
   } catch (e) {

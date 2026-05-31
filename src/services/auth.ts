@@ -77,7 +77,16 @@ export async function getCustomerProfile(userId: string, companyId: string) {
 export async function updateCustomerProfile(
   userId: string,
   companyId: string,
-  updates: { name?: string; address?: object }
+  updates: {
+    name?: string
+    logradouro?: string
+    numero?: string
+    complemento?: string | null
+    bairro?: string
+    municipio?: string  // ← era cidade
+    uf?: string         // ← era estado
+    cep?: string        // ← pode ser útil futuramente
+  }
 ) {
   const { data: existing } = await supabase
     .from('customers')

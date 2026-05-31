@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { converterCfopCst, Finalidade } from '@/lib/fiscal/conversao-cfop-cst'
+import { converterCfopCst, type Finalidade } from '@/lib/fiscal/conversao-cfop-cst'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -23,7 +23,7 @@ type ItemNota = {
 }
 
 export async function POST(req: NextRequest) {
-  const { companyId, chave, finalidade } = await req.json() as {
+  const { companyId, chave, finalidade } = (await req.json()) as {
     companyId: string
     chave: string
     finalidade: Finalidade
@@ -48,8 +48,9 @@ export async function POST(req: NextRequest) {
 
     const itens: ItemNota[] = nota.itens_nota ?? []
 
-    // 2. Recalcula conversão com a nova finalidade
+    // 2. Recalcula conversão com a nova finalidade usando regras do banco
     const itensOriginais = itens.map(i => ({ cfop: i.cfop, cst: i.cst }))
+
     const itensConvertidos = await converterCfopCst({
       companyId,
       itens: itensOriginais,

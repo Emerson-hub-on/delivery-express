@@ -24,21 +24,21 @@ export function useAuth() {
       setLoading(false)
     })
 
-    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
-      // Token expirou durante a navegação
-      if (event === 'SIGNED_OUT') {
-        setUser(null)
-        return
-      }
-
-      if (event === 'TOKEN_REFRESHED' && !session) {
-        supabase.auth.signOut()
-        setUser(null)
-        return
-      }
-
-      setUser(session?.user ?? null)
-    })
+  const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+    if (event === 'SIGNED_OUT') {
+      setUser(null)
+      setLoading(false) // ← adicione
+      return
+    }
+    if (event === 'TOKEN_REFRESHED' && !session) {
+      supabase.auth.signOut()
+      setUser(null)
+      setLoading(false) // ← adicione
+      return
+    }
+    setUser(session?.user ?? null)
+    setLoading(false) // ← adicione
+  })
 
     return () => listener.subscription.unsubscribe()
   }, [])

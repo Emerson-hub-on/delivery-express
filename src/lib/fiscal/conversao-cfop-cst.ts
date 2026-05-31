@@ -43,11 +43,10 @@ const supabaseAdmin = createClient(
  */
 async function getCrtEmpresa(companyId: string): Promise<number> {
   const { data } = await supabaseAdmin
-    .from('companies')
+    .from('fiscal_configs')
     .select('crt')
-    .eq('id', companyId)
+    .eq('company_id', companyId)
     .single<{ crt: number }>()
-
   return data?.crt ?? 3
 }
 
@@ -95,19 +94,24 @@ export async function converterCfopCst(params: {
   const mapaExato = new Map<string, RegraConversao>()
   const mapaCuringa = new Map<string, RegraConversao>() // só cfop, cst vazio/*
 
-  for (const r of regras) {
-    if (r.cst_origem && r.cst_origem !== '*') {
-      mapaExato.set(`${r.cfop_origem}|${r.cst_origem}`, r)
-    } else {
-      mapaCuringa.set(r.cfop_origem, r)
-    }
+for (const r of regras) {
+  const cstOrigemNorm = String(r.cst_origem ?? '').padStart(3, '0') // ← String() aqui também
+  if (r.cst_origem && r.cst_origem !== '*') {
+    mapaExato.set(`${r.cfop_origem}|${cstOrigemNorm}`, r)
+    mapaExato.set(`${r.cfop_origem}|${r.cst_origem}`, r)
+  } else {
+    mapaCuringa.set(r.cfop_origem, r)
   }
+}
 
-  return itens.map((item): ItemConvertido => {
-    const regra =
-      mapaExato.get(`${item.cfop}|${item.cst}`) ??
-      mapaCuringa.get(item.cfop) ??
-      null
+return itens.map((item): ItemConvertido => {
+  const cstNormalizado = String(item.cst).padStart(3, '0') // ← String() primeiro
+  
+  const regra =
+    mapaExato.get(`${item.cfop}|${cstNormalizado}`) ??
+    mapaExato.get(`${item.cfop}|${item.cst}`) ??
+    mapaCuringa.get(item.cfop) ??
+    null
 
     if (!regra) {
       return {

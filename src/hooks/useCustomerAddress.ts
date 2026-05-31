@@ -15,7 +15,7 @@ export type Address = {
 }
 
 export function useCustomerAddress() {
-  const { user } = useAuth()
+  const { user, loading: authLoading } = useAuth()
   const params = useParams<{ slug: string }>()
   const [companyId, setCompanyId] = useState<string>('')
   const [address, setAddress] = useState<Address | null>(null)
@@ -37,17 +37,29 @@ export function useCustomerAddress() {
   }, [params?.slug])
 
   const fetchAddress = useCallback(async () => {
+    if (authLoading) return
     if (!user || !companyId) { setLoading(false); return }
     try {
       setLoading(true)
       const profile = await getCustomerProfile(user.id, companyId)
-      setAddress(profile?.address ?? null)
+
+      // Monta o Address a partir das colunas separadas
+    const addr: Address | null = profile?.logradouro ? {
+      street:     profile.logradouro,
+      number:     profile.numero,
+      complement: profile.complemento ?? undefined,
+      district:   profile.bairro,
+      city:       profile.municipio,  // ← era cidade
+      state:      profile.uf,         // ← era estado
+    } : null
+
+      setAddress(addr)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Erro ao buscar endereço')
     } finally {
       setLoading(false)
     }
-  }, [user, companyId])
+  }, [user, companyId, authLoading])
 
   useEffect(() => { fetchAddress() }, [fetchAddress])
 
@@ -56,7 +68,17 @@ export function useCustomerAddress() {
     try {
       setSaving(true)
       setError(null)
-      await updateCustomerProfile(user.id, companyId, { address: newAddress })
+
+      // Salva nas colunas separadas
+    await updateCustomerProfile(user.id, companyId, {
+      logradouro:  newAddress.street,
+      numero:      newAddress.number,
+      complemento: newAddress.complement ?? null,
+      bairro:      newAddress.district,
+      municipio:   newAddress.city,   // ← era cidade
+      uf:          newAddress.state,  // ← era estado
+    })
+
       setAddress(newAddress)
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Erro ao salvar endereço'

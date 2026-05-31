@@ -1,5 +1,6 @@
 'use client'
 import { useState, useMemo } from 'react'
+import { supabase } from '@/lib/supabase'
 import {
   type NfEntrada,
   type ItemNota,
@@ -21,6 +22,16 @@ type ItemConvertido = {
 type ItemOverride = {
   cfop_entrada: string
   cst_entrada: string
+}
+
+type ProdutoBusca = {
+  id: number
+  name: string
+  ean: string | null
+  code: number
+  stock: number | null
+  cost_price: number | null
+  price: number | null
 }
 
 const FINALIDADES = [
@@ -57,8 +68,6 @@ function ConversaoModal({ onClose, onError }: { onClose: () => void; onError: (m
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 px-4 pt-10 pb-6 overflow-y-auto">
       <div className="bg-white rounded-xl border border-gray-200 w-full max-w-4xl shadow-sm">
-
-        {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 sticky top-0 bg-white rounded-t-xl z-10">
           <div>
             <h3 className="text-sm font-semibold text-gray-900">Regras de conversão CFOP / CST</h3>
@@ -66,30 +75,128 @@ function ConversaoModal({ onClose, onError }: { onClose: () => void; onError: (m
               As novas regras serão aplicadas imediatamente ao recalcular a finalidade
             </p>
           </div>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-700 transition-colors p-1.5 rounded-lg
-              hover:bg-gray-100 text-lg leading-none"
-            aria-label="Fechar"
-          >
+          <button onClick={onClose}
+            className="text-gray-400 hover:text-gray-700 transition-colors p-1.5 rounded-lg hover:bg-gray-100 text-lg leading-none"
+            aria-label="Fechar">
+            ✕
+          </button>
+        </div>
+        <div className="p-5 pb-6">
+          <ConversaoRegrasManager onError={onError} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Modal de vínculo de produto ──────────────────────────────────────────────
+
+function ModalVincularProduto({
+  companyId,
+  item,
+  onVincular,
+  onClose,
+}: {
+  companyId: string
+  item: ItemNota
+  onVincular: (produto: ProdutoBusca) => void
+  onClose: () => void
+}) {
+  const [busca,      setBusca]      = useState('')
+  const [resultados, setResultados] = useState<ProdutoBusca[]>([])
+  const [buscando,   setBuscando]   = useState(false)
+
+  const handleBusca = async (termo: string) => {
+    setBusca(termo)
+    if (termo.length < 2) { setResultados([]); return }
+    setBuscando(true)
+    try {
+      const { data } = await supabase
+        .from('products')
+        .select('id, name, ean, code, stock, cost_price, price')
+        .eq('company_id', companyId)
+        .eq('active', true)
+        .or(`name.ilike.%${termo}%,ean.ilike.%${termo}%`)
+        .limit(8)
+      setResultados((data ?? []) as ProdutoBusca[])
+    } finally {
+      setBuscando(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+      <div className="bg-white rounded-xl border border-gray-200 w-full max-w-lg shadow-xl">
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+          <div>
+            <p className="text-sm font-semibold text-gray-900">Vincular produto</p>
+            <p className="text-xs text-gray-400 truncate max-w-xs" title={item.descricao}>
+              {item.descricao}
+            </p>
+          </div>
+          <button onClick={onClose}
+            className="text-gray-400 hover:text-gray-700 text-lg leading-none p-1 rounded hover:bg-gray-100 transition-colors">
             ✕
           </button>
         </div>
 
-        {/* Body */}
-        <div className="p-5">
-          <ConversaoRegrasManager onError={onError} />
+        {/* Busca */}
+        <div className="px-4 pt-3 pb-2">
+          <div className="relative">
+            <input
+              autoFocus
+              type="text"
+              placeholder="Buscar por nome, EAN ou código…"
+              value={busca}
+              onChange={e => handleBusca(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm
+                focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 pr-8"
+            />
+            {buscando && (
+              <span className="absolute right-3 top-1/2 -translate-y-1/2">
+                <svg className="w-4 h-4 animate-spin text-gray-400" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                </svg>
+              </span>
+            )}
+          </div>
         </div>
 
-        {/* Footer */}
-        <div className="flex justify-end px-5 py-4 border-t border-gray-100">
-          <button
-            onClick={onClose}
-            className="text-sm px-5 py-2 rounded-lg border border-gray-200
-              text-gray-600 hover:bg-gray-50 transition-colors font-medium"
-          >
-            Fechar
-          </button>
+        {/* Resultados */}
+        <div className="px-4 pb-4 space-y-1 max-h-72 overflow-y-auto">
+          {busca.length < 2 && (
+            <p className="text-xs text-gray-400 text-center py-6">
+              Digite pelo menos 2 caracteres para buscar.
+            </p>
+          )}
+          {busca.length >= 2 && !buscando && resultados.length === 0 && (
+            <p className="text-xs text-gray-400 text-center py-6">Nenhum produto encontrado.</p>
+          )}
+          {resultados.map(produto => (
+            <button
+              key={produto.id}
+              onClick={() => onVincular(produto)}
+              className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg
+                hover:bg-blue-50 border border-transparent hover:border-blue-200
+                transition-colors text-left"
+            >
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-gray-800 truncate">{produto.name}</p>
+                <p className="text-xs text-gray-400 truncate">
+                  Cód: {produto.code}
+                  {produto.ean ? ` · EAN: ${produto.ean}` : ''}
+                  {produto.stock != null ? ` · Estoque: ${produto.stock}` : ''}
+                  {produto.cost_price != null
+                    ? ` · Custo: R$ ${fmtMoney(produto.cost_price)}`
+                    : ''}
+                </p>
+              </div>
+              <span className="text-xs text-blue-600 font-medium ml-3 shrink-0">Selecionar</span>
+            </button>
+          ))}
         </div>
       </div>
     </div>
@@ -110,17 +217,22 @@ interface Props {
 // ─── Main ──────────────────────────────────────────────────────────────────────
 
 export function NfEntradaDetalhe({ nota, companyId, onBack, onUpdated, onDeleted, onError }: Props) {
-  const [loading,             setLoading]             = useState<string | null>(null)
-  const [copied,              setCopied]              = useState(false)
-  const [finalidade,          setFinalidade]          = useState<Finalidade>(
+  const [loading,            setLoading]            = useState<string | null>(null)
+  const [copied,             setCopied]             = useState(false)
+  const [finalidade,         setFinalidade]         = useState<Finalidade>(
     (nota.finalidade as Finalidade) ?? 'revenda'
   )
-  const [recalculando,        setRecalculando]        = useState(false)
-  const [itensConvertidos,    setItensConvertidos]    = useState<ItemConvertido[]>(
+  const [recalculando,       setRecalculando]       = useState(false)
+  const [itensConvertidos,   setItensConvertidos]   = useState<ItemConvertido[]>(
     (nota.itens_convertidos as ItemConvertido[]) ?? []
   )
-  const [overrides,           setOverrides]           = useState<Record<number, ItemOverride>>({})
-  const [showConversaoModal,  setShowConversaoModal]  = useState(false)
+  const [overrides,          setOverrides]          = useState<Record<number, ItemOverride>>({})
+  const [fatores,            setFatores]            = useState<Record<number, number>>(() =>
+    Object.fromEntries((nota.itens_nota ?? []).map((_, idx) => [idx, 1]))
+  )
+  const [showConversaoModal, setShowConversaoModal] = useState(false)
+  const [modalVinculo,       setModalVinculo]       = useState<{ idx: number; item: ItemNota } | null>(null)
+  const [vinculando,         setVinculando]         = useState<number | null>(null)
 
   const badge      = STATUS_BADGE[nota.status]
   const itens      = (nota.itens_nota ?? []) as ItemNota[]
@@ -187,6 +299,41 @@ export function NfEntradaDetalhe({ nota, companyId, onBack, onUpdated, onDeleted
     }))
   }
 
+  const handleFatorChange = (idx: number, value: string) => {
+    const num = Math.max(1, parseInt(value) || 1)
+    setFatores(prev => ({ ...prev, [idx]: num }))
+  }
+
+  const handleVincularProduto = async (produto: ProdutoBusca) => {
+    if (!modalVinculo) return
+    const { idx, item } = modalVinculo
+    setVinculando(idx)
+    try {
+      const res = await fetch('/api/fiscal/nf-entrada/vincular-item', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          companyId,
+          chave: nota.chave,
+          itemCodigo: item.codigo,
+          produtoId: produto.id,
+        }),
+      })
+      if (!res.ok) throw new Error('Erro ao vincular produto')
+
+      // Atualiza localmente sem recarregar
+      const itensAtualizados = itens.map((it, i) =>
+        i === idx ? { ...it, produto_id: produto.id, produto_nome: produto.name } : it
+      )
+      onUpdated({ ...nota, itens_nota: itensAtualizados })
+      setModalVinculo(null)
+    } catch (e) {
+      onError(e instanceof Error ? e.message : 'Erro ao vincular produto')
+    } finally {
+      setVinculando(null)
+    }
+  }
+
   const handleManifestar = async (evento: Evento) => {
     const confirmMsg = CONFIRM_MESSAGES[evento]
     if (confirmMsg && !window.confirm(`${confirmMsg} Esta ação pode ser desfeita reabrindo a nota.`)) return
@@ -195,7 +342,12 @@ export function NfEntradaDetalhe({ nota, companyId, onBack, onUpdated, onDeleted
       const res = await fetch('/api/fiscal/nf-entrada/manifestar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ companyId, chave: nota.chave, evento }),
+        body: JSON.stringify({
+          companyId,
+          chave: nota.chave,
+          evento,
+          fatores: evento === 'confirmacao' ? fatores : undefined,
+        }),
       })
       if (!res.ok) throw new Error('Erro ao manifestar')
       const statusMap: Partial<Record<Evento, NfEntrada['status']>> = {
@@ -315,8 +467,6 @@ export function NfEntradaDetalhe({ nota, companyId, onBack, onUpdated, onDeleted
                 Define como os CFOPs e CSTs da nota serão convertidos para entrada.
                 Ao alterar, o sistema recalcula automaticamente com base na tabela de conversão.
               </p>
-
-              {/* Select + botão lado a lado */}
               <div className="flex items-center gap-2 flex-wrap">
                 <div className="relative inline-block">
                   <select
@@ -333,7 +483,6 @@ export function NfEntradaDetalhe({ nota, companyId, onBack, onUpdated, onDeleted
                   </select>
                   <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">▾</span>
                 </div>
-
                 <button
                   onClick={() => setShowConversaoModal(true)}
                   className="inline-flex items-center gap-1.5 text-xs px-3 py-2.5 rounded-lg border
@@ -344,7 +493,6 @@ export function NfEntradaDetalhe({ nota, companyId, onBack, onUpdated, onDeleted
                 </button>
               </div>
             </div>
-
             {recalculando && (
               <div className="flex items-center gap-2 text-xs text-blue-600">
                 <span className="inline-block w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
@@ -365,7 +513,7 @@ export function NfEntradaDetalhe({ nota, companyId, onBack, onUpdated, onDeleted
           badge={itensPendentes > 0 ? `${itensPendentes} sem vínculo` : undefined}
           badgeColor="orange">
           <div className="overflow-x-auto -mx-4 sm:mx-0">
-            <table className="w-full text-xs min-w-[820px]">
+            <table className="w-full text-xs min-w-[960px]">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-100">
                   {[
@@ -374,7 +522,9 @@ export function NfEntradaDetalhe({ nota, companyId, onBack, onUpdated, onDeleted
                     ['CST orig.',           'left'],
                     ['CFOP entrada',        'left'],
                     ['CST entrada',         'left'],
-                    ['Qtd',                 'right'],
+                    ['Qtd NF',              'right'],
+                    ['Por Caixa',           'center'],
+                    ['Qtd Final',           'center'],
                     ['Vlr unit.',           'right'],
                     ['Total',               'right'],
                     ['Vínculo',             'center'],
@@ -388,12 +538,15 @@ export function NfEntradaDetalhe({ nota, companyId, onBack, onUpdated, onDeleted
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {itens.length === 0 ? (
-                  <tr><td colSpan={9} className="text-center py-8 text-gray-400">Nenhum item</td></tr>
+                  <tr><td colSpan={11} className="text-center py-8 text-gray-400">Nenhum item</td></tr>
                 ) : itens.map((item, idx) => {
                   const conv        = conversaoMap[item.cfop]
                   const override    = getOverride(idx, item)
                   const semConv     = conv && !conv.convertido
                   const hasOverride = !!overrides[idx]
+                  const fator       = fatores[idx] ?? 1
+                  const qtdFinal    = item.quantidade * fator
+                  const isVinculando = vinculando === idx
 
                   return (
                     <tr key={idx} className={`transition-colors ${semConv ? 'bg-orange-50/40' : 'hover:bg-gray-50'}`}>
@@ -449,26 +602,79 @@ export function NfEntradaDetalhe({ nota, companyId, onBack, onUpdated, onDeleted
                             }`}
                         />
                       </td>
+
+                      {/* Qtd NF */}
                       <td className="px-3 py-2.5 text-gray-700 text-right whitespace-nowrap">
                         {item.quantidade} {item.unidade}
                       </td>
+
+                      {/* Por Caixa */}
+                      <td className="px-3 py-2.5 text-center w-24">
+                        <input
+                          type="number"
+                          min={1}
+                          value={fator}
+                          onChange={e => handleFatorChange(idx, e.target.value)}
+                          className={`w-16 border rounded px-2 py-1 text-xs text-center font-mono
+                            focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400
+                            transition-colors
+                            ${fator > 1
+                              ? 'border-blue-300 bg-blue-50 text-blue-800'
+                              : 'border-gray-200 bg-white text-gray-700'
+                            }`}
+                        />
+                      </td>
+
+                      {/* Qtd Final */}
+                      <td className="px-3 py-2.5 text-center whitespace-nowrap">
+                        <span className={`inline-flex items-center gap-1 font-medium
+                          ${fator > 1 ? 'text-blue-700' : 'text-gray-700'}`}>
+                          {qtdFinal} {item.unidade}
+                          {fator > 1 && (
+                            <span className="text-[10px] text-blue-400 font-normal">
+                              ({item.quantidade}×{fator})
+                            </span>
+                          )}
+                        </span>
+                      </td>
+
                       <td className="px-3 py-2.5 text-gray-700 text-right whitespace-nowrap">
                         R$ {fmtMoney(item.valor_unitario)}
                       </td>
                       <td className="px-3 py-2.5 text-gray-900 font-medium text-right whitespace-nowrap">
                         R$ {fmtMoney(item.valor_total)}
                       </td>
+
+                      {/* Vínculo */}
                       <td className="px-3 py-2.5 text-center">
                         {item.produto_id !== null ? (
-                          <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full
-                            bg-green-50 text-green-700 border border-green-200 font-medium whitespace-nowrap">
-                            ✓ {item.produto_nome ?? 'Vinculado'}
-                          </span>
+                          <div className="flex flex-col items-center gap-1">
+                            <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full
+                              bg-green-50 text-green-700 border border-green-200 font-medium whitespace-nowrap">
+                              ✓ {item.produto_nome ?? 'Vinculado'}
+                            </span>
+                            <button
+                              onClick={() => setModalVinculo({ idx, item })}
+                              disabled={isVinculando}
+                              className="text-[10px] text-gray-400 hover:text-blue-600 underline transition-colors disabled:opacity-40"
+                            >
+                              Alterar
+                            </button>
+                          </div>
                         ) : (
-                          <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full
-                            bg-orange-50 text-orange-700 border border-orange-200 font-medium whitespace-nowrap">
-                            ⚠ Pendente
-                          </span>
+                          <button
+                            onClick={() => setModalVinculo({ idx, item })}
+                            disabled={isVinculando}
+                            className="inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-lg
+                              bg-orange-50 text-orange-700 border border-orange-200 hover:bg-orange-100
+                              font-medium transition-colors whitespace-nowrap disabled:opacity-40"
+                          >
+                            {isVinculando
+                              ? <span className="inline-block w-3 h-3 border border-orange-500 border-t-transparent rounded-full animate-spin" />
+                              : '🔗'
+                            }
+                            Vincular
+                          </button>
                         )}
                       </td>
                     </tr>
@@ -490,6 +696,10 @@ export function NfEntradaDetalhe({ nota, companyId, onBack, onUpdated, onDeleted
             <span className="flex items-center gap-1.5">
               <span className="w-3 h-3 rounded border border-blue-300 bg-blue-50 inline-block" />
               Editado manualmente
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded border border-blue-300 bg-blue-50 inline-block" />
+              Por caixa &gt; 1 — quantidade convertida
             </span>
           </div>
 
@@ -536,11 +746,21 @@ export function NfEntradaDetalhe({ nota, companyId, onBack, onUpdated, onDeleted
 
       </div>
 
-      {/* Modal de conversão CFOP/CST */}
+      {/* Modal conversão CFOP/CST */}
       {showConversaoModal && (
         <ConversaoModal
           onClose={() => setShowConversaoModal(false)}
           onError={onError}
+        />
+      )}
+
+      {/* Modal vínculo de produto */}
+      {modalVinculo && (
+        <ModalVincularProduto
+          companyId={companyId}
+          item={modalVinculo.item}
+          onVincular={handleVincularProduto}
+          onClose={() => setModalVinculo(null)}
         />
       )}
     </>

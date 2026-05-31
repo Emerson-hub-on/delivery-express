@@ -204,8 +204,16 @@ export const StepFinish = ({ setStep, onRequireAuth }: Props) => {
 
   const saveAddressToProfile = async (userId: string) => {
     if (isPickup) return
-    try { await updateCustomerProfile(userId, companyId, { address }) } catch {}
-  }
+    try {
+      await updateCustomerProfile(userId, companyId, {
+        logradouro:  address?.street,
+        numero:      address?.number,
+        complemento: address?.complement ?? null,
+        bairro:      address?.district,
+        municipio:   address?.city,
+        uf:          address?.state,
+      })
+    } catch {}  }
 
   const generatePix = async (order: { id: number; code: string }) => {
     setPixError(null)

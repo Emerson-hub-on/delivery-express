@@ -133,7 +133,7 @@ export function AddressSection({ address, loading, saving, onSave }: AddressSect
             {address.complement ? ` — ${address.complement}` : ''}
           </p>
           <p className="text-xs text-gray-500 mt-0.5">
-            {address.district}, {address.city} / {address.state.toUpperCase()}
+            {address.district}, {address.city} / {address.state?.toUpperCase()}
           </p>
           {success && <p className="text-xs text-green-600 mt-2">✓ Endereço atualizado com sucesso</p>}
         </div>

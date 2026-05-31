@@ -100,7 +100,7 @@ function RegraModal({ initial, editId, onClose, onSaved, onError }: ModalProps) 
     try {
       const method = editId ? 'PUT' : 'POST'
       const body   = editId ? { ...form, id: editId } : form
-      const res    = await fetch('/api/fiscal/conversao-regras', {
+      const res    = await fetch('/api/fiscal/nf-entrada/conversao-regras', {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -116,11 +116,12 @@ function RegraModal({ initial, editId, onClose, onSaved, onError }: ModalProps) 
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 pt-16 px-4">
-      <div className="bg-white rounded-xl border border-gray-200 w-full max-w-lg shadow-sm">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 px-4">
+      <div className="bg-white rounded-xl border border-gray-200 w-full max-w-md flex flex-col"
+        style={{ maxHeight: '90vh' }}>
 
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 shrink-0">
           <h3 className="text-sm font-semibold text-gray-900">
             {editId ? 'Editar regra de conversão' : 'Nova regra de conversão'}
           </h3>
@@ -130,12 +131,13 @@ function RegraModal({ initial, editId, onClose, onSaved, onError }: ModalProps) 
           </button>
         </div>
 
-        <div className="p-5 space-y-5">
+        {/* Body com scroll */}
+        <div className="p-5 space-y-4 overflow-y-auto flex-1">
 
-          {/* Origem */}
+          {/* Origem + Entrada em linha */}
           <div>
-            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-3">
-              Códigos de origem (nota do emitente)
+            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-2">
+              Origem → Entrada
             </p>
             <div className="grid grid-cols-2 gap-3">
               <FieldInput
@@ -143,28 +145,17 @@ function RegraModal({ initial, editId, onClose, onSaved, onError }: ModalProps) 
                 value={form.cfop_origem}
                 onChange={v => set('cfop_origem', v.replace(/\D/g, '').slice(0, 4))}
                 placeholder="ex: 6661"
-                hint="4 dígitos — CFOP que vem na nota"
+                hint="CFOP que vem na nota"
                 mono
               />
               <FieldInput
                 label="CST de origem"
                 value={form.cst_origem}
                 onChange={v => set('cst_origem', v.slice(0, 3))}
-                placeholder="ex: 061 (vazio = qualquer)"
-                hint="Deixe vazio para qualquer CST"
+                placeholder="ex: 061"
+                hint="Vazio = qualquer CST"
                 mono
               />
-            </div>
-          </div>
-
-          <hr className="border-gray-100" />
-
-          {/* Entrada */}
-          <div>
-            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-3">
-              Códigos convertidos (entrada)
-            </p>
-            <div className="grid grid-cols-2 gap-3">
               <FieldInput
                 label="CFOP de entrada"
                 value={form.cfop_entrada}
@@ -184,95 +175,87 @@ function RegraModal({ initial, editId, onClose, onSaved, onError }: ModalProps) 
 
           <hr className="border-gray-100" />
 
-          {/* Classificação */}
-          <div>
-            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-3">
-              Classificação
-            </p>
-            <div className="grid grid-cols-2 gap-4">
-
-              {/* CRT */}
-              <div>
-                <label className="text-[10px] text-gray-400 uppercase tracking-wide mb-1.5 block">
-                  Regime tributário (CRT)
-                </label>
-                <div className="relative">
-                  <select
-                    value={form.crt}
-                    onChange={e => set('crt', Number(e.target.value))}
-                    className="w-full appearance-none border border-gray-200 rounded-lg px-3 py-2
-                      text-sm text-gray-800 bg-white focus:outline-none focus:ring-2
-                      focus:ring-blue-100 focus:border-blue-400 pr-7"
-                  >
-                    {CRT_OPTIONS.map(c => (
-                      <option key={c.value} value={c.value}>{c.label}</option>
-                    ))}
-                  </select>
-                  <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2
-                    text-gray-400 text-xs">▾</span>
-                </div>
-              </div>
-
-              {/* Base ICMS */}
-              <div>
-                <label className="text-[10px] text-gray-400 uppercase tracking-wide mb-1.5 block">
-                  Tem base de ICMS?
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  {[{ v: false, label: 'Não' }, { v: true, label: 'Sim' }].map(opt => (
-                    <button
-                      key={String(opt.v)}
-                      onClick={() => set('tem_icms', opt.v)}
-                      className={`flex items-center justify-center gap-1.5 py-2 rounded-lg border text-sm
-                        transition-colors font-medium
-                        ${form.tem_icms === opt.v
-                          ? 'border-blue-300 bg-blue-50 text-blue-700'
-                          : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}
-                    >
-                      {form.tem_icms === opt.v ? '✓' : ''} {opt.label}
-                    </button>
+          {/* CRT + ICMS em linha */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-[10px] text-gray-400 uppercase tracking-wide mb-1.5 block">
+                Regime (CRT)
+              </label>
+              <div className="relative">
+                <select
+                  value={form.crt}
+                  onChange={e => set('crt', Number(e.target.value))}
+                  className="w-full appearance-none border border-gray-200 rounded-lg px-3 py-2
+                    text-sm text-gray-800 bg-white focus:outline-none focus:ring-2
+                    focus:ring-blue-100 focus:border-blue-400 pr-7"
+                >
+                  {CRT_OPTIONS.map(c => (
+                    <option key={c.value} value={c.value}>{c.label}</option>
                   ))}
-                </div>
+                </select>
+                <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2
+                  text-gray-400 text-xs">▾</span>
               </div>
             </div>
 
-            {/* Finalidade */}
-            <div className="mt-4">
-              <label className="text-[10px] text-gray-400 uppercase tracking-wide mb-2 block">
-                Finalidade
+            <div>
+              <label className="text-[10px] text-gray-400 uppercase tracking-wide mb-1.5 block">
+                Base de ICMS?
               </label>
-              <div className="grid grid-cols-2 gap-y-2 gap-x-6">
-                {FINALIDADES.map(f => (
-                  <label key={f.value}
-                    className="flex items-center gap-2 cursor-pointer text-sm text-gray-700">
-                    <input
-                      type="radio"
-                      name="finalidade"
-                      value={f.value}
-                      checked={form.finalidade === f.value}
-                      onChange={() => set('finalidade', f.value)}
-                      className="accent-blue-600"
-                    />
-                    {f.label}
-                  </label>
+              <div className="grid grid-cols-2 gap-2">
+                {[{ v: false, label: 'Não' }, { v: true, label: 'Sim' }].map(opt => (
+                  <button
+                    key={String(opt.v)}
+                    onClick={() => set('tem_icms', opt.v)}
+                    className={`flex items-center justify-center gap-1 py-2 rounded-lg border text-sm
+                      transition-colors font-medium
+                      ${form.tem_icms === opt.v
+                        ? 'border-blue-300 bg-blue-50 text-blue-700'
+                        : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}
+                  >
+                    {form.tem_icms === opt.v ? '✓ ' : ''}{opt.label}
+                  </button>
                 ))}
               </div>
             </div>
+          </div>
 
-            {/* Descrição opcional */}
-            <div className="mt-4">
-              <label className="text-[10px] text-gray-400 uppercase tracking-wide mb-1.5 block">
-                Descrição / observação (opcional)
-              </label>
-              <input
-                type="text"
-                value={form.descricao ?? ''}
-                onChange={e => set('descricao', e.target.value || null)}
-                placeholder="ex: GLP botijão P13 — interestadual"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800
-                  focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400"
-              />
+          {/* Finalidade — horizontal compacto */}
+          <div>
+            <label className="text-[10px] text-gray-400 uppercase tracking-wide mb-2 block">
+              Finalidade
+            </label>
+            <div className="grid grid-cols-2 gap-x-6 gap-y-1.5">
+              {FINALIDADES.map(f => (
+                <label key={f.value}
+                  className="flex items-center gap-2 cursor-pointer text-sm text-gray-700">
+                  <input
+                    type="radio"
+                    name="finalidade"
+                    value={f.value}
+                    checked={form.finalidade === f.value}
+                    onChange={() => set('finalidade', f.value)}
+                    className="accent-blue-600"
+                  />
+                  {f.label}
+                </label>
+              ))}
             </div>
+          </div>
+
+          {/* Descrição */}
+          <div>
+            <label className="text-[10px] text-gray-400 uppercase tracking-wide mb-1.5 block">
+              Descrição (opcional)
+            </label>
+            <input
+              type="text"
+              value={form.descricao ?? ''}
+              onChange={e => set('descricao', e.target.value || null)}
+              placeholder="ex: GLP botijão P13 — interestadual"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800
+                focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400"
+            />
           </div>
 
           {/* Erro */}
@@ -284,8 +267,8 @@ function RegraModal({ initial, editId, onClose, onSaved, onError }: ModalProps) 
           )}
         </div>
 
-        {/* Footer */}
-        <div className="flex justify-end gap-2 px-5 py-4 border-t border-gray-100">
+        {/* Footer — sempre visível */}
+        <div className="flex justify-end gap-2 px-5 py-3.5 border-t border-gray-100 shrink-0">
           <button onClick={onClose}
             className="text-sm px-4 py-2 rounded-lg border border-gray-200
               text-gray-600 hover:bg-gray-50 transition-colors">
@@ -403,7 +386,7 @@ export function ConversaoRegrasManager({ onError }: Props) {
       if (filtroCrt) params.set('crt', filtroCrt)
       if (busca)     params.set('busca', busca)
 
-      const res  = await fetch(`/api/fiscal/conversao-regras?${params}`)
+      const res  = await fetch(`/api/fiscal/nf-entrada/conversao-regras?${params}`)
       const json = await res.json()
       if (!res.ok) throw new Error(json.message)
       setRegras(json.regras)
@@ -430,7 +413,7 @@ export function ConversaoRegrasManager({ onError }: Props) {
     if (!deleting) return
     setDeleteLoad(true)
     try {
-      const res = await fetch(`/api/fiscal/conversao-regras?id=${deleting.id}`, {
+      const res = await fetch(`/api/fiscal/nf-entrada/conversao-regras?id=${deleting.id}`, {
         method: 'DELETE',
       })
       if (!res.ok) {

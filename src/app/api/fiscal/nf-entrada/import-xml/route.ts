@@ -201,7 +201,7 @@ export async function POST(req: NextRequest) {
     const itensCasados: ItensCasado[] = itensNota.map(item => {
       const match =
         (item.ean    && produtos.find(p => p.ean  === item.ean)) ||
-        (item.codigo && produtos.find(p => String(p.code) === item.codigo))
+        (item.codigo && produtos.find(p => String(p.code) === String(item.codigo)))
 
       return {
         item,
@@ -249,6 +249,7 @@ export async function POST(req: NextRequest) {
     })
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Erro interno'
+    console.error('Erro ao importar NF-e:', e)
     return NextResponse.json({ message }, { status: 500 })
   }
 }
