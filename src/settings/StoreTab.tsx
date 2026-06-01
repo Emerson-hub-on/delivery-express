@@ -123,23 +123,25 @@ export function StoreTab({ onError, companyId }: StoreTabProps) {
     setForm(f => ({ ...f, [field]: value }))
 
   // ── Image upload helpers ──────────────────────────────────────────────────
-  const handleImageUpload = async (
-    e: React.ChangeEvent<HTMLInputElement>,
-    field: 'banner_url' | 'logo_url',
-    setUploading: (v: boolean) => void
-  ) => {
-    const file = e.target.files?.[0]
-    if (!file || !companyId) return
-    setUploading(true)
-    try {
-      const url = await uploadImage(file, companyId, 'company-images', field.replace('_url', ''))
-      set(field, url)
-    } catch (e: any) {
-      onError('Erro ao fazer upload: ' + e.message)
-    } finally {
-      setUploading(false)
-    }
+const handleImageUpload = async (
+  e: React.ChangeEvent<HTMLInputElement>,
+  field: 'banner_url' | 'logo_url',
+  setUploading: (v: boolean) => void
+) => {
+  const file = e.target.files?.[0]
+  if (!file || !companyId) return
+  setUploading(true)
+  try {
+    // ← bucket correto por campo
+    const bucket = field === 'banner_url' ? 'company-banners' : 'company-logos'
+    const url = await uploadImage(file, companyId, bucket, field.replace('_url', ''))
+    set(field, url)
+  } catch (e: any) {
+    onError('Erro ao fazer upload: ' + e.message)
+  } finally {
+    setUploading(false)
   }
+}
 
   // ── Save ──────────────────────────────────────────────────────────────────
   const handleSave = async () => {

@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { notFound } from 'next/navigation'
 import CardapioPage from './CardapioPage'
 
-export const revalidate = 60
+export const revalidate = 0
 
 type CompanyProfile = {
   banner_url: string | null
@@ -26,25 +26,17 @@ export default async function SlugPage({
 
   const { data: company } = await supabase
     .from('companies')
-    .select(`
-      id,
-      name,
-      slug,
-      company_profiles (
-        banner_url,
-        logo_url,
-        min_order,
-        is_open,
-        description
-      )
-    `)
+    .select('id, name, slug')
     .eq('slug', slug)
     .maybeSingle()
 
   if (!company) notFound()
 
-  const rawProfile = company.company_profiles as unknown as CompanyProfile[] | CompanyProfile | null
-  const profile = Array.isArray(rawProfile) ? rawProfile[0] ?? null : rawProfile
+  const { data: profile } = await supabase
+    .from('company_profiles')
+    .select('banner_url, logo_url, min_order, is_open, description')
+    .eq('company_id', company.id)
+    .maybeSingle()
 
   return (
     <CardapioPage

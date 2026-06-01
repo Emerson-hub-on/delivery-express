@@ -53,7 +53,20 @@ useEffect(() => {
       router.replace(`/${params?.slug}/admin/login`)
       return
     }
-    setCompanyId(data.session.user.id) // ← direto, sem query extra
+
+    // ← busca o company_id real pelo user_id
+    const { data: company } = await supabase
+      .from('companies')
+      .select('id')
+      .eq('user_id', data.session.user.id)
+      .single()
+
+    if (!company) {
+      router.replace(`/${params?.slug}/admin/login`)
+      return
+    }
+
+    setCompanyId(company.id)  // ← UUID da empresa, não do usuário
     setAuthReady(true)
   })
 }, [])

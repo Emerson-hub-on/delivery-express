@@ -60,30 +60,36 @@ export function DestinatarioSection({ form, onChange, companyId }: Props) {
   }, [companyId])
 
   // ── Seleciona um resultado e preenche o form ──────────────────────────────
+  // dest_id e origem agora são propagados para DestinatarioForm,
+  // permitindo que o service grave dest_id e dest_origem no banco corretamente.
   const handleSelect = useCallback((r: DestinatarioResult) => {
     setSelected(r)
     setQuery(r.nome)
     setOpen(false)
     setResults([])
 
-    onChange('nome', r.nome)
-    onChange('tipo', r.tipo)
-    onChange('email', r.email ?? '')
-    onChange('telefone', r.telefone ?? '')
-    onChange('logradouro', r.logradouro ?? '')
-    onChange('numero', r.numero ?? '')
-    onChange('bairro', r.bairro ?? '')
-    onChange('municipio', r.municipio ?? '')
+    onChange('nome',             r.nome)
+    onChange('tipo',             r.tipo)
+    onChange('email',            r.email      ?? '')
+    onChange('telefone',         r.telefone   ?? '')
+    onChange('logradouro',       r.logradouro ?? '')
+    onChange('numero',           r.numero     ?? '')
+    onChange('bairro',           r.bairro     ?? '')
+    onChange('municipio',        r.municipio  ?? '')
     onChange('codigo_municipio', r.codigo_municipio ?? '')
-    onChange('uf', r.uf ?? '')
-    onChange('cep', r.cep ?? '')
-    onChange('ie', r.ie ?? '')
+    onChange('uf',               r.uf  ?? '')
+    onChange('cep',              r.cep ?? '')
+    onChange('ie',               r.ie  ?? '')
+
+    // ← campos novos em DestinatarioForm (ver types-patch.ts)
+    onChange('dest_id', r.id)
+    onChange('origem',  r.origem)
 
     if (r.tipo === 'juridica') {
       onChange('cnpj', r.cpf_cnpj ?? '')
-      onChange('cpf', '')
+      onChange('cpf',  '')
     } else {
-      onChange('cpf', r.cpf_cnpj ?? '')
+      onChange('cpf',  r.cpf_cnpj ?? '')
       onChange('cnpj', '')
     }
   }, [onChange])
@@ -94,7 +100,10 @@ export function DestinatarioSection({ form, onChange, companyId }: Props) {
     setQuery('')
     setResults([])
     setOpen(false)
-  }, [])
+    // Limpa também dest_id e origem do form
+    onChange('dest_id', undefined)
+    onChange('origem',  undefined)
+  }, [onChange])
 
   return (
     <div className="bg-white border border-gray-300 rounded-xl mb-3.5 overflow-hidden shadow-sm">

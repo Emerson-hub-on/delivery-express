@@ -26,7 +26,12 @@ const CardapioPage = ({ companyId, slug, companyName, bannerUrl, logoUrl, minOrd
 
   return (
     <div className="w-full min-h-screen flex flex-col bg-zinc-50 dark:bg-zinc-950">
-      <Header slug={slug} companyId={companyId} />
+      <Header 
+        slug={slug} 
+        companyId={companyId}
+        bannerUrl={bannerUrl}
+        logoUrl={logoUrl}
+      />
 
       {/* ── Desktop: two-column layout ── */}
       <div className="hidden md:flex flex-1 w-full max-w-7xl mx-auto px-6 gap-8 py-8">

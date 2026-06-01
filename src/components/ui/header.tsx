@@ -17,6 +17,8 @@ import { BottomNav } from './bottom-nav'
 interface HeaderProps {
   slug: string
   companyId: string
+  bannerUrl?: string | null
+  logoUrl?: string | null
 }
 
 interface SearchResultsProps {
@@ -84,7 +86,7 @@ const SearchResults = ({ query, companyId, onClose }: SearchResultsProps) => {
   )
 }
 
-export const Header = ({ slug, companyId }: HeaderProps) => {
+export const Header = ({ slug, companyId, bannerUrl: bannerProp, logoUrl: logoProp }: HeaderProps) => {
   const { user, loading } = useAuth()
   const [showAuth, setShowAuth] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -93,6 +95,10 @@ export const Header = ({ slug, companyId }: HeaderProps) => {
   const company = useCompanyStore(s => s.company)
   const searchQuery = useCompanyStore(s => s.searchQuery)
   const setSearchQuery = useCompanyStore(s => s.setSearchQuery)
+
+  // Usa prop como fallback enquanto a store não hidrata
+  const bannerUrl = company?.bannerUrl ?? bannerProp
+  const logoUrl   = company?.logoUrl   ?? logoProp
 
   useEffect(() => {
     if (searchOpen) searchInputRef.current?.focus()
@@ -103,17 +109,11 @@ export const Header = ({ slug, companyId }: HeaderProps) => {
 
   return (
     <>
-      {/* ════════════════════════════════════════════════
-          DESKTOP (md+)
-      ════════════════════════════════════════════════ */}
+      {/* DESKTOP */}
       <div className="hidden md:block">
-
-        {/* ── Sticky top navbar ── */}
         <header className="w-full h-14 flex items-center bg-white/90 dark:bg-zinc-950/90 backdrop-blur-md
           border-b border-zinc-200/80 dark:border-zinc-800 sticky top-0 z-40 shadow-sm">
           <div className="w-full max-w-7xl mx-auto px-6 flex items-center gap-4">
-
-            {/* Profile button */}
             <button
               onClick={() => loading ? null : user ? setMenuOpen(v => !v) : setShowAuth(true)}
               className="relative w-9 h-9 rounded-full overflow-hidden border-2 border-zinc-200 dark:border-zinc-700
@@ -129,7 +129,6 @@ export const Header = ({ slug, companyId }: HeaderProps) => {
                   onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
                 />
               ) : null}
-              {/* Fallback icon always rendered underneath */}
               <UserCircle2
                 size={22}
                 className={`absolute text-zinc-400 dark:text-zinc-500 ${user ? 'opacity-0' : 'opacity-100'}`}
@@ -143,7 +142,6 @@ export const Header = ({ slug, companyId }: HeaderProps) => {
 
             <div className="flex-1" />
 
-            {/* Search bar (desktop inline) */}
             <div className="relative w-64">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
               <input
@@ -164,7 +162,6 @@ export const Header = ({ slug, companyId }: HeaderProps) => {
               )}
             </div>
 
-            {/* Status pill */}
             <span className={`inline-flex items-center gap-1.5 text-xs font-medium rounded-full px-2.5 py-1
               ${company?.isOpen
                 ? 'bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800'
@@ -178,28 +175,24 @@ export const Header = ({ slug, companyId }: HeaderProps) => {
           </div>
         </header>
 
-        {/* ── Hero banner ── */}
+        {/* Hero banner */}
         <div className="relative w-full h-72 bg-zinc-900 overflow-hidden">
-          {company?.bannerUrl ? (
-            <img src={company.bannerUrl} alt="Banner da loja"
+          {bannerUrl ? (
+            <img src={bannerUrl} alt="Banner da loja"
               className="w-full h-full object-cover opacity-80" />
           ) : (
-            /* Subtle geometric fallback */
             <div className="w-full h-full bg-gradient-to-br from-zinc-800 via-zinc-900 to-zinc-950"
               style={{
                 backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.03'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
               }}
             />
           )}
-          {/* Gradient overlay */}
           <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/70 via-zinc-950/10 to-transparent" />
           <div className="absolute inset-0 bg-gradient-to-r from-zinc-950/30 to-transparent" />
 
-          {/* Store info overlay — bottom left */}
           <div className="absolute bottom-0 left-0 right-0">
             <div className="max-w-7xl mx-auto px-6 pb-6 flex items-end justify-between">
               <div className="flex items-end gap-4">
-                {/* Logo avatar */}
                 <div className="w-16 h-16 rounded-2xl overflow-hidden border-2 border-white/20 bg-zinc-800 shadow-xl shrink-0 flex items-center justify-center mb-0.5">
                   <Logo />
                 </div>
@@ -228,10 +221,8 @@ export const Header = ({ slug, companyId }: HeaderProps) => {
           </div>
         </div>
 
-        {/* Dropdown menu */}
         {menuOpen && user && (
           <div className="fixed top-14 left-4 w-56 bg-white dark:bg-zinc-900 shadow-xl border border-zinc-100 dark:border-zinc-800 rounded-2xl z-50 p-4 flex flex-col gap-3">
-            {/* User info */}
             <div className="flex items-center gap-2.5 pb-1">
               <div className="w-8 h-8 rounded-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 flex items-center justify-center shrink-0 overflow-hidden">
                 <span className="text-xs font-bold text-zinc-600 dark:text-zinc-300 uppercase">
@@ -261,17 +252,15 @@ export const Header = ({ slug, companyId }: HeaderProps) => {
         )}
       </div>
 
-      {/* ════════════════════════════════════════════════
-          MOBILE (< md)
-      ════════════════════════════════════════════════ */}
+      {/* MOBILE */}
       <div className="md:hidden">
         <div className="relative w-full h-52 bg-zinc-200 overflow-hidden">
-          {company?.bannerUrl && (
-            <img src={company.bannerUrl} alt="Banner da loja" className="w-full h-full object-cover" />
+          {bannerUrl && (
+            <img src={bannerUrl} alt="Banner da loja" className="w-full h-full object-cover" />
           )}
           <div className="absolute top-3 left-3 z-10">
-            <span className={`inline-flex items-center gap-1.5 text-xs font-medium bg-white/80 backdrop-blur-sm
-              text-zinc-700 rounded-full px-2.5 py-1 shadow-sm`}>
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium bg-white/80 backdrop-blur-sm
+              text-zinc-700 rounded-full px-2.5 py-1 shadow-sm">
               <span className={`w-1.5 h-1.5 rounded-full ${company?.isOpen ? 'bg-green-500' : 'bg-red-400'}`} />
               {company?.isOpen ? 'Aberto' : 'Fechado'}
             </span>
@@ -302,9 +291,7 @@ export const Header = ({ slug, companyId }: HeaderProps) => {
         <BottomNav slug={slug} companyId={companyId} onSearchOpen={() => setSearchOpen(true)} />
       </div>
 
-      {/* ════════════════════════════════════════════════
-          SEARCH OVERLAY (shared)
-      ════════════════════════════════════════════════ */}
+      {/* SEARCH OVERLAY */}
       {searchOpen && (
         <div className="fixed inset-0 z-50 flex flex-col bg-white dark:bg-zinc-950">
           <div className="flex items-center px-3 gap-2 h-14 shrink-0 border-b border-zinc-100 dark:border-zinc-800">

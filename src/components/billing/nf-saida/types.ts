@@ -61,7 +61,8 @@ export interface DestinatarioForm {
   bairro: string
   municipio: string
   codigo_municipio: string
-  uf: string
+  uf: string                      // UUID do customer ou supplier selecionado
+  origem?:  'cliente' | 'fornecedor'  
 }
 
 export interface NfSaidaForm {

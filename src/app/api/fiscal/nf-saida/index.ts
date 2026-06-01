@@ -7,6 +7,23 @@ function stripNonDigits(s?: string | null) {
   return s ? s.replace(/\D/g, '') : null
 }
 
+// ─── Contrato unificado da edge function emitir-nfe ──────────────────────────
+//
+// Tanto NfSaidaTab quanto qualquer outro consumidor devem importar este tipo.
+// A edge function `emitir-nfe` deve retornar exatamente estes campos.
+
+export interface EmitirNfeResult {
+  ok:        boolean
+  chave:     string   // chave de acesso (44 dígitos)
+  protocolo: string   // nProt da SEFAZ
+  numero:    string   // número da NF-e gerado
+  xml_url:   string   // caminho no Storage (bucket nfe-xmls)
+  danfe_url?: string  // URL do DANFE em PDF (opcional — pode ser gerado depois)
+  cStat?:    number
+  xMotivo?:  string
+  error?:    string   // presente quando ok = false
+}
+
 // ─── Listagem ─────────────────────────────────────────────────────────────────
 
 export async function getNfsSaida(companyId: string): Promise<NfSaida[]> {
@@ -42,37 +59,45 @@ export async function createNfSaida(
 ): Promise<NfSaida> {
   const d = form.destinatario
   const payload = {
-    company_id:       companyId,
-    numero:           '',                          // gerado por trigger / edge function
-    serie:            form.serie,
-    tipo_nota:        form.tipo_nota,
-    finalidade:       form.finalidade,
-    natureza_operacao: form.natureza_operacao,
-    dest_tipo:        d.tipo,
-    dest_nome:        d.nome,
-    dest_cpf_cnpj:    d.tipo === 'juridica'
-                        ? stripNonDigits(d.cnpj)
-                        : stripNonDigits(d.cpf),
-    dest_ie:          d.ie   || null,
-    dest_ind_ie:      resolveIndIe(d.ie, d.contribuinte),
-    dest_email:       d.email    || null,
-    dest_telefone:    d.telefone || null,
-    dest_logradouro:  d.logradouro || null,
-    dest_numero:      d.numero     || null,
-    dest_complemento: d.complemento || null,
-    dest_bairro:      d.bairro      || null,
-    dest_municipio:   d.municipio   || null,
-    dest_codigo_mun:  d.codigo_municipio || null,
-    dest_uf:          d.uf  || null,
-    dest_cep:         stripNonDigits(d.cep),
-    dest_id:          d.dest_id || null,
-    chave_ref:        form.chave_ref  || null,
-    nf_entrada_id:    form.nf_entrada_id || null,
-    itens:            form.itens,
-    valor_produtos:   valorProdutos,
-    valor_desconto:   form.valor_desconto,
-    valor_frete:      form.valor_frete,
-    valor_total:      valorTotal,
+    company_id:            companyId,
+    // numero vazio — preenchido pela edge function na emissão.
+    // O banco deve ter DEFAULT '' para aceitar INSERT sem este campo.
+    numero:                '',
+    serie:                 form.serie,
+    tipo_nota:             form.tipo_nota,
+    finalidade:            form.finalidade,
+    natureza_operacao:     form.natureza_operacao,
+    dest_tipo:             d.tipo,
+    dest_nome:             d.nome,
+    dest_cpf_cnpj:         d.tipo === 'juridica'
+                             ? stripNonDigits(d.cnpj)
+                             : stripNonDigits(d.cpf),
+    dest_ie:               d.ie   || null,
+    // dest_ind_ie: obrigatório para o XML da NF-e (1=contribuinte, 2=isento, 9=não contribuinte)
+    dest_ind_ie:           resolveIndIe(d.ie, d.contribuinte),
+    dest_email:            d.email       || null,
+    dest_telefone:         d.telefone    || null,
+    dest_logradouro:       d.logradouro  || null,
+    dest_numero:           d.numero      || null,
+    dest_complemento:      d.complemento || null,
+    dest_bairro:           d.bairro      || null,
+    dest_municipio:        d.municipio   || null,
+    dest_codigo_mun:       d.codigo_municipio || null,
+    dest_uf:               d.uf          || null,
+    dest_cep:              stripNonDigits(d.cep),
+    dest_id:               d.dest_id  || null,
+    // dest_origem só existe quando o destinatário veio do autocomplete;
+    // em preenchimento manual fica null (aceito pelo CHECK constraint da tabela).
+    dest_origem:           d.origem   || null,
+    chave_ref:             form.chave_ref       || null,
+    nf_entrada_id:         form.nf_entrada_id   || null,
+    itens:                 form.itens,
+    valor_produtos:        valorProdutos,
+    valor_desconto:        form.valor_desconto,
+    valor_frete:           form.valor_frete,
+    valor_total:           valorTotal,
+    forma_pagamento:       form.forma_pagamento  || null,
+    informacoes_adicionais: form.informacoes_adicionais || null,
     status,
   }
 
@@ -86,7 +111,7 @@ export async function createNfSaida(
   return data as NfSaida
 }
 
-// ─── Atualização (rascunho) ───────────────────────────────────────────────────
+// ─── Atualização (somente rascunho) ──────────────────────────────────────────
 
 export async function updateNfSaida(
   id: string,
@@ -97,35 +122,38 @@ export async function updateNfSaida(
 ): Promise<NfSaida> {
   const d = form.destinatario
   const payload = {
-    tipo_nota:         form.tipo_nota,
-    finalidade:        form.finalidade,
-    natureza_operacao: form.natureza_operacao,
-    dest_tipo:        d.tipo,
-    dest_nome:        d.nome,
-    dest_cpf_cnpj:    d.tipo === 'juridica'
-                        ? stripNonDigits(d.cnpj)
-                        : stripNonDigits(d.cpf),
-    dest_ie:          d.ie   || null,
-    dest_ind_ie:      resolveIndIe(d.ie, d.contribuinte),
-    dest_email:       d.email    || null,
-    dest_telefone:    d.telefone || null,
-    dest_logradouro:  d.logradouro || null,
-    dest_numero:      d.numero     || null,
-    dest_complemento: d.complemento || null,
-    dest_bairro:      d.bairro      || null,
-    dest_municipio:   d.municipio   || null,
-    dest_codigo_mun:  d.codigo_municipio || null,
-    dest_uf:          d.uf  || null,
-    dest_cep:         stripNonDigits(d.cep),
-    dest_id:          d.dest_id || null,
-    chave_ref:        form.chave_ref  || null,
-    nf_entrada_id:    form.nf_entrada_id || null,
-    itens:            form.itens,
-    valor_produtos:   valorProdutos,
-    valor_desconto:   form.valor_desconto,
-    valor_frete:      form.valor_frete,
-    valor_total:      valorTotal,
-    updated_at:       new Date().toISOString(),
+    tipo_nota:             form.tipo_nota,
+    finalidade:            form.finalidade,
+    natureza_operacao:     form.natureza_operacao,
+    dest_tipo:             d.tipo,
+    dest_nome:             d.nome,
+    dest_cpf_cnpj:         d.tipo === 'juridica'
+                             ? stripNonDigits(d.cnpj)
+                             : stripNonDigits(d.cpf),
+    dest_ie:               d.ie   || null,
+    dest_ind_ie:           resolveIndIe(d.ie, d.contribuinte),
+    dest_email:            d.email       || null,
+    dest_telefone:         d.telefone    || null,
+    dest_logradouro:       d.logradouro  || null,
+    dest_numero:           d.numero      || null,
+    dest_complemento:      d.complemento || null,
+    dest_bairro:           d.bairro      || null,
+    dest_municipio:        d.municipio   || null,
+    dest_codigo_mun:       d.codigo_municipio || null,
+    dest_uf:               d.uf          || null,
+    dest_cep:              stripNonDigits(d.cep),
+    dest_id:               d.dest_id  || null,
+    dest_origem:           d.origem   || null,
+    chave_ref:             form.chave_ref       || null,
+    nf_entrada_id:         form.nf_entrada_id   || null,
+    itens:                 form.itens,
+    valor_produtos:        valorProdutos,
+    valor_desconto:        form.valor_desconto,
+    valor_frete:           form.valor_frete,
+    valor_total:           valorTotal,
+    forma_pagamento:       form.forma_pagamento  || null,
+    informacoes_adicionais: form.informacoes_adicionais || null,
+    updated_at:            new Date().toISOString(),
   }
 
   const { data, error } = await supabase
@@ -143,12 +171,20 @@ export async function updateNfSaida(
 
 // ─── Emissão (delega à edge function) ────────────────────────────────────────
 
-export async function emitirNfSaida(nfSaidaId: string): Promise<{ chave: string; danfe_url: string }> {
+export async function emitirNfSaida(nfSaidaId: string): Promise<EmitirNfeResult> {
   const { data, error } = await supabase.functions.invoke('emitir-nfe', {
     body: { nf_saida_id: nfSaidaId },
   })
+
+  // Erro de rede / HTTP da própria invocação
   if (error) throw new Error(error.message)
-  return data as { chave: string; danfe_url: string }
+
+  // Erro de negócio retornado pela edge function (ok: false)
+  if (!data?.ok) {
+    throw new Error(data?.error ?? 'Erro desconhecido na emissão da NF-e')
+  }
+
+  return data as EmitirNfeResult
 }
 
 // ─── Cancelamento ─────────────────────────────────────────────────────────────
@@ -161,10 +197,13 @@ export async function cancelarNfSaida(
   if (justificativa.trim().length < 15) {
     throw new Error('Justificativa deve ter pelo menos 15 caracteres.')
   }
+
   const { data, error } = await supabase.functions.invoke('cancelar-nfe', {
     body: { nf_saida_id: id, company_id: companyId, justificativa },
   })
+
   if (error) throw new Error(error.message)
+  if (!data?.ok) throw new Error(data?.error ?? 'Erro ao cancelar NF-e')
   return data as NfSaida
 }
 
@@ -181,12 +220,23 @@ export async function deleteNfSaidaRascunho(id: string, companyId: string): Prom
   if (error) throw new Error(error.message)
 }
 
+// ─── Download XML do Storage ──────────────────────────────────────────────────
+
+export async function downloadXmlNfe(xmlUrl: string, numero: string): Promise<void> {
+  // Bucket dedicado para NF-e (mod 55). Crie em: Supabase Dashboard → Storage → New bucket → "nfe-xmls" (public: false)
+  const { data, error } = await supabase.storage.from('nfe-xmls').download(xmlUrl)
+  if (error || !data) throw new Error('Erro ao baixar XML: ' + error?.message)
+
+  const url = URL.createObjectURL(data)
+  const a   = document.createElement('a')
+  a.href     = url
+  a.download = `nfe-${numero}.xml`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 // ─── Busca de destinatário (cliente ou fornecedor) ────────────────────────────
 
-/**
- * Busca por nome, CPF ou CNPJ em customers E suppliers.
- * Retorna lista unificada para o autocomplete da tela de faturamento.
- */
 export async function searchDestinatario(
   companyId: string,
   query: string
@@ -196,7 +246,6 @@ export async function searchDestinatario(
 
   const isDoc = /^\d+$/.test(q)
 
-  // ── Clientes ────────────────────────────────────────────────
   let clienteQuery = supabase
     .from('customers')
     .select('id, name, razao_social, cpf, cnpj, ie, ind_ie_dest, contribuinte, pessoa_tipo, email, phone, codigo_municipio, address')
@@ -207,7 +256,6 @@ export async function searchDestinatario(
     ? clienteQuery.or(`cpf.ilike.%${q}%,cnpj.ilike.%${q}%`)
     : clienteQuery.or(`name.ilike.%${q}%,razao_social.ilike.%${q}%`)
 
-  // ── Fornecedores ─────────────────────────────────────────────
   let fornecedorQuery = supabase
     .from('suppliers')
     .select('id, razao_social, nome_fantasia, cnpj, inscricao_estadual, contribuinte, email, telefone, codigo_municipio, endereco')
@@ -222,12 +270,10 @@ export async function searchDestinatario(
     clienteQuery, fornecedorQuery,
   ])
 
-  const results: DestinatarioSearchResult[] = [
-    ...(clientes ?? []).map(c => clienteToDestinatario(c)),
+  return [
+    ...(clientes    ?? []).map(c => clienteToDestinatario(c)),
     ...(fornecedores ?? []).map(f => fornecedorToDestinatario(f)),
   ]
-
-  return results
 }
 
 // ─── Converters ───────────────────────────────────────────────────────────────
@@ -235,62 +281,63 @@ export async function searchDestinatario(
 function clienteToDestinatario(c: any): DestinatarioSearchResult {
   const addr = c.address ?? {}
   return {
-    dest_id:           c.id,
-    origem:            'cliente',
-    tipo:              c.pessoa_tipo ?? 'fisica',
-    nome:              c.razao_social ?? c.name,
-    cpf:               c.cpf  ?? '',
-    cnpj:              c.cnpj ?? '',
-    ie:                c.ie   ?? '',
-    contribuinte:      c.contribuinte ?? '',
-    ind_ie_dest:       c.ind_ie_dest ?? 9,
-    email:             c.email ?? '',
-    telefone:          c.phone ?? '',
-    logradouro:        addr.logradouro ?? addr.street ?? '',
-    numero:            addr.numero     ?? addr.number ?? '',
-    complemento:       addr.complemento ?? '',
-    bairro:            addr.bairro     ?? addr.district ?? '',
-    municipio:         addr.municipio  ?? addr.city ?? '',
-    codigo_municipio:  c.codigo_municipio ?? addr.codigo_municipio ?? '',
-    uf:                addr.uf ?? addr.state ?? 'PB',
-    cep:               addr.cep ?? addr.zipcode ?? '',
+    dest_id:          c.id,
+    origem:           'cliente',
+    tipo:             c.pessoa_tipo ?? 'fisica',
+    nome:             c.razao_social ?? c.name,
+    cpf:              c.cpf  ?? '',
+    cnpj:             c.cnpj ?? '',
+    ie:               c.ie   ?? '',
+    contribuinte:     c.contribuinte ?? '',
+    ind_ie_dest:      c.ind_ie_dest ?? 9,
+    email:            c.email ?? '',
+    telefone:         c.phone ?? '',
+    logradouro:       addr.logradouro ?? addr.street   ?? '',
+    numero:           addr.numero     ?? addr.number   ?? '',
+    complemento:      addr.complemento ?? '',
+    bairro:           addr.bairro     ?? addr.district ?? '',
+    municipio:        addr.municipio  ?? addr.city     ?? '',
+    codigo_municipio: c.codigo_municipio ?? addr.codigo_municipio ?? '',
+    uf:               addr.uf ?? addr.state ?? 'PB',
+    cep:              addr.cep ?? addr.zipcode ?? '',
   }
 }
 
 function fornecedorToDestinatario(f: any): DestinatarioSearchResult {
   const addr = f.endereco ?? {}
   return {
-    dest_id:           f.id,
-    origem:            'fornecedor',
-    tipo:              'juridica',
-    nome:              f.razao_social,
-    cpf:               '',
-    cnpj:              f.cnpj ?? '',
-    ie:                f.inscricao_estadual ?? '',
-    contribuinte:      f.contribuinte ?? '',
-    ind_ie_dest:       resolveIndIe(f.inscricao_estadual, f.contribuinte),
-    email:             f.email    ?? '',
-    telefone:          f.telefone ?? '',
-    logradouro:        addr.logradouro ?? '',
-    numero:            addr.numero     ?? '',
-    complemento:       addr.complemento ?? '',
-    bairro:            addr.bairro      ?? '',
-    municipio:         addr.municipio   ?? '',
-    codigo_municipio:  f.codigo_municipio ?? addr.codigo_municipio ?? '',
-    uf:                addr.uf  ?? 'PB',
-    cep:               addr.cep ?? '',
+    dest_id:          f.id,
+    origem:           'fornecedor',
+    tipo:             'juridica',
+    nome:             f.razao_social,
+    cpf:              '',
+    cnpj:             f.cnpj ?? '',
+    ie:               f.inscricao_estadual ?? '',
+    contribuinte:     f.contribuinte ?? '',
+    ind_ie_dest:      resolveIndIe(f.inscricao_estadual, f.contribuinte),
+    email:            f.email    ?? '',
+    telefone:         f.telefone ?? '',
+    logradouro:       addr.logradouro  ?? '',
+    numero:           addr.numero      ?? '',
+    complemento:      addr.complemento ?? '',
+    bairro:           addr.bairro      ?? '',
+    municipio:        addr.municipio   ?? '',
+    codigo_municipio: f.codigo_municipio ?? addr.codigo_municipio ?? '',
+    uf:               addr.uf  ?? 'PB',
+    cep:              addr.cep ?? '',
   }
 }
 
-// ─── indIeDest (indicador IE destinatário) ────────────────────────────────────
+// ─── indIeDest ────────────────────────────────────────────────────────────────
 // 1 = Contribuinte ICMS | 2 = Isento | 9 = Não contribuinte
+
 function resolveIndIe(ie?: string | null, contribuinte?: string | null): 1 | 2 | 9 {
-  if (contribuinte === '2') return 2  // isento
+  if (contribuinte === '2') return 2
   if (ie && ie.trim() !== '' && ie.toUpperCase() !== 'ISENTO') return 1
   return 9
 }
 
-// ─── Tipos locais ─────────────────────────────────────────────────────────────
+// ─── Tipos exportados ─────────────────────────────────────────────────────────
 
 export interface DestinatarioSearchResult {
   dest_id:          string

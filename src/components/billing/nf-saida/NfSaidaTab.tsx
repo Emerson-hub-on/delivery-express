@@ -10,6 +10,17 @@ import { ItensSection }        from './ItensSection'
 import { TotaisSection }       from './TotaisSection'
 import { DanfePreview }        from './DanfePreview'
 
+// ── Importa service e contrato unificado ────────────────────────────────────
+// buildPayload local foi removido — toda persistência passa pelo service,
+// que garante dest_ind_ie, forma_pagamento, informacoes_adicionais e
+// os status aceitos pelo CHECK constraint do banco.
+import {
+  createNfSaida,
+  emitirNfSaida,
+  downloadXmlNfe,
+} from '@/app/api/fiscal/nf-saida'
+import type { EmitirNfeResult } from '@/app/api/fiscal/nf-saida'
+
 import {
   TIPOS_NOTA_PADRAO,
   TIPOS_NOTA_REQUEREM_CHAVE_REF,
@@ -42,14 +53,6 @@ type Emitente = {
   fone?: string
 }
 
-// Resultado da emissão bem-sucedida
-interface EmissaoResult {
-  chave_acesso: string
-  protocolo: string
-  numero: string
-  xml_url: string
-}
-
 // ── Estado inicial ────────────────────────────────────────────────────────────
 const DEST_EMPTY: DestinatarioForm = {
   tipo: 'fisica',
@@ -75,21 +78,21 @@ const TIPO_INICIAL = TIPOS_NOTA_PADRAO[0]
 
 function emptyForm(): NfSaidaForm {
   return {
-    tipo_nota:          TIPO_INICIAL.value,
-    natureza_operacao:  TIPO_INICIAL.natureza_operacao,
-    cfop_padrao:        TIPO_INICIAL.cfop,
-    finalidade:         TIPO_INICIAL.finalidade,
-    serie:              '001',
-    destinatario:       DEST_EMPTY,
+    tipo_nota:              TIPO_INICIAL.value,
+    natureza_operacao:      TIPO_INICIAL.natureza_operacao,
+    cfop_padrao:            TIPO_INICIAL.cfop,
+    finalidade:             TIPO_INICIAL.finalidade,
+    serie:                  '001',
+    destinatario:           DEST_EMPTY,
     itens: [{
       id: nanoid(), produto_desc: '', ncm: '', cfop: '',
       cst_csosn: '', quantidade: 1, valor_unit: 0, valor_total: 0,
     }],
-    valor_desconto:       0,
-    valor_frete:          0,
-    forma_pagamento:      'boleto',
+    valor_desconto:         0,
+    valor_frete:            0,
+    forma_pagamento:        'boleto',
     informacoes_adicionais: '',
-    chave_ref:            '',
+    chave_ref:              '',
   }
 }
 
@@ -102,8 +105,8 @@ export function NfSaidaTab({ companyId, onError }: Props) {
   const [showDanfe, setShowDanfe]     = useState(false)
   const [savedNumero, setSavedNumero] = useState<string | undefined>()
 
-  // Resultado da última emissão autorizada
-  const [emissaoResult, setEmissaoResult] = useState<EmissaoResult | null>(null)
+  // Usa EmitirNfeResult importado do service — sem tipo local duplicado
+  const [emissaoResult, setEmissaoResult] = useState<EmitirNfeResult | null>(null)
   const [copiedChave, setCopiedChave]     = useState(false)
 
   const [emitente, setEmitente]               = useState<Emitente | null>(null)
@@ -144,15 +147,25 @@ export function NfSaidaTab({ companyId, onError }: Props) {
   }, [companyId])
 
   // ── Tipo de nota ─────────────────────────────────────────────────────────
-  function handleTipoChange(tipo: TipoNota) {
-    setForm(prev => ({
-      ...prev,
-      tipo_nota:         tipo.value,
-      natureza_operacao: tipo.natureza_operacao,
-      cfop_padrao:       tipo.cfop,
-      finalidade:        tipo.finalidade,
-    }))
+ function handleTipoChange(tipo: TipoNota) {
+    setForm(prev => {
+      const cfopAntigo = prev.cfop_padrao
+      const cfopNovo   = tipo.cfop
+      const itensAtualizados = prev.itens.map(item => {
+        const deveAtualizar = !item.cfop || item.cfop === cfopAntigo
+        return deveAtualizar ? { ...item, cfop: cfopNovo } : item
+      })
+      return {
+        ...prev,
+        tipo_nota:         tipo.value,
+        natureza_operacao: tipo.natureza_operacao,
+        cfop_padrao:       cfopNovo,
+        finalidade:        tipo.finalidade,
+        itens:             itensAtualizados,
+      }
+    })
   }
+  
 
   // ── Destinatário ─────────────────────────────────────────────────────────
   const handleDestChange = useCallback(
@@ -184,52 +197,14 @@ export function NfSaidaTab({ companyId, onError }: Props) {
 
   const showChaveRef = TIPOS_NOTA_REQUEREM_CHAVE_REF.includes(form.tipo_nota)
 
-  // ── Payload ──────────────────────────────────────────────────────────────
-  function buildPayload(status: 'rascunho' | 'pendente') {
-    const d = form.destinatario
-    return {
-      company_id:        companyId,
-      numero:            '',
-      serie:             form.serie,
-      tipo_nota:         form.tipo_nota,
-      finalidade:        form.finalidade,
-      natureza_operacao: form.natureza_operacao,
-      dest_tipo:         d.tipo === 'juridica' ? 'juridica' : 'fisica',
-      dest_nome:         d.nome,
-      dest_cpf_cnpj:     d.tipo === 'juridica' ? d.cnpj.replace(/\D/g, '') : d.cpf.replace(/\D/g, ''),
-      dest_ie:           d.ie          || null,
-      dest_email:        d.email       || null,
-      dest_telefone:     d.telefone    || null,
-      dest_logradouro:   d.logradouro  || null,
-      dest_numero:       d.numero      || null,
-      dest_complemento:  d.complemento || null,
-      dest_bairro:       d.bairro      || null,
-      dest_municipio:    d.municipio   || null,
-      dest_codigo_mun:   d.codigo_municipio || null,
-      dest_uf:           d.uf          || null,
-      dest_cep:          d.cep.replace(/\D/g, '') || null,
-      chave_ref:         form.chave_ref || null,
-      itens:             form.itens,
-      valor_produtos:    valorProdutos,
-      valor_desconto:    form.valor_desconto,
-      valor_frete:       form.valor_frete,
-      valor_total:       valorTotal,
-      status,
-    }
-  }
-
   // ── Salvar rascunho → abre DANFE ─────────────────────────────────────────
+  // Usa createNfSaida do service: garante dest_ind_ie e todos os campos corretos.
   async function handleSaveRascunho() {
     if (!emitente) { onError?.('Configuração fiscal não encontrada.'); return }
     try {
       setSaving(true)
-      const { data, error } = await supabase
-        .from('nf_saida')
-        .insert(buildPayload('rascunho'))
-        .select('numero')
-        .single()
-      if (error) throw error
-      setSavedNumero(data?.numero ?? undefined)
+      const nf = await createNfSaida(companyId, form, valorProdutos, valorTotal, 'rascunho')
+      setSavedNumero(nf.numero || undefined)
       setShowDanfe(true)
     } catch (e: any) {
       onError?.(e.message ?? 'Erro ao salvar rascunho')
@@ -239,35 +214,23 @@ export function NfSaidaTab({ companyId, onError }: Props) {
   }
 
   // ── Emitir NF-e ──────────────────────────────────────────────────────────
+  // 1. Cria no banco como 'pendente' via service (status válido no CHECK constraint)
+  // 2. Invoca edge function via emitirNfSaida (que valida ok: false e lança erro)
+  // 3. Usa EmitirNfeResult importado — sem tipo local duplicado
   async function handleEmitir() {
     if (!emitente) { onError?.('Configuração fiscal não encontrada.'); return }
     try {
       setEmitting(true)
       setEmissaoResult(null)
 
-      // 1. Salva a nota como 'pendente'
-      const { data: inserted, error: insertErr } = await supabase
-        .from('nf_saida')
-        .insert(buildPayload('pendente'))
-        .select('id')
-        .single()
-      if (insertErr) throw insertErr
+      // Persiste como 'pendente' — status aceito pelo CHECK constraint
+      const nf = await createNfSaida(companyId, form, valorProdutos, valorTotal, 'pendente')
 
-      // 2. Chama a edge function — ela gera XML, envia à SEFAZ e salva no Storage
-      const { data: fnData, error: fnErr } = await supabase.functions.invoke('emitir-nfe', {
-        body: { nf_saida_id: inserted.id },
-      })
-      if (fnErr) throw fnErr
+      // Delega à edge function e obtém resultado tipado
+      const result = await emitirNfSaida(nf.id)
 
-      // 3. Exibe o resultado de sucesso e limpa o formulário
-      setEmissaoResult({
-        chave_acesso: fnData.chave_acesso,
-        protocolo:    fnData.protocolo,
-        numero:       fnData.numero,
-        xml_url:      fnData.xml_url,
-      })
+      setEmissaoResult(result)
       setForm(emptyForm())
-
     } catch (e: any) {
       onError?.(e.message ?? 'Erro ao emitir NF-e')
     } finally {
@@ -282,16 +245,14 @@ export function NfSaidaTab({ companyId, onError }: Props) {
     setTimeout(() => setCopiedChave(false), 2000)
   }
 
-  // ── Download XML direto do Storage ───────────────────────────────────────
+  // ── Download XML ─────────────────────────────────────────────────────────
+  // Delegado ao service, que usa o bucket correto 'nfe-xmls'
   async function handleDownloadXml(xmlUrl: string, numero: string) {
-    const { data, error } = await supabase.storage.from('nfe-xmls').download(xmlUrl)
-    if (error || !data) { onError?.('Erro ao baixar XML: ' + error?.message); return }
-    const url = URL.createObjectURL(data)
-    const a   = document.createElement('a')
-    a.href     = url
-    a.download = `nfe-${numero}.xml`
-    a.click()
-    URL.revokeObjectURL(url)
+    try {
+      await downloadXmlNfe(xmlUrl, numero)
+    } catch (e: any) {
+      onError?.(e.message ?? 'Erro ao baixar XML')
+    }
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -365,11 +326,11 @@ export function NfSaidaTab({ companyId, onError }: Props) {
                   Chave de Acesso
                 </div>
                 <div style={{ fontSize: '12px', color: '#6c9fd4', fontFamily: 'monospace', letterSpacing: '1.5px', wordBreak: 'break-all' }}>
-                  {emissaoResult.chave_acesso}
+                  {emissaoResult.chave}
                 </div>
               </div>
               <button
-                onClick={() => handleCopyChave(emissaoResult.chave_acesso)}
+                onClick={() => handleCopyChave(emissaoResult.chave)}
                 style={{
                   display: 'flex', alignItems: 'center', gap: '5px',
                   background: copiedChave ? '#1a4a28' : '#1a2a20',
