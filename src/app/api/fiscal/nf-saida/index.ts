@@ -248,7 +248,7 @@ export async function searchDestinatario(
 
   let clienteQuery = supabase
     .from('customers')
-    .select('id, name, razao_social, cpf, cnpj, ie, ind_ie_dest, contribuinte, pessoa_tipo, email, phone, codigo_municipio, address')
+    .select('id, name, razao_social, cpf, cnpj, ie, ind_ie_dest, contribuinte, pessoa_tipo, email, phone, codigo_municipio, logradouro, numero, complemento, bairro, municipio, uf, cep')
     .eq('company_id', companyId)
     .limit(8)
 
@@ -279,7 +279,6 @@ export async function searchDestinatario(
 // ─── Converters ───────────────────────────────────────────────────────────────
 
 function clienteToDestinatario(c: any): DestinatarioSearchResult {
-  const addr = c.address ?? {}
   return {
     dest_id:          c.id,
     origem:           'cliente',
@@ -292,14 +291,14 @@ function clienteToDestinatario(c: any): DestinatarioSearchResult {
     ind_ie_dest:      c.ind_ie_dest ?? 9,
     email:            c.email ?? '',
     telefone:         c.phone ?? '',
-    logradouro:       addr.logradouro ?? addr.street   ?? '',
-    numero:           addr.numero     ?? addr.number   ?? '',
-    complemento:      addr.complemento ?? '',
-    bairro:           addr.bairro     ?? addr.district ?? '',
-    municipio:        addr.municipio  ?? addr.city     ?? '',
-    codigo_municipio: c.codigo_municipio ?? addr.codigo_municipio ?? '',
-    uf:               addr.uf ?? addr.state ?? 'PB',
-    cep:              addr.cep ?? addr.zipcode ?? '',
+    logradouro:       c.logradouro  ?? '',   // ← direto da coluna
+    numero:           c.numero      ?? '',
+    complemento:      c.complemento ?? '',
+    bairro:           c.bairro      ?? '',
+    municipio:        c.municipio   ?? '',
+    codigo_municipio: c.codigo_municipio ?? '',
+    uf:               c.uf           ?? 'PB',
+    cep:              c.cep          ?? '',
   }
 }
 

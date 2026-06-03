@@ -50,6 +50,7 @@ type Emitente = {
   uf: string
   cep: string
   fone?: string
+  codigo_ibge: string
 }
 
 // ── Estado inicial ────────────────────────────────────────────────────────────
@@ -117,7 +118,7 @@ export function NfSaidaTab({ companyId, onError }: Props) {
       setLoadingEmitente(true)
       const { data, error } = await supabase
         .from('fiscal_configs')
-        .select('razao_social, cnpj, ie, logradouro, numero, bairro, municipio, uf, cep, telefone')
+        .select('razao_social, cnpj, ie, codigo_ibge, logradouro, numero, bairro, municipio, uf, cep, telefone')
         .eq('company_id', companyId)
         .single()
 
@@ -138,6 +139,7 @@ export function NfSaidaTab({ companyId, onError }: Props) {
         uf:           data.uf.trim(),
         cep:          data.cep,
         fone:         data.telefone ?? undefined,
+        codigo_ibge: data.codigo_ibge ?? '',
       })
       setLoadingEmitente(false)
     }

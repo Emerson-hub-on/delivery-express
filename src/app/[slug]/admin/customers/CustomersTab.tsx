@@ -167,11 +167,9 @@ export function CustomersTab({
                   )}
                 </td>
                 <td className="px-5 py-3 text-gray-500 text-xs">
-                  <td className="px-5 py-3 text-gray-500 text-xs">
                   {c.municipio
                     ? `${c.municipio} / ${c.uf?.toUpperCase() ?? ''}`
                     : '—'}
-                </td>
                 </td>
                 <td className="px-5 py-3 text-right whitespace-nowrap">
                   <button

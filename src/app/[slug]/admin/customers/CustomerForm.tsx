@@ -18,6 +18,7 @@ const addrFields = {
   district:   z.string().optional(),
   city:       z.string().optional(),
   state:      z.string().optional(),
+  codigo_municipio: z.string().regex(/^\d{7}$/, 'Deve ter 7 dígitos').optional().or(z.literal('')),
 }
 
 const baseSchema = z.object({
@@ -75,6 +76,7 @@ export function CustomerForm({ initial, companyId, onSaved, onCancel, onError }:
         district:     initial?.bairro        ?? '',
         city:         initial?.municipio     ?? '',
         state:        initial?.uf            ?? '',
+        codigo_municipio: initial?.codigo_municipio ?? '',
       },
     })
 
@@ -94,6 +96,7 @@ export function CustomerForm({ initial, companyId, onSaved, onCancel, onError }:
       setValue('district', d.bairro     ?? '')
       setValue('city',     d.localidade ?? '')
       setValue('state',    d.uf         ?? '')
+      setValue('codigo_municipio', d.ibge   ?? '') 
       setTimeout(() =>
         document.querySelector<HTMLInputElement>('input[name="number"]')?.focus(), 100)
     } catch {
@@ -132,13 +135,14 @@ export function CustomerForm({ initial, companyId, onSaved, onCancel, onError }:
       bairro:           values.district    || null,
       municipio:        values.city        || null,
       uf:               values.state       || null,
+      
       cpf:              pessoaTipo === 'fisica'   ? (values.cpf          || null) : null,
       cnpj:             pessoaTipo === 'juridica' ? (values.cnpj         || null) : null,
       razao_social:     pessoaTipo === 'juridica' ? (values.razao_social || null) : null,
       ie:               pessoaTipo === 'juridica' ? (values.ie           || null) : null,
       // campos gerenciados fora do form
       code:             initial?.code          ?? 0,
-      codigo_municipio: initial?.codigo_municipio ?? null,
+      codigo_municipio: values.codigo_municipio || null,
       ind_ie_dest:      initial?.ind_ie_dest   ?? 9,   // 9 = não contribuinte (padrão NF-e)
       contribuinte:     initial?.contribuinte  ?? null,
     } satisfies Omit<Customer, 'id' | 'created_at'>
@@ -295,6 +299,10 @@ export function CustomerForm({ initial, companyId, onSaved, onCancel, onError }:
           {F('Bairro',      'district',   { placeholder: 'Bairro' })}
           {F('Cidade',      'city',       { placeholder: 'Cidade' })}
           {F('Estado',      'state',      { placeholder: 'PB', maxLength: 2 })}
+          {F('Cód. IBGE do Município', 'codigo_municipio', {
+            placeholder: '2507507',
+            maxLength: 7,
+          })}
         </div>
 
         {/* ── Actions ── */}

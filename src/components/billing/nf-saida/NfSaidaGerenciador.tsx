@@ -2,11 +2,12 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { DanfePreview } from './DanfePreview'
+import { downloadXmlNfe } from '@/app/api/fiscal/nf-saida'
 import type { NfSaidaForm } from './types'
 import {
   FileText, Search, RefreshCw, ChevronDown, ChevronUp,
   Eye, Trash2, Send, X, CheckCircle2, Clock, AlertCircle,
-  Ban, Filter, Download,
+  Ban, Filter, Download, FileCode,
 } from 'lucide-react'
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
@@ -27,8 +28,10 @@ interface NfSaidaRow {
   itens: any[]
   valor_desconto: number
   valor_frete: number
+  valor_produtos: number
   dest_tipo: string
   dest_ie: string | null
+  dest_ind_ie: number | null
   dest_email: string | null
   dest_telefone: string | null
   dest_logradouro: string | null
@@ -37,24 +40,32 @@ interface NfSaidaRow {
   dest_bairro: string | null
   dest_municipio: string | null
   dest_codigo_mun: string | null
-  dest_uf2: string | null
   dest_cep: string | null
   informacoes_adicionais: string | null
   chave_ref: string | null
+  chave_acesso: string | null
+  xml_url: string | null
+  xml_protocolo: string | null
+  sefaz_motivo: string | null
   finalidade: 1 | 2 | 3 | 4
+  forma_pagamento: string | null
 }
 
 interface Emitente {
   razao_social: string
   cnpj: string
   ie: string
+  crt: number
+  codigo_ibge: string
   logradouro: string
   numero: string
+  complemento: string | null
   bairro: string
   municipio: string
   uf: string
   cep: string
-  fone?: string
+  telefone: string | null
+  ambiente: number
 }
 
 interface Props {
@@ -75,14 +86,138 @@ function fmtDoc(v: string) {
   if (n.length === 11) return n.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4')
   return v || '—'
 }
+function esc(s: string) {
+  return (s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+// ── Geração de XML de rascunho (preview, sem assinatura) ─────────────────────
+// Usado quando a nota ainda não foi transmitida e não tem xml_url no Storage.
+function gerarXmlRascunho(nota: NfSaidaRow, emitente: Emitente): string {
+  const dhEmi = new Date(nota.created_at).toISOString().replace('Z', '-03:00')
+  const fmt2  = (n: number) => n.toFixed(2)
+  const fmt4  = (n: number) => n.toFixed(4)
+
+  const xmlItens = (nota.itens ?? []).map((item: any, idx: number) => {
+    const nItem = String(idx + 1)
+    return `
+  <det nItem="${nItem}">
+    <prod>
+      <cProd>${nItem.padStart(6, '0')}</cProd>
+      <cEAN>SEM GTIN</cEAN>
+      <xProd>${esc(item.produto_desc ?? '')}</xProd>
+      <NCM>${(item.ncm ?? '00000000').replace(/\D/g, '').padStart(8, '0')}</NCM>
+      <CFOP>${item.cfop ?? ''}</CFOP>
+      <uCom>UN</uCom>
+      <qCom>${fmt4(item.quantidade ?? 0)}</qCom>
+      <vUnCom>${fmt4(item.valor_unit ?? 0)}</vUnCom>
+      <vProd>${fmt2(item.valor_total ?? 0)}</vProd>
+      <cEANTrib>SEM GTIN</cEANTrib>
+      <uTrib>UN</uTrib>
+      <qTrib>${fmt4(item.quantidade ?? 0)}</qTrib>
+      <vUnTrib>${fmt4(item.valor_unit ?? 0)}</vUnTrib>
+      <indTot>1</indTot>
+    </prod>
+    <imposto>
+      <ICMS><ICMSSN400><orig>0</orig><CSOSN>400</CSOSN></ICMSSN400></ICMS>
+      <PIS><PISNT><CST>07</CST></PISNT></PIS>
+      <COFINS><COFINSNT><CST>07</CST></COFINSNT></COFINS>
+    </imposto>
+  </det>`
+  }).join('')
+
+  const isCnpj  = nota.dest_tipo === 'juridica'
+  const docDest = isCnpj
+    ? `<CNPJ>${(nota.dest_cpf_cnpj ?? '').replace(/\D/g, '')}</CNPJ>`
+    : `<CPF>${(nota.dest_cpf_cnpj ?? '').replace(/\D/g, '')}</CPF>`
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<!-- RASCUNHO — SEM ASSINATURA DIGITAL — APENAS PARA CONFERÊNCIA -->
+<NFe xmlns="http://www.portalfiscal.inf.br/nfe">
+  <infNFe versao="4.00" Id="NFe_RASCUNHO_${nota.id}">
+    <ide>
+      <mod>55</mod>
+      <serie>${(nota.serie ?? '001').padStart(3, '0')}</serie>
+      <nNF>${nota.numero ? parseInt(nota.numero) : 0}</nNF>
+      <dhEmi>${dhEmi}</dhEmi>
+      <tpNF>1</tpNF>
+      <tpAmb>${emitente.ambiente === 1 ? '1' : '2'}</tpAmb>
+      <finNFe>${nota.finalidade ?? 1}</finNFe>
+      <natOp>${esc(nota.natureza_operacao ?? '')}</natOp>
+    </ide>
+    <emit>
+      <CNPJ>${(emitente.cnpj ?? '').replace(/\D/g, '')}</CNPJ>
+      <xNome>${esc(emitente.razao_social)}</xNome>
+      <enderEmit>
+        <xLgr>${esc(emitente.logradouro)}</xLgr>
+        <nro>${esc(emitente.numero)}</nro>
+        ${emitente.complemento ? `<xCpl>${esc(emitente.complemento)}</xCpl>` : ''}
+        <xBairro>${esc(emitente.bairro)}</xBairro>
+        <cMun>${emitente.codigo_ibge}</cMun>
+        <xMun>${esc(emitente.municipio)}</xMun>
+        <UF>${emitente.uf.trim()}</UF>
+        <CEP>${(emitente.cep ?? '').replace(/\D/g, '')}</CEP>
+        <cPais>1058</cPais>
+        <xPais>Brasil</xPais>
+        ${emitente.telefone ? `<fone>${emitente.telefone.replace(/\D/g, '')}</fone>` : ''}
+      </enderEmit>
+      <IE>${(emitente.ie ?? '').replace(/\D/g, '')}</IE>
+      <CRT>${emitente.crt}</CRT>
+    </emit>
+    <dest>
+      ${docDest}
+      <xNome>${esc(nota.dest_nome ?? '')}</xNome>
+      <enderDest>
+        <xLgr>${esc(nota.dest_logradouro ?? '')}</xLgr>
+        <nro>${esc(nota.dest_numero ?? 'SN')}</nro>
+        ${nota.dest_complemento ? `<xCpl>${esc(nota.dest_complemento)}</xCpl>` : ''}
+        <xBairro>${esc(nota.dest_bairro ?? '')}</xBairro>
+        <cMun>${nota.dest_codigo_mun || ''}</cMun>
+        <xMun>${esc(nota.dest_municipio ?? '')}</xMun>
+        <UF>${(nota.dest_uf ?? '').trim()}</UF>
+        <CEP>${(nota.dest_cep ?? '').replace(/\D/g, '')}</CEP>
+        <cPais>1058</cPais>
+        <xPais>Brasil</xPais>
+      </enderDest>
+      <indIEDest>${nota.dest_ind_ie ?? 9}</indIEDest>
+      ${nota.dest_ie ? `<IE>${nota.dest_ie}</IE>` : ''}
+      ${nota.dest_email ? `<email>${esc(nota.dest_email)}</email>` : ''}
+    </dest>
+    ${xmlItens}
+    <total>
+      <ICMSTot>
+        <vBC>0.00</vBC><vICMS>0.00</vICMS><vICMSDeson>0.00</vICMSDeson>
+        <vFCP>0.00</vFCP><vBCST>0.00</vBCST><vST>0.00</vST>
+        <vFCPST>0.00</vFCPST><vFCPSTRet>0.00</vFCPSTRet>
+        <vProd>${fmt2(nota.valor_produtos ?? nota.valor_total)}</vProd>
+        <vFrete>${fmt2(nota.valor_frete ?? 0)}</vFrete>
+        <vSeg>0.00</vSeg>
+        <vDesc>${fmt2(nota.valor_desconto ?? 0)}</vDesc>
+        <vII>0.00</vII><vIPI>0.00</vIPI><vIPIDevol>0.00</vIPIDevol>
+        <vPIS>0.00</vPIS><vCOFINS>0.00</vCOFINS><vOutro>0.00</vOutro>
+        <vNF>${fmt2(nota.valor_total)}</vNF>
+      </ICMSTot>
+    </total>
+    <transp><modFrete>9</modFrete></transp>
+    <pag>
+      <detPag>
+        <tPag>99</tPag>
+        <vPag>${fmt2(nota.valor_total)}</vPag>
+      </detPag>
+    </pag>
+    ${nota.informacoes_adicionais
+      ? `<infAdic><infCpl>${esc(nota.informacoes_adicionais)}</infCpl></infAdic>`
+      : ''}
+  </infNFe>
+</NFe>`
+}
 
 // ── Status config ────────────────────────────────────────────────────────────
 const STATUS_CONFIG: Record<StatusNf, { label: string; color: string; bg: string; border: string; icon: React.ReactNode }> = {
-  rascunho:  { label: 'Rascunho',  color: '#a0a5ad', bg: '#22262b', border: '#3a3d42', icon: <Clock size={11} /> },
-  pendente:  { label: 'Pendente',  color: '#f0c060', bg: '#2a2410', border: '#5a4a10', icon: <AlertCircle size={11} /> },
-  autorizada:{ label: 'Autorizada',color: '#60c080', bg: '#102a18', border: '#205a30', icon: <CheckCircle2 size={11} /> },
-  cancelada: { label: 'Cancelada', color: '#f08080', bg: '#2a1010', border: '#5a2020', icon: <Ban size={11} /> },
-  rejeitada: { label: 'Rejeitada', color: '#f08080', bg: '#2a1010', border: '#5a2020', icon: <X size={11} /> },
+  rascunho:  { label: 'Rascunho',   color: '#a0a5ad', bg: '#22262b', border: '#3a3d42', icon: <Clock size={11} /> },
+  pendente:  { label: 'Pendente',   color: '#f0c060', bg: '#2a2410', border: '#5a4a10', icon: <AlertCircle size={11} /> },
+  autorizada:{ label: 'Autorizada', color: '#60c080', bg: '#102a18', border: '#205a30', icon: <CheckCircle2 size={11} /> },
+  cancelada: { label: 'Cancelada',  color: '#f08080', bg: '#2a1010', border: '#5a2020', icon: <Ban size={11} /> },
+  rejeitada: { label: 'Rejeitada',  color: '#f08080', bg: '#2a1010', border: '#5a2020', icon: <X size={11} /> },
 }
 
 function StatusBadge({ status }: { status: StatusNf }) {
@@ -100,38 +235,59 @@ function StatusBadge({ status }: { status: StatusNf }) {
 
 // ── Componente principal ──────────────────────────────────────────────────────
 export function NfSaidaGerenciador({ companyId, onError }: Props) {
-  const [notas, setNotas]           = useState<NfSaidaRow[]>([])
-  const [loading, setLoading]       = useState(true)
-  const [search, setSearch]         = useState('')
+  const [notas, setNotas]               = useState<NfSaidaRow[]>([])
+  const [loading, setLoading]           = useState(true)
+  const [search, setSearch]             = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusNf | 'todas'>('todas')
-  const [expandedId, setExpandedId] = useState<string | null>(null)
-  const [emitente, setEmitente]     = useState<Emitente | null>(null)
-  const [danfeNota, setDanfeNota]   = useState<NfSaidaRow | null>(null)
-  const [sortDir, setSortDir]       = useState<'desc' | 'asc'>('desc')
-  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [expandedId, setExpandedId]     = useState<string | null>(null)
+  const [emitente, setEmitente]         = useState<Emitente | null>(null)
+  const [danfeNota, setDanfeNota]       = useState<NfSaidaRow | null>(null)
+  const [sortDir, setSortDir]           = useState<'desc' | 'asc'>('desc')
+  const [deletingId, setDeletingId]     = useState<string | null>(null)
+  const [downloadingId, setDownloadingId] = useState<string | null>(null)
 
-  // ── Busca emitente ──────────────────────────────────────────────────────
-  useEffect(() => {
-    supabase
-      .from('fiscal_config')
-      .select('razao_social, cnpj, ie, logradouro, numero, bairro, municipio, uf, cep, telefone')
-      .eq('company_id', companyId)
-      .single()
-      .then(({ data }) => {
-        if (data) setEmitente({
-          razao_social: data.razao_social,
-          cnpj:         data.cnpj,
-          ie:           data.ie ?? '',
-          logradouro:   data.logradouro,
-          numero:       data.numero,
-          bairro:       data.bairro,
-          municipio:    data.municipio,
-          uf:           data.uf?.trim(),
-          cep:          data.cep,
-          fone:         data.telefone ?? undefined,
-        })
+  // ── FIX: tabela correta é fiscal_configs (não fiscal_config) ─────────────
+useEffect(() => {
+  if (!companyId) {
+    console.warn('[FiscalConfig] companyId ausente')
+    return
+  }
+
+  supabase
+    .from('fiscal_configs')
+    .select('razao_social, cnpj, ie, crt, codigo_ibge, logradouro, numero, complemento, bairro, municipio, uf, cep, telefone, ambiente')
+    .eq('company_id', companyId)
+    .maybeSingle()                        // ← não estoura erro se não achar
+    .then(({ data, error }) => {
+      console.log('[FiscalConfig] data:', data, '| error:', error, '| companyId:', companyId)
+
+      if (error) {
+        onError?.(`Erro ao carregar config fiscal: ${error.message}`)
+        return
+      }
+      if (!data) {
+        onError?.('Nenhuma configuração fiscal encontrada para esta empresa.')
+        return
+      }
+
+      setEmitente({
+        razao_social:     data.razao_social,
+        cnpj:             data.cnpj,
+        ie:               data.ie ?? '',
+        crt:              data.crt ?? 1,
+        codigo_ibge:      data.codigo_ibge ?? '',
+        logradouro:       data.logradouro,
+        numero:           data.numero,
+        complemento:      data.complemento ?? null,
+        bairro:           data.bairro,
+        municipio:        data.municipio,
+        uf:               data.uf?.trim(),
+        cep:              data.cep,
+        telefone:         data.telefone ?? null,
+        ambiente:         data.ambiente ?? 2,
       })
-  }, [companyId])
+    })
+}, [companyId])
 
   // ── Busca notas ─────────────────────────────────────────────────────────
   const fetchNotas = useCallback(async () => {
@@ -142,11 +298,8 @@ export function NfSaidaGerenciador({ companyId, onError }: Props) {
       .eq('company_id', companyId)
       .order('created_at', { ascending: sortDir === 'asc' })
 
-    if (error) {
-      onError?.(error.message)
-    } else {
-      setNotas((data ?? []) as NfSaidaRow[])
-    }
+    if (error) onError?.(error.message)
+    else setNotas((data ?? []) as NfSaidaRow[])
     setLoading(false)
   }, [companyId, sortDir])
 
@@ -164,27 +317,67 @@ export function NfSaidaGerenciador({ companyId, onError }: Props) {
     return matchStatus && matchSearch
   })
 
+  // ── Download XML ─────────────────────────────────────────────────────────
+  // Se a nota tem xml_url (foi transmitida), baixa do Storage via service.
+  // Caso contrário (rascunho puro), gera o XML localmente para conferência.
+  async function handleDownloadXml(nota: NfSaidaRow) {
+    if (!emitente) { onError?.('Configuração fiscal não carregada.'); return }
+    setDownloadingId(nota.id)
+    try {
+      if (nota.xml_url) {
+        // Nota já transmitida → baixa o XML assinado do Storage
+        await downloadXmlNfe(nota.xml_url, nota.numero || nota.id)
+      } else {
+        // Rascunho / pendente sem transmissão → gera XML de conferência no browser
+        const xml      = gerarXmlRascunho(nota, emitente)
+        const blob     = new Blob([xml], { type: 'application/xml' })
+        const url      = URL.createObjectURL(blob)
+        const a        = document.createElement('a')
+        const filename = nota.numero
+          ? `nfe-rascunho-${nota.numero}.xml`
+          : `nfe-rascunho-${nota.id.slice(0, 8)}.xml`
+        a.href = url; a.download = filename; a.click()
+        URL.revokeObjectURL(url)
+      }
+    } catch (e: any) {
+      onError?.(e.message ?? 'Erro ao baixar XML')
+    } finally {
+      setDownloadingId(null)
+    }
+  }
+
   // ── Deletar rascunho ────────────────────────────────────────────────────
   async function handleDelete(id: string) {
     if (!confirm('Excluir este rascunho? Esta ação não pode ser desfeita.')) return
     setDeletingId(id)
-    const { error } = await supabase.from('nf_saida').delete().eq('id', id)
+    const { error } = await supabase
+      .from('nf_saida').delete()
+      .eq('id', id).eq('status', 'rascunho') // garante só rascunho
     if (error) onError?.(error.message)
     else setNotas(prev => prev.filter(n => n.id !== id))
     setDeletingId(null)
   }
 
-  // ── Montar form para o DanfePreview a partir de uma linha salva ─────────
+  // ── Emitir pelo gerenciador ─────────────────────────────────────────────
+  async function handleEmitir(nota: NfSaidaRow) {
+    const { data, error } = await supabase.functions.invoke('emitir-nfe', {
+      body: { nf_saida_id: nota.id },
+    })
+    if (error) { onError?.(error.message); return }
+    if (!data?.ok) { onError?.(data?.error ?? 'Erro na emissão'); return }
+    fetchNotas()
+  }
+
+  // ── Montar form para DanfePreview ────────────────────────────────────────
   function buildFormFromRow(row: NfSaidaRow): NfSaidaForm {
     return {
       tipo_nota:          row.tipo_nota,
       natureza_operacao:  row.natureza_operacao,
       cfop_padrao:        row.itens?.[0]?.cfop ?? '',
-      finalidade: ([1, 2, 3, 4].includes(row.finalidade) ? row.finalidade : 1) as 1 | 2 | 3 | 4,
-
+      finalidade:         ([1, 2, 3, 4].includes(row.finalidade) ? row.finalidade : 1) as 1 | 2 | 3 | 4,
       serie:              row.serie,
       destinatario: {
-        tipo:             row.dest_tipo as any ?? 'fisica',
+        tipo:             (row.dest_tipo as any) ?? 'fisica',
         nome:             row.dest_nome ?? '',
         cpf:              row.dest_tipo !== 'juridica' ? row.dest_cpf_cnpj ?? '' : '',
         cnpj:             row.dest_tipo === 'juridica' ? row.dest_cpf_cnpj ?? '' : '',
@@ -200,25 +393,25 @@ export function NfSaidaGerenciador({ companyId, onError }: Props) {
         codigo_municipio: row.dest_codigo_mun ?? '',
         uf:               row.dest_uf ?? 'PB',
         contribuinte:     '',
-        ind_ie_dest:      1,
+        ind_ie_dest:      (row.dest_ind_ie as any) ?? 9,
       },
-      itens:                row.itens ?? [],
-      valor_desconto:       row.valor_desconto ?? 0,
-      valor_frete:          row.valor_frete ?? 0,
-      forma_pagamento:      'boleto',
+      itens:                 row.itens ?? [],
+      valor_desconto:        row.valor_desconto ?? 0,
+      valor_frete:           row.valor_frete ?? 0,
+      forma_pagamento:       (row.forma_pagamento as any) ?? 'boleto',
       informacoes_adicionais: row.informacoes_adicionais ?? '',
-      chave_ref:            row.chave_ref ?? '',
+      chave_ref:             row.chave_ref ?? '',
     }
   }
 
   // ── Totais do rodapé ────────────────────────────────────────────────────
-  const totalAutorizadas = notas.filter(n => n.status === 'autorizada').reduce((s, n) => s + n.valor_total, 0)
-  const totalNotas = notasFiltradas.length
+  const totalAutorizadas = notas
+    .filter(n => n.status === 'autorizada')
+    .reduce((s, n) => s + n.valor_total, 0)
 
-  // ── Render ───────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <>
-      {/* Modal DANFE */}
       {danfeNota && emitente && (
         <DanfePreview
           form={buildFormFromRow(danfeNota)}
@@ -231,14 +424,14 @@ export function NfSaidaGerenciador({ companyId, onError }: Props) {
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
-        {/* ── Cabeçalho da tela ── */}
+        {/* ── Cabeçalho ── */}
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '4px' }}>
           <div>
             <h2 style={{ fontSize: '18px', fontWeight: 600, color: '#f0f2f4', margin: 0 }}>
               Notas Fiscais de Saída
             </h2>
             <p style={{ fontSize: '12px', color: '#7a7f86', marginTop: '2px' }}>
-              {totalNotas} nota{totalNotas !== 1 ? 's' : ''} encontrada{totalNotas !== 1 ? 's' : ''}
+              {notasFiltradas.length} nota{notasFiltradas.length !== 1 ? 's' : ''} encontrada{notasFiltradas.length !== 1 ? 's' : ''}
               {statusFilter !== 'todas' ? ` · filtro: ${STATUS_CONFIG[statusFilter]?.label}` : ''}
             </p>
           </div>
@@ -258,9 +451,8 @@ export function NfSaidaGerenciador({ companyId, onError }: Props) {
           </button>
         </div>
 
-        {/* ── Barra de busca + filtros ── */}
+        {/* ── Busca + filtros ── */}
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-          {/* Search */}
           <div style={{ position: 'relative', flex: 1, minWidth: '200px' }}>
             <Search size={13} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#5a5f66', pointerEvents: 'none' }} />
             <input
@@ -281,7 +473,6 @@ export function NfSaidaGerenciador({ companyId, onError }: Props) {
             )}
           </div>
 
-          {/* Filtro de status */}
           <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
             {(['todas', 'rascunho', 'pendente', 'autorizada', 'cancelada', 'rejeitada'] as const).map(s => (
               <button
@@ -309,7 +500,6 @@ export function NfSaidaGerenciador({ companyId, onError }: Props) {
             ))}
           </div>
 
-          {/* Ordenação */}
           <button
             onClick={() => setSortDir(d => d === 'desc' ? 'asc' : 'desc')}
             style={{
@@ -324,7 +514,7 @@ export function NfSaidaGerenciador({ companyId, onError }: Props) {
           </button>
         </div>
 
-        {/* ── Lista de notas ── */}
+        {/* ── Lista ── */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
           {loading && (
             <div style={{ textAlign: 'center', padding: '40px', color: '#5a5f66', fontSize: '13px' }}>
@@ -348,7 +538,6 @@ export function NfSaidaGerenciador({ companyId, onError }: Props) {
 
           {!loading && notasFiltradas.map(nota => {
             const expanded = expandedId === nota.id
-            const s = STATUS_CONFIG[nota.status] ?? STATUS_CONFIG.rascunho
 
             return (
               <div key={nota.id} style={{
@@ -371,7 +560,6 @@ export function NfSaidaGerenciador({ companyId, onError }: Props) {
                     userSelect: 'none',
                   }}
                 >
-                  {/* Número */}
                   <div>
                     <div style={{ fontSize: '11px', color: '#5a5f66', marginBottom: '2px' }}>NF-e</div>
                     <div style={{ fontSize: '13px', fontWeight: 600, color: '#c0c5cc', fontFamily: 'monospace', letterSpacing: '0.5px' }}>
@@ -380,7 +568,6 @@ export function NfSaidaGerenciador({ companyId, onError }: Props) {
                     <div style={{ fontSize: '10px', color: '#4a4f56' }}>Série {nota.serie}</div>
                   </div>
 
-                  {/* Destinatário */}
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontSize: '13px', fontWeight: 500, color: '#d0d5dc', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {nota.dest_nome || '—'}
@@ -390,7 +577,6 @@ export function NfSaidaGerenciador({ companyId, onError }: Props) {
                     </div>
                   </div>
 
-                  {/* Natureza */}
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontSize: '11px', color: '#5a5f66', marginBottom: '2px' }}>Natureza</div>
                     <div style={{ fontSize: '12px', color: '#9095a0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -398,24 +584,18 @@ export function NfSaidaGerenciador({ companyId, onError }: Props) {
                     </div>
                   </div>
 
-                  {/* Data */}
                   <div>
                     <div style={{ fontSize: '11px', color: '#5a5f66', marginBottom: '2px' }}>Emissão</div>
                     <div style={{ fontSize: '12px', color: '#9095a0' }}>{fmtDate(nota.created_at)}</div>
                   </div>
 
-                  {/* Valor */}
                   <div style={{ textAlign: 'right' }}>
                     <div style={{ fontSize: '11px', color: '#5a5f66', marginBottom: '2px' }}>Valor total</div>
                     <div style={{ fontSize: '13px', fontWeight: 600, color: '#c0c5cc' }}>R$ {fmt(nota.valor_total)}</div>
                   </div>
 
-                  {/* Status */}
-                  <div>
-                    <StatusBadge status={nota.status} />
-                  </div>
+                  <div><StatusBadge status={nota.status} /></div>
 
-                  {/* Chevron */}
                   <div style={{ color: '#3a3d42' }}>
                     {expanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
                   </div>
@@ -426,36 +606,30 @@ export function NfSaidaGerenciador({ companyId, onError }: Props) {
                   <div style={{ borderTop: '1px solid #252830', padding: '14px', background: '#161820' }}>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '14px' }}>
 
-                      {/* Bloco destinatário */}
+                      {/* Destinatário */}
                       <div style={{ background: '#1a1d20', border: '1px solid #252830', borderRadius: '8px', padding: '10px 12px' }}>
-                        <div style={{ fontSize: '10px', color: '#4a4f56', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px', fontWeight: 600 }}>
-                          Destinatário
-                        </div>
-                        <InfoLine label="Nome" value={nota.dest_nome} />
+                        <SectionTitle>Destinatário</SectionTitle>
+                        <InfoLine label="Nome"     value={nota.dest_nome} />
                         <InfoLine label="CNPJ/CPF" value={fmtDoc(nota.dest_cpf_cnpj)} />
-                        <InfoLine label="IE" value={nota.dest_ie || 'ISENTO'} />
-                        <InfoLine label="E-mail" value={nota.dest_email} />
+                        <InfoLine label="IE"       value={nota.dest_ie || 'ISENTO'} />
+                        <InfoLine label="E-mail"   value={nota.dest_email} />
                         <InfoLine label="Telefone" value={nota.dest_telefone} />
                       </div>
 
-                      {/* Bloco endereço */}
+                      {/* Endereço */}
                       <div style={{ background: '#1a1d20', border: '1px solid #252830', borderRadius: '8px', padding: '10px 12px' }}>
-                        <div style={{ fontSize: '10px', color: '#4a4f56', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px', fontWeight: 600 }}>
-                          Endereço
-                        </div>
+                        <SectionTitle>Endereço</SectionTitle>
                         <InfoLine label="Logradouro" value={`${nota.dest_logradouro ?? ''}${nota.dest_numero ? `, ${nota.dest_numero}` : ''}`} />
-                        <InfoLine label="Bairro" value={nota.dest_bairro} />
-                        <InfoLine label="Município" value={`${nota.dest_municipio ?? ''} — ${nota.dest_uf ?? ''}`} />
-                        <InfoLine label="CEP" value={nota.dest_cep} />
+                        <InfoLine label="Bairro"     value={nota.dest_bairro} />
+                        <InfoLine label="Município"  value={`${nota.dest_municipio ?? ''} — ${nota.dest_uf ?? ''}`} />
+                        <InfoLine label="CEP"        value={nota.dest_cep} />
                       </div>
 
-                      {/* Bloco financeiro */}
+                      {/* Financeiro */}
                       <div style={{ background: '#1a1d20', border: '1px solid #252830', borderRadius: '8px', padding: '10px 12px' }}>
-                        <div style={{ fontSize: '10px', color: '#4a4f56', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px', fontWeight: 600 }}>
-                          Valores
-                        </div>
-                        <InfoLine label="Produtos" value={`R$ ${fmt(nota.valor_total + nota.valor_desconto - nota.valor_frete)}`} />
-                        <InfoLine label="Frete" value={`R$ ${fmt(nota.valor_frete)}`} />
+                        <SectionTitle>Valores</SectionTitle>
+                        <InfoLine label="Produtos" value={`R$ ${fmt(nota.valor_produtos ?? nota.valor_total)}`} />
+                        <InfoLine label="Frete"    value={`R$ ${fmt(nota.valor_frete)}`} />
                         <InfoLine label="Desconto" value={`R$ ${fmt(nota.valor_desconto)}`} />
                         <div style={{ borderTop: '1px solid #252830', marginTop: '6px', paddingTop: '6px', display: 'flex', justifyContent: 'space-between' }}>
                           <span style={{ fontSize: '11px', color: '#5a5f66' }}>Total</span>
@@ -463,6 +637,29 @@ export function NfSaidaGerenciador({ companyId, onError }: Props) {
                         </div>
                       </div>
                     </div>
+
+                    {/* Protocolo / chave — só para autorizadas */}
+                    {nota.status === 'autorizada' && (nota.chave_acesso || nota.xml_protocolo) && (
+                      <div style={{
+                        background: '#102a18', border: '1px solid #1a4a28',
+                        borderRadius: '8px', padding: '10px 14px', marginBottom: '14px',
+                      }}>
+                        <SectionTitle color="#3a7a48">Autorização SEFAZ</SectionTitle>
+                        <InfoLine label="Protocolo"      value={nota.xml_protocolo} />
+                        <InfoLine label="Chave de acesso" value={nota.chave_acesso} mono />
+                      </div>
+                    )}
+
+                    {/* Motivo rejeição */}
+                    {nota.status === 'rejeitada' && nota.sefaz_motivo && (
+                      <div style={{
+                        background: '#2a1010', border: '1px solid #4a2020',
+                        borderRadius: '8px', padding: '10px 14px', marginBottom: '14px',
+                      }}>
+                        <SectionTitle color="#8a4040">Motivo da Rejeição</SectionTitle>
+                        <p style={{ fontSize: '12px', color: '#c08080', margin: 0 }}>{nota.sefaz_motivo}</p>
+                      </div>
+                    )}
 
                     {/* Itens */}
                     {nota.itens?.length > 0 && (
@@ -501,11 +698,10 @@ export function NfSaidaGerenciador({ companyId, onError }: Props) {
 
                     {/* Ações */}
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <div style={{ fontSize: '10px', color: '#3a3f46' }}>
-                        ID: {nota.id}
-                      </div>
+                      <div style={{ fontSize: '10px', color: '#3a3f46' }}>ID: {nota.id}</div>
                       <div style={{ display: 'flex', gap: '6px' }}>
-                        {/* Visualizar DANFE */}
+
+                        {/* Ver DANFE */}
                         <ActionBtn
                           icon={<Eye size={13} />}
                           label="Ver DANFE"
@@ -513,25 +709,33 @@ export function NfSaidaGerenciador({ companyId, onError }: Props) {
                           variant="default"
                         />
 
-                        {/* Download (placeholder) */}
+                        {/* Download XML — disponível para QUALQUER status */}
                         <ActionBtn
-                          icon={<Download size={13} />}
-                          label="XML"
-                          onClick={() => onError?.('Download de XML disponível apenas para NF-e autorizadas.')}
+                          icon={downloadingId === nota.id
+                            ? <RefreshCw size={13} style={{ animation: 'spin 1s linear infinite' }} />
+                            : nota.xml_url ? <Download size={13} /> : <FileCode size={13} />
+                          }
+                          label={
+                            downloadingId === nota.id ? 'Baixando…'
+                            : nota.xml_url            ? 'XML assinado'
+                            :                           'XML rascunho'
+                          }
+                          title={
+                            nota.xml_url
+                              ? 'Baixar XML assinado transmitido à SEFAZ'
+                              : 'Baixar XML de rascunho para conferência (sem assinatura)'
+                          }
+                          onClick={() => handleDownloadXml(nota)}
                           variant="default"
-                          disabled={nota.status !== 'autorizada'}
+                          disabled={downloadingId === nota.id}
                         />
 
-                        {/* Emitir (apenas rascunho/pendente) */}
+                        {/* Emitir (rascunho ou pendente) */}
                         {(nota.status === 'rascunho' || nota.status === 'pendente') && (
                           <ActionBtn
                             icon={<Send size={13} />}
                             label="Emitir"
-                            onClick={async () => {
-                              const { error } = await supabase.functions.invoke('emitir-nfe', { body: { nf_saida_id: nota.id } })
-                              if (error) onError?.(error.message)
-                              else fetchNotas()
-                            }}
+                            onClick={() => handleEmitir(nota)}
                             variant="primary"
                           />
                         )}
@@ -555,15 +759,15 @@ export function NfSaidaGerenciador({ companyId, onError }: Props) {
           })}
         </div>
 
-        {/* ── Rodapé com totais ── */}
+        {/* ── Rodapé ── */}
         {!loading && notas.length > 0 && (
           <div style={{
             display: 'flex', justifyContent: 'flex-end', gap: '24px',
             borderTop: '1px solid #2e3238', paddingTop: '12px', marginTop: '4px',
           }}>
-            <Stat label="Total de notas" value={String(notas.length)} />
-            <Stat label="Autorizadas" value={String(notas.filter(n => n.status === 'autorizada').length)} color="#60c080" />
-            <Stat label="Rascunhos" value={String(notas.filter(n => n.status === 'rascunho').length)} color="#a0a5ad" />
+            <Stat label="Total de notas"        value={String(notas.length)} />
+            <Stat label="Autorizadas"            value={String(notas.filter(n => n.status === 'autorizada').length)} color="#60c080" />
+            <Stat label="Rascunhos"              value={String(notas.filter(n => n.status === 'rascunho').length)}   color="#a0a5ad" />
             <Stat label="Faturado (autorizadas)" value={`R$ ${fmt(totalAutorizadas)}`} color="#6c9fd4" />
           </div>
         )}
@@ -579,11 +783,23 @@ export function NfSaidaGerenciador({ companyId, onError }: Props) {
 }
 
 // ── Sub-componentes ───────────────────────────────────────────────────────────
-function InfoLine({ label, value }: { label: string; value?: string | null }) {
+function SectionTitle({ children, color = '#4a4f56' }: { children: React.ReactNode; color?: string }) {
+  return (
+    <div style={{ fontSize: '10px', color, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px', fontWeight: 600 }}>
+      {children}
+    </div>
+  )
+}
+
+function InfoLine({ label, value, mono }: { label: string; value?: string | null; mono?: boolean }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', marginBottom: '3px' }}>
       <span style={{ fontSize: '11px', color: '#4a4f56', flexShrink: 0 }}>{label}</span>
-      <span style={{ fontSize: '11px', color: '#8a8f98', textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+      <span style={{
+        fontSize: '11px', color: '#8a8f98', textAlign: 'right',
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        fontFamily: mono ? 'monospace' : undefined, letterSpacing: mono ? '0.5px' : undefined,
+      }}>
         {value || '—'}
       </span>
     </div>
@@ -591,10 +807,11 @@ function InfoLine({ label, value }: { label: string; value?: string | null }) {
 }
 
 function ActionBtn({
-  icon, label, onClick, variant = 'default', disabled = false,
+  icon, label, title, onClick, variant = 'default', disabled = false,
 }: {
   icon: React.ReactNode
   label: string
+  title?: string
   onClick: () => void
   variant?: 'default' | 'primary' | 'danger'
   disabled?: boolean
@@ -608,6 +825,7 @@ function ActionBtn({
     <button
       onClick={onClick}
       disabled={disabled}
+      title={title}
       style={{
         display: 'flex', alignItems: 'center', gap: '5px',
         padding: '6px 12px', borderRadius: '7px', fontSize: '12px',
