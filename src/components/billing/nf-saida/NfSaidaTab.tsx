@@ -30,7 +30,6 @@ import type {
   DestinatarioForm,
   ItemNota,
   TipoNota,
-  TipoNotaCustom,
   FormaPagamento,
 } from './types'
 
@@ -99,7 +98,6 @@ function emptyForm(): NfSaidaForm {
 // ── Componente ────────────────────────────────────────────────────────────────
 export function NfSaidaTab({ companyId, onError }: Props) {
   const [form, setForm]               = useState<NfSaidaForm>(emptyForm)
-  const [customTypes, setCustomTypes] = useState<TipoNotaCustom[]>([])
   const [saving, setSaving]           = useState(false)
   const [emitting, setEmitting]       = useState(false)
   const [showDanfe, setShowDanfe]     = useState(false)
@@ -147,7 +145,10 @@ export function NfSaidaTab({ companyId, onError }: Props) {
   }, [companyId])
 
   // ── Tipo de nota ─────────────────────────────────────────────────────────
- function handleTipoChange(tipo: TipoNota) {
+  // Ao trocar o tipo, atualiza cfop_padrao E propaga o novo CFOP para todos
+  // os itens que ainda estejam com o CFOP anterior (ou em branco).
+  // Itens editados manualmente pelo usuário (CFOP diferente do padrão) são preservados.
+  function handleTipoChange(tipo: TipoNota) {
     setForm(prev => {
       const cfopAntigo = prev.cfop_padrao
       const cfopNovo   = tipo.cfop
@@ -165,7 +166,6 @@ export function NfSaidaTab({ companyId, onError }: Props) {
       }
     })
   }
-  
 
   // ── Destinatário ─────────────────────────────────────────────────────────
   const handleDestChange = useCallback(
@@ -376,10 +376,9 @@ export function NfSaidaTab({ companyId, onError }: Props) {
         {/* Tipo de nota */}
         <div className="mb-5">
           <TipoNotaSelect
+            companyId={companyId}
             value={form.tipo_nota}
             onChange={handleTipoChange}
-            customTypes={customTypes}
-            onCustomTypeAdded={t => setCustomTypes(prev => [...prev, t])}
           />
         </div>
 

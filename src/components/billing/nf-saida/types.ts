@@ -5,130 +5,132 @@ export type FormaPagamento =
   | 'boleto' | 'dinheiro' | 'cartao_credito' | 'cartao_debito' | 'pix' | 'sem_pagamento'
 
 export interface TipoNotaCustom {
-  key: string
-  nome: string
+  key:               string
+  nome:              string
   natureza_operacao: string
-  cfop_padrao: string
-  finalidade: 1 | 2 | 3 | 4
-  direcao: 'saida' | 'entrada'
+  cfop_padrao:       string
+  finalidade:        1 | 2 | 3 | 4
+  direcao:           'saida' | 'entrada'
 }
 
 export interface TipoNota {
-  value: string
-  label: string
-  cfop: string
+  value:             string
+  label:             string
+  cfop:              string   // CFOP interno (mesmo estado, 5xxx / 1xxx)
+  cfop_externo?:     string   // CFOP externo (outro estado, 6xxx / 2xxx) — vem do banco
   natureza_operacao: string
-  finalidade: 1 | 2 | 3 | 4
-  isCustom?: boolean
+  finalidade:        1 | 2 | 3 | 4
+  requerChaveRef?:   boolean  // true = exibe campo chave de referência no form
+  isCustom?:         boolean  // false = tipo de sistema, true = cadastrado pela empresa
+  dbId?:             number   // PK na cfop_saida_tipos (presente quando vem do banco)
 }
 
 export interface ItemNota {
-  id: string
+  id:           string
   produto_desc: string
-  ncm: string
-  cfop: string
-  cst_csosn: string
-  quantidade: number
-  valor_unit: number
-  valor_total: number
+  ncm:          string
+  cfop:         string
+  cst_csosn:    string
+  quantidade:   number
+  valor_unit:   number
+  valor_total:  number
 }
 
 export interface DestinatarioForm {
-  // ── origem do destinatário ──────────────────────────────────
-  /** UUID do registro em customers ou suppliers */
-  dest_id?: string
-  /** De onde veio o destinatário (para rastreio na nf_saida) */
-  dest_origem?: 'cliente' | 'fornecedor'
+  // ── origem do destinatário ──────────────────────────────────────────────
+  /** UUID do registro em customers ou suppliers — preenchido pelo autocomplete */
+  dest_id?:  string
+  /** Fonte do destinatário — grava dest_origem na nf_saida */
+  origem?:   'cliente' | 'fornecedor'
 
-  // ── dados cadastrais ────────────────────────────────────────
-  tipo: 'fisica' | 'juridica'
-  nome: string
-  cpf: string
-  cnpj: string
-  ie: string
-  /** contribuinte: '1' = contribuinte, '2' = isento, '9' = não contribuinte */
+  // ── dados cadastrais ────────────────────────────────────────────────────
+  tipo:         'fisica' | 'juridica'
+  nome:         string
+  cpf:          string
+  cnpj:         string
+  ie:           string
+  /** '1' = contribuinte | '2' = isento | '9' = não contribuinte */
   contribuinte: string
   /** indIEDest gerado automaticamente: 1 | 2 | 9 */
-  ind_ie_dest: 1 | 2 | 9
-  email: string
-  telefone: string
+  ind_ie_dest:  1 | 2 | 9
+  email:        string
+  telefone:     string
 
-  // ── endereço ────────────────────────────────────────────────
-  cep: string
-  logradouro: string
-  numero: string
-  complemento: string
-  bairro: string
-  municipio: string
+  // ── endereço ────────────────────────────────────────────────────────────
+  cep:              string
+  logradouro:       string
+  numero:           string
+  complemento:      string
+  bairro:           string
+  municipio:        string
   codigo_municipio: string
-  uf: string                      // UUID do customer ou supplier selecionado
-  origem?:  'cliente' | 'fornecedor'  
+  uf:               string
 }
 
 export interface NfSaidaForm {
-  tipo_nota: string
-  natureza_operacao: string
-  cfop_padrao: string
-  finalidade: 1 | 2 | 3 | 4
-  serie: string
-  destinatario: DestinatarioForm
-  itens: ItemNota[]
-  valor_desconto: number
-  valor_frete: number
-  forma_pagamento: FormaPagamento
+  tipo_nota:              string
+  natureza_operacao:      string
+  cfop_padrao:            string
+  finalidade:             1 | 2 | 3 | 4
+  serie:                  string
+  destinatario:           DestinatarioForm
+  itens:                  ItemNota[]
+  valor_desconto:         number
+  valor_frete:            number
+  forma_pagamento:        FormaPagamento
   informacoes_adicionais: string
   /** Chave NF-e referenciada (devolução / nota anulatória) */
-  chave_ref: string
+  chave_ref:              string
   /** ID da NF de entrada referenciada (devolução) */
-  nf_entrada_id?: string
+  nf_entrada_id?:         string
 }
 
 export interface NfSaida {
-  id: string
-  company_id: string
-  chave: string | null
-  numero: string
-  serie: string
-  tipo_nota: string
-  finalidade: number
+  id:                string
+  company_id:        string
+  chave:             string | null
+  numero:            string
+  serie:             string
+  tipo_nota:         string
+  finalidade:        number
   natureza_operacao: string
-  data_emissao: string
-  data_saida: string | null
-  dest_tipo: string
-  dest_origem: 'cliente' | 'fornecedor' | null
-  dest_id: string | null
-  dest_nome: string
-  dest_cpf_cnpj: string | null
-  dest_ie: string | null
-  dest_ind_ie: number | null
-  dest_email: string | null
-  dest_telefone: string | null
-  dest_logradouro: string | null
-  dest_numero: string | null
-  dest_complemento: string | null
-  dest_bairro: string | null
-  dest_municipio: string | null
-  dest_codigo_mun: string | null
-  dest_uf: string | null
-  dest_cep: string | null
-  chave_ref: string | null
-  nf_entrada_id: string | null
-  itens: ItemNota[]
-  valor_produtos: number
-  valor_desconto: number
-  valor_frete: number
-  valor_total: number
+  data_emissao:      string
+  data_saida:        string | null
+  dest_tipo:         string
+  dest_origem:       'cliente' | 'fornecedor' | null
+  dest_id:           string | null
+  dest_nome:         string
+  dest_cpf_cnpj:     string | null
+  dest_ie:           string | null
+  dest_ind_ie:       number | null
+  dest_email:        string | null
+  dest_telefone:     string | null
+  dest_logradouro:   string | null
+  dest_numero:       string | null
+  dest_complemento:  string | null
+  dest_bairro:       string | null
+  dest_municipio:    string | null
+  dest_codigo_mun:   string | null
+  dest_uf:           string | null
+  dest_cep:          string | null
+  chave_ref:         string | null
+  nf_entrada_id:     string | null
+  itens:             ItemNota[]
+  valor_produtos:    number
+  valor_desconto:    number
+  valor_frete:       number
+  valor_total:       number
   informacoes_adicionais: string | null
-  forma_pagamento: string | null
-  status: NfSaidaStatus
-  sefaz_motivo: string | null
-  xml_raw: string | null
-  danfe_url: string | null
-  order_id: number | null
-  created_at: string
-  updated_at: string
-  chave_acesso:  string | null
-  xml_url:       string | null
-  xml_protocolo: string | null
-  autorizada_em: string | null
+  forma_pagamento:   string | null
+  status:            NfSaidaStatus
+  sefaz_motivo:      string | null
+  xml_raw:           string | null
+  danfe_url:         string | null
+  order_id:          number | null
+  created_at:        string
+  updated_at:        string
+  chave_acesso:      string | null
+  xml_url:           string | null
+  xml_protocolo:     string | null
+  autorizada_em:     string | null
 }
