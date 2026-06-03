@@ -1,6 +1,6 @@
 'use client'
 import { useState, useMemo, useCallback, useEffect } from 'react'
-import { FileText, Save, Send, CheckCircle2, Copy } from 'lucide-react'
+import { FileText, Save, Send, CheckCircle2, Copy, RefreshCw  } from 'lucide-react'
 import { nanoid } from 'nanoid'
 import { supabase } from '@/lib/supabase'
 
@@ -110,6 +110,8 @@ export function NfSaidaTab({ companyId, onError }: Props) {
 
   const [emitente, setEmitente]               = useState<Emitente | null>(null)
   const [loadingEmitente, setLoadingEmitente] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+
 
   // ── Busca dados do emitente ──────────────────────────────────────────────
   useEffect(() => {
@@ -145,6 +147,76 @@ export function NfSaidaTab({ companyId, onError }: Props) {
     }
     fetchEmitente()
   }, [companyId])
+
+  // após o useEffect do emitente, adicione a função:
+const fetchEmitente = useCallback(async () => {
+  if (!companyId) return
+  const { data, error } = await supabase
+    .from('fiscal_configs')
+    .select('razao_social, cnpj, ie, codigo_ibge, logradouro, numero, bairro, municipio, uf, cep, telefone')
+    .eq('company_id', companyId)
+    .maybeSingle()
+
+  if (error || !data) return
+  setEmitente({
+    razao_social: data.razao_social,
+    cnpj:         data.cnpj,
+    ie:           data.ie ?? '',
+    logradouro:   data.logradouro,
+    numero:       data.numero,
+    bairro:       data.bairro,
+    municipio:    data.municipio,
+    uf:           data.uf.trim(),
+    cep:          data.cep,
+    fone:         data.telefone ?? undefined,
+    codigo_ibge:  data.codigo_ibge ?? '',
+  })
+}, [companyId])
+
+async function handleRefresh() {
+  setRefreshing(true)
+  try {
+    await fetchEmitente()
+
+    const destId = (form.destinatario as any).dest_id
+    if (destId) {
+      const { data: cliente } = await supabase
+        .from('customers')
+        .select('id, name, razao_social, cpf, cnpj, ie, ind_ie_dest, contribuinte, pessoa_tipo, email, phone, codigo_municipio, logradouro, numero, complemento, bairro, municipio, uf, cep')
+        .eq('id', destId)
+        .single()
+
+      if (cliente) {
+        setForm(prev => ({
+          ...prev,
+          destinatario: {
+            ...prev.destinatario,
+            nome:             cliente.razao_social ?? cliente.name,
+            cpf:              cliente.cpf          ?? '',
+            cnpj:             cliente.cnpj         ?? '',
+            ie:               cliente.ie           ?? '',
+            contribuinte:     cliente.contribuinte ?? '',
+            ind_ie_dest:      cliente.ind_ie_dest  ?? 9,
+            email:            cliente.email        ?? '',
+            telefone:         cliente.phone        ?? '',
+            logradouro:       cliente.logradouro   ?? '',
+            numero:           cliente.numero       ?? '',
+            complemento:      cliente.complemento  ?? '',
+            bairro:           cliente.bairro       ?? '',
+            municipio:        cliente.municipio    ?? '',
+            codigo_municipio: cliente.codigo_municipio ?? '',
+            uf:               cliente.uf           ?? 'PB',
+            cep:              cliente.cep          ?? '',
+          },
+        }))
+      }
+    }
+  } catch (e: any) {
+    onError?.(e.message ?? 'Erro ao sincronizar dados')
+  } finally {
+    setRefreshing(false)
+  }
+}
 
   // ── Tipo de nota ─────────────────────────────────────────────────────────
   // Ao trocar o tipo, atualiza cfop_padrao E propaga o novo CFOP para todos
@@ -272,31 +344,42 @@ export function NfSaidaTab({ companyId, onError }: Props) {
 
       <div>
         {/* Cabeçalho */}
-        <div className="flex items-start justify-between mb-5">
-          <div>
-            <h2 className="text-[18px] font-semibold text-[#f0f2f4]">Nova nota fiscal</h2>
-            <p className="text-[12px] text-[#7a7f86] mt-0.5">Emissão de NF-e</p>
-          </div>
-          <div className="flex items-center gap-2">
-            {loadingEmitente && (
-              <span className="bg-[#2a2d30] border border-[#141516] rounded-md px-3 py-1.5 text-[12px] text-[#7a7f86] animate-pulse">
-                Carregando emitente…
-              </span>
-            )}
-            {!loadingEmitente && !emitente && (
-              <span className="bg-[#3a1a1a] border border-[#6b2a2a] rounded-md px-3 py-1.5 text-[12px] text-[#f08080]">
-                ⚠ Config. fiscal não encontrada
-              </span>
-            )}
-            <span className="bg-[#2a2d30] border border-[#141516] rounded-md px-3 py-1.5 text-[12px] text-[#a0a5ad]">
-              Rascunho
-            </span>
-            <span className="bg-[#2a2d30] border border-[#3a3d42] rounded-md px-3 py-1.5 text-[12px] text-[#a0a5ad]">
-              Série <span className="text-[#6c8ebf] font-semibold">{form.serie}</span>
-              {' · '}N° <span className="text-[#6c8ebf] font-semibold">—</span>
-            </span>
-          </div>
-        </div>
+      <div className="flex items-center gap-2">
+        {loadingEmitente && (
+          <span className="bg-[#2a2d30] border border-[#141516] rounded-md px-3 py-1.5 text-[12px] text-[#7a7f86] animate-pulse">
+            Carregando emitente…
+          </span>
+        )}
+        {!loadingEmitente && !emitente && (
+          <span className="bg-[#3a1a1a] border border-[#6b2a2a] rounded-md px-3 py-1.5 text-[12px] text-[#f08080]">
+            ⚠ Config. fiscal não encontrada
+          </span>
+        )}
+
+        {/* ── Botão Sincronizar ── */}
+        <button
+          type="button"
+          onClick={handleRefresh}
+          disabled={refreshing || loadingEmitente}
+          className="flex items-center gap-1.5 bg-[#1a2a3a] border border-[#2a4a6a]
+            rounded-md px-3 py-1.5 mb-1 text-[12px] text-[#6c9fd4]
+            hover:bg-[#1e3448] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          <RefreshCw
+            size={12}
+            style={{ animation: refreshing ? 'spin 1s linear infinite' : 'none' }}
+          />
+          {refreshing ? 'Sincronizando…' : 'Sincronizar dados'}
+        </button>
+
+        <span className="mb-1 bg-[#2a2d30] border border-[#141516] rounded-md px-3 py-1.5 text-[12px] text-[#a0a5ad]">
+          Rascunho
+        </span>
+        <span className="mb-1 bg-[#2a2d30] border border-[#3a3d42] rounded-md px-3 py-1.5 text-[12px] text-[#a0a5ad]">
+          Série <span className="text-[#6c8ebf] font-semibold">{form.serie}</span>
+          {' · '}N° <span className="text-[#6c8ebf] font-semibold">—</span>
+        </span>
+      </div>
 
         {/* ── Banner de sucesso pós-emissão ── */}
         {emissaoResult && (

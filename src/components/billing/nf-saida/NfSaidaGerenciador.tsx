@@ -247,47 +247,41 @@ export function NfSaidaGerenciador({ companyId, onError }: Props) {
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
 
   // ── FIX: tabela correta é fiscal_configs (não fiscal_config) ─────────────
-useEffect(() => {
-  if (!companyId) {
-    console.warn('[FiscalConfig] companyId ausente')
-    return
-  }
-
-  supabase
+// Substitua o useEffect do emitente por fetchEmitente + useEffect:
+const fetchEmitente = useCallback(async () => {
+  if (!companyId) return
+  const { data, error } = await supabase
     .from('fiscal_configs')
     .select('razao_social, cnpj, ie, crt, codigo_ibge, logradouro, numero, complemento, bairro, municipio, uf, cep, telefone, ambiente')
     .eq('company_id', companyId)
-    .maybeSingle()                        // ← não estoura erro se não achar
-    .then(({ data, error }) => {
-      console.log('[FiscalConfig] data:', data, '| error:', error, '| companyId:', companyId)
+    .maybeSingle()
 
-      if (error) {
-        onError?.(`Erro ao carregar config fiscal: ${error.message}`)
-        return
-      }
-      if (!data) {
-        onError?.('Nenhuma configuração fiscal encontrada para esta empresa.')
-        return
-      }
+  if (error) { onError?.(`Erro ao carregar config fiscal: ${error.message}`); return }
+  if (!data)  { onError?.('Nenhuma configuração fiscal encontrada.'); return }
 
-      setEmitente({
-        razao_social:     data.razao_social,
-        cnpj:             data.cnpj,
-        ie:               data.ie ?? '',
-        crt:              data.crt ?? 1,
-        codigo_ibge:      data.codigo_ibge ?? '',
-        logradouro:       data.logradouro,
-        numero:           data.numero,
-        complemento:      data.complemento ?? null,
-        bairro:           data.bairro,
-        municipio:        data.municipio,
-        uf:               data.uf?.trim(),
-        cep:              data.cep,
-        telefone:         data.telefone ?? null,
-        ambiente:         data.ambiente ?? 2,
-      })
-    })
+  setEmitente({
+    razao_social:  data.razao_social,
+    cnpj:          data.cnpj,
+    ie:            data.ie ?? '',
+    crt:           data.crt ?? 1,
+    codigo_ibge:   data.codigo_ibge ?? '',
+    logradouro:    data.logradouro,
+    numero:        data.numero,
+    complemento:   data.complemento ?? null,
+    bairro:        data.bairro,
+    municipio:     data.municipio,
+    uf:            data.uf?.trim(),
+    cep:           data.cep,
+    telefone:      data.telefone ?? null,
+    ambiente:      data.ambiente ?? 2,
+  })
 }, [companyId])
+
+useEffect(() => { fetchEmitente() }, [fetchEmitente])
+
+async function handleRefreshAll() {
+  await Promise.all([fetchNotas(), fetchEmitente()])
+}
 
   // ── Busca notas ─────────────────────────────────────────────────────────
   const fetchNotas = useCallback(async () => {
@@ -436,19 +430,19 @@ useEffect(() => {
             </p>
           </div>
           <button
-            onClick={fetchNotas}
-            disabled={loading}
-            style={{
-              display: 'flex', alignItems: 'center', gap: '6px',
-              background: '#22262b', border: '1px solid #3a3d42',
-              borderRadius: '8px', padding: '7px 14px',
-              fontSize: '12px', color: '#a0a5ad', cursor: 'pointer',
-              opacity: loading ? 0.5 : 1,
-            }}
-          >
-            <RefreshCw size={13} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
-            Atualizar
-          </button>
+          onClick={handleRefreshAll}
+          disabled={loading}
+          style={{
+            display: 'flex', alignItems: 'center', gap: '6px',
+            background: '#22262b', border: '1px solid #3a3d42',
+            borderRadius: '8px', padding: '7px 14px',
+            fontSize: '12px', color: '#a0a5ad', cursor: 'pointer',
+            opacity: loading ? 0.5 : 1,
+          }}
+        >
+          <RefreshCw size={13} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
+          Atualizar
+        </button>
         </div>
 
         {/* ── Busca + filtros ── */}
