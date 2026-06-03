@@ -1,4 +1,3 @@
-'use client'
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { getFiscalConfig, saveFiscalConfig } from '@/services/fiscal'
@@ -47,14 +46,6 @@ const EMPTY: FiscalConfigPayload = {
 
 type Section = 'emitente' | 'endereco' | 'nfce' | 'certificado'
 
-function mask(value: string, pattern: string) {
-  let i = 0
-  const v = value.replace(/\D/g, '')
-  return pattern.replace(/#/g, () => v[i++] ?? '').replace(/[^0-9\s]/g, (c, idx) =>
-    i > 0 || idx < pattern.indexOf('#') + v.length ? c : ''
-  ).trimEnd()
-}
-
 function cnpjMask(v: string) {
   return v.replace(/\D/g, '').slice(0, 14)
     .replace(/^(\d{2})(\d)/, '$1.$2')
@@ -75,21 +66,52 @@ function phoneMask(v: string) {
 }
 
 export function FiscalTab({ onError }: FiscalTabProps) {
-  const [form, setForm] = useState<FiscalConfigPayload>(EMPTY)
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
-  const [section, setSection] = useState<Section>('emitente')
+  const [form, setForm]           = useState<FiscalConfigPayload>(EMPTY)
+  const [loading, setLoading]     = useState(true)
+  const [saving, setSaving]       = useState(false)
+  const [saved, setSaved]         = useState(false)
+  const [section, setSection]     = useState<Section>('emitente')
   const [uploadingCert, setUploadingCert] = useState(false)
   const certRef = useRef<HTMLInputElement>(null)
+
+  // ── Sequências de numeração ───────────────────────────────────────────────
+  const [nfceSeq,   setNfceSeq]   = useState<number>(0)
+  const [nfeSeq,    setNfeSeq]    = useState<number>(0)
+  const [nfeSerie,  setNfeSerie]  = useState<string>('001')
+  const [loadingSeq, setLoadingSeq] = useState(false)
+  const [savedSeq,  setSavedSeq]  = useState(false)
+
+  // Guarda o company_id para reusar nas operações de sequência
+  const [companyId, setCompanyId] = useState<string | null>(null)
 
   useEffect(() => {
     const load = async () => {
       try {
         const config = await getFiscalConfig()
         if (config) {
-          const { id, company_id, created_at, updated_at, ...rest } = config
+          const { id, company_id, created_at, updated_at, ...rest } = config as any
           setForm({ ...EMPTY, ...rest })
+          setCompanyId(company_id)
+
+          // Busca sequências NFC-e e NF-e em paralelo
+          const [{ data: seqNfce }, { data: seqNfe }] = await Promise.all([
+            supabase
+              .from('nfce_numero_seq')
+              .select('ultimo')
+              .eq('company_id', company_id)
+              .eq('serie', rest.nfce_serie ?? '001')
+              .maybeSingle(),
+            supabase
+              .from('nfe_numero_seq')
+              .select('ultimo, serie')
+              .eq('company_id', company_id)
+              .eq('serie', '001')
+              .maybeSingle(),
+          ])
+
+          setNfceSeq(seqNfce?.ultimo ?? 0)
+          setNfeSeq(seqNfe?.ultimo   ?? 0)
+          setNfeSerie(seqNfe?.serie  ?? '001')
         }
       } catch (e: any) {
         onError(e.message)
@@ -105,16 +127,16 @@ export function FiscalTab({ onError }: FiscalTabProps) {
     const raw = cep.replace(/\D/g, '')
     if (raw.length !== 8) return
     try {
-      const res = await fetch(`https://viacep.com.br/ws/${raw}/json/`)
+      const res  = await fetch(`https://viacep.com.br/ws/${raw}/json/`)
       const data = await res.json()
       if (data.erro) return
       setForm(f => ({
         ...f,
-        logradouro: data.logradouro ?? f.logradouro,
-        bairro:     data.bairro     ?? f.bairro,
-        municipio:  data.localidade ?? f.municipio,
-        uf:         data.uf         ?? f.uf,
-        codigo_ibge: data.ibge      ?? f.codigo_ibge,
+        logradouro:  data.logradouro ?? f.logradouro,
+        bairro:      data.bairro     ?? f.bairro,
+        municipio:   data.localidade ?? f.municipio,
+        uf:          data.uf         ?? f.uf,
+        codigo_ibge: data.ibge       ?? f.codigo_ibge,
       }))
     } catch {}
   }
@@ -138,32 +160,64 @@ export function FiscalTab({ onError }: FiscalTabProps) {
     }
   }
 
-const handleSave = async () => {
-  setSaving(true)
-  setSaved(false)
-  try {
-    const payload = {
-      ...form,
-      nfce_serie: (form.nfce_serie ?? '').padStart(3, '0') || '001',
+  const handleSave = async () => {
+    setSaving(true)
+    setSaved(false)
+    try {
+      const payload = {
+        ...form,
+        nfce_serie: (form.nfce_serie ?? '').padStart(3, '0') || '001',
+      }
+      await saveFiscalConfig(payload)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 3000)
+    } catch (e: any) {
+      onError(e.message)
+    } finally {
+      setSaving(false)
     }
-    await saveFiscalConfig(payload)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 3000)
-  } catch (e: any) {
-    onError(e.message)
-  } finally {
-    setSaving(false)
   }
-}
+
+  // ── Salvar sequências de numeração ────────────────────────────────────────
+  const handleSaveSeq = async () => {
+    if (!companyId) { onError('company_id não encontrado'); return }
+    setLoadingSeq(true)
+    setSavedSeq(false)
+    try {
+      const serieNfce = (form.nfce_serie ?? '001').padStart(3, '0')
+      const serieNfe  = nfeSerie.padStart(3, '0')
+
+      const [resNfce, resNfe] = await Promise.all([
+        supabase.from('nfce_numero_seq').upsert(
+          { company_id: companyId, serie: serieNfce, ultimo: nfceSeq },
+          { onConflict: 'company_id,serie' }
+        ),
+        supabase.from('nfe_numero_seq').upsert(
+          { company_id: companyId, serie: serieNfe, ultimo: nfeSeq },
+          { onConflict: 'company_id,serie' }
+        ),
+      ])
+
+      if (resNfce.error) throw new Error(resNfce.error.message)
+      if (resNfe.error)  throw new Error(resNfe.error.message)
+
+      setSavedSeq(true)
+      setTimeout(() => setSavedSeq(false), 3000)
+    } catch (e: any) {
+      onError(e.message)
+    } finally {
+      setLoadingSeq(false)
+    }
+  }
 
   const inputCls = 'w-full h-10 px-3 text-sm border border-gray-200 rounded-lg bg-white text-gray-800 outline-none focus:border-[#1a4a8a] focus:ring-2 focus:ring-[#1a4a8a]/10 transition-all placeholder-gray-300 disabled:opacity-50'
   const labelCls = 'block text-xs font-medium text-gray-500 mb-1'
 
   const tabs: { id: Section; label: string; icon: string }[] = [
-    { id: 'emitente',    label: 'Emitente',    icon: '🏢' },
-    { id: 'endereco',    label: 'Endereço',    icon: '📍' },
+    { id: 'emitente',    label: 'Emitente',     icon: '🏢' },
+    { id: 'endereco',    label: 'Endereço',     icon: '📍' },
     { id: 'nfce',        label: 'NFC-e / NF-e', icon: '🧾' },
-    { id: 'certificado', label: 'Certificado', icon: '🔐' },
+    { id: 'certificado', label: 'Certificado',  icon: '🔐' },
   ]
 
   if (loading) {
@@ -396,6 +450,8 @@ const handleSave = async () => {
       {/* ── NFC-e / NF-e ── */}
       {section === 'nfce' && (
         <div className="space-y-4">
+
+          {/* Ambiente SEFAZ */}
           <div className="bg-white rounded-xl shadow-sm p-5 space-y-4">
             <h3 className="text-sm font-semibold text-gray-700 border-b border-gray-100 pb-3">
               Ambiente SEFAZ
@@ -443,6 +499,7 @@ const handleSave = async () => {
             </div>
           </div>
 
+          {/* Série e CSC (NFC-e) */}
           <div className="bg-white rounded-xl shadow-sm p-5 space-y-4">
             <h3 className="text-sm font-semibold text-gray-700 border-b border-gray-100 pb-3">
               Série e CSC (NFC-e)
@@ -489,6 +546,115 @@ const handleSave = async () => {
               </span>
             </div>
           </div>
+
+          {/* ── Numeração — Última nota emitida ── */}
+          <div className="bg-white rounded-xl shadow-sm p-5 space-y-4">
+            <div className="border-b border-gray-100 pb-3">
+              <h3 className="text-sm font-semibold text-gray-700">
+                Numeração — Última nota emitida
+              </h3>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Configure apenas ao migrar de outro sistema. Em uso normal, o sistema incrementa automaticamente.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+
+              {/* NFC-e */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">NFC-e</span>
+                  <span className="text-[10px] bg-amber-50 text-amber-600 border border-amber-200 rounded px-1.5 py-0.5 font-medium">
+                    Série {(form.nfce_serie ?? '001').padStart(3, '0')}
+                  </span>
+                </div>
+                <label className={labelCls}>Último número emitido</label>
+                <input
+                  type="number"
+                  min={0}
+                  className={inputCls}
+                  value={nfceSeq}
+                  onChange={e => setNfceSeq(Math.max(0, Number(e.target.value)))}
+                  placeholder="0"
+                />
+                <p className="text-[11px] text-gray-400 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />
+                  Próxima NFC-e será emitida como n°{' '}
+                  <span className="font-semibold text-gray-600">{nfceSeq + 1}</span>
+                </p>
+              </div>
+
+              {/* NF-e */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">NF-e</span>
+                  <div className="flex items-center gap-1">
+                    <span className="text-[10px] text-gray-400">Série</span>
+                    <input
+                      type="text"
+                      maxLength={3}
+                      className="w-14 h-6 px-2 text-xs border border-gray-200 rounded-md
+                        focus:outline-none focus:border-[#1a4a8a] text-center font-mono
+                        bg-amber-50 text-amber-600 border-amber-200"
+                      value={nfeSerie}
+                      onChange={e => setNfeSerie(
+                        e.target.value.replace(/\D/g, '').slice(0, 3).padStart(
+                          e.target.value.replace(/\D/g, '').length > 0 ? 3 : 0, '0'
+                        )
+                      )}
+                    />
+                  </div>
+                </div>
+                <label className={labelCls}>Último número emitido</label>
+                <input
+                  type="number"
+                  min={0}
+                  className={inputCls}
+                  value={nfeSeq}
+                  onChange={e => setNfeSeq(Math.max(0, Number(e.target.value)))}
+                  placeholder="0"
+                />
+                <p className="text-[11px] text-gray-400 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-400 inline-block" />
+                  Próxima NF-e será emitida como n°{' '}
+                  <span className="font-semibold text-gray-600">{nfeSeq + 1}</span>
+                </p>
+              </div>
+            </div>
+
+            {/* Aviso */}
+            <div className="flex items-start gap-2.5 bg-orange-50 border border-orange-200 rounded-lg p-3 text-xs text-orange-700">
+              <span className="text-base leading-none shrink-0">⚠️</span>
+              <span>
+                Alterar a numeração pode causar rejeição pela SEFAZ se o número já tiver sido
+                utilizado. Use apenas para sincronizar a sequência ao migrar de outro emissor.
+              </span>
+            </div>
+
+            {/* Botão salvar numeração */}
+            <div className="flex items-center justify-end gap-3">
+              {savedSeq && (
+                <span className="flex items-center gap-1.5 text-sm text-green-600 font-medium">
+                  <CheckCircle2 size={14} />
+                  Numeração salva!
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={handleSaveSeq}
+                disabled={loadingSeq}
+                className="flex items-center gap-2 text-sm px-4 py-2 rounded-lg
+                  bg-[#1a4a8a] text-white hover:bg-[#1a4a8a]/90
+                  disabled:opacity-50 transition-colors font-medium"
+              >
+                {loadingSeq
+                  ? <><Loader2 size={14} className="animate-spin" /> Salvando...</>
+                  : <><Save size={14} /> Salvar numeração</>
+                }
+              </button>
+            </div>
+          </div>
+
         </div>
       )}
 
@@ -562,7 +728,7 @@ const handleSave = async () => {
         </div>
       )}
 
-      {/* Save button */}
+      {/* Botão salvar configurações fiscais */}
       <div className="flex items-center justify-end gap-3 pt-1">
         {saved && (
           <span className="flex items-center gap-1.5 text-sm text-green-600 font-medium animate-pulse">
