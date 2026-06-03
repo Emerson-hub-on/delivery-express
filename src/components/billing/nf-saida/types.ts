@@ -34,6 +34,8 @@ export interface ItemNota {
   quantidade:   number
   valor_unit:   number
   valor_total:  number
+  cest?: string
+  inf_ad_prod?: string
 }
 
 export interface DestinatarioForm {
