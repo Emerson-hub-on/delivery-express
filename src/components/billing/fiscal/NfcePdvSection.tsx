@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import {
   Plus, ChevronDown, ChevronUp, Save, Trash2,
-  Loader2, CheckCircle2, AlertTriangle, Store,
+  Loader2, CheckCircle2, AlertTriangle, Store, Lock,
 } from 'lucide-react'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
@@ -41,29 +41,42 @@ const EMPTY_PDV = (companyId: string): Omit<NfcePdv, 'id'> => ({
 
 // ── Componente ────────────────────────────────────────────────────────────────
 export function NfcePdvSection({ companyId, onError }: Props) {
-  const [pdvs,        setPdvs]        = useState<NfcePdv[]>([])
-  const [loading,     setLoading]     = useState(true)
-  const [expandedId,  setExpandedId]  = useState<string | null>(null)
-  const [savingId,    setSavingId]    = useState<string | null>(null)
-  const [deletingId,  setDeletingId]  = useState<string | null>(null)
-  const [savedId,     setSavedId]     = useState<string | null>(null)
-  const [adding,      setAdding]      = useState(false)
+  const [pdvs,       setPdvs]       = useState<NfcePdv[]>([])
+  const [pdvLimit,   setPdvLimit]   = useState<number>(1)
+  const [loading,    setLoading]    = useState(true)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [savingId,   setSavingId]   = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [savedId,    setSavedId]    = useState<string | null>(null)
+  const [adding,     setAdding]     = useState(false)
 
-  // ── Carrega PDVs ────────────────────────────────────────────────────────
+  // ── Carrega PDVs + limite da empresa ────────────────────────────────────
   useEffect(() => {
     if (!companyId) return
-    supabase
-      .from('nfce_pdv')
-      .select('*')
-      .eq('company_id', companyId)
-      .order('serie')
-      .then(({ data, error }) => {
-        console.log('[NfcePdv] companyId:', companyId, '| data:', data, '| error:', error)
-        if (error) onError(error.message)
-        else setPdvs((data ?? []) as NfcePdv[])
-        setLoading(false)
-      })
+
+    Promise.all([
+      supabase
+        .from('nfce_pdv')
+        .select('*')
+        .eq('company_id', companyId)
+        .order('serie'),
+      supabase
+        .from('companies')
+        .select('pdv_limit')
+        .eq('id', companyId)
+        .single(),
+    ]).then(([{ data: pdvData, error: pdvError }, { data: company, error: compError }]) => {
+      if (pdvError) onError(pdvError.message)
+      else setPdvs((pdvData ?? []) as NfcePdv[])
+
+      if (!compError && company) setPdvLimit(company.pdv_limit ?? 1)
+
+      setLoading(false)
+    })
   }, [companyId])
+
+  // Derivados
+  const atingiuLimite = pdvs.length >= pdvLimit
 
   // ── Atualiza campo local ─────────────────────────────────────────────────
   function updateField(id: string, field: keyof NfcePdv, value: unknown) {
@@ -72,6 +85,9 @@ export function NfcePdvSection({ companyId, onError }: Props) {
 
   // ── Adicionar novo PDV ──────────────────────────────────────────────────
   async function handleAdd() {
+    // Verificação de limite
+    if (atingiuLimite) return // botão já fica desabilitado, mas garante no handler
+
     setAdding(true)
     try {
       const { data, error } = await supabase
@@ -92,7 +108,6 @@ export function NfcePdvSection({ companyId, onError }: Props) {
 
   // ── Salvar PDV ──────────────────────────────────────────────────────────
   async function handleSave(pdv: NfcePdv) {
-    // Valida série
     const serie = pdv.serie.replace(/\D/g, '').padStart(3, '0')
     if (!serie || serie === '000') {
       onError('Informe uma série válida (ex: 001)')
@@ -105,7 +120,7 @@ export function NfcePdvSection({ companyId, onError }: Props) {
         .from('nfce_pdv')
         .update({
           nome:      pdv.nome,
-          serie:     serie,
+          serie,
           csc_id:    pdv.csc_id,
           csc_token: pdv.csc_token,
           ultimo:    pdv.ultimo,
@@ -115,8 +130,6 @@ export function NfcePdvSection({ companyId, onError }: Props) {
         .eq('company_id', companyId)
 
       if (error) throw new Error(error.message)
-
-      // Atualiza série formatada localmente
       updateField(pdv.id, 'serie', serie)
       setSavedId(pdv.id)
       setTimeout(() => setSavedId(null), 2500)
@@ -157,23 +170,47 @@ export function NfcePdvSection({ companyId, onError }: Props) {
           <h3 className="text-sm font-semibold text-gray-700">PDVs — NFC-e</h3>
           <p className="text-xs text-gray-400 mt-0.5">
             Cada PDV tem série e CSC próprios independentes
+            {!loading && (
+              <span className="ml-1.5">
+                · <span className={`font-medium ${atingiuLimite ? 'text-red-500' : 'text-gray-500'}`}>
+                  {pdvs.length}/{pdvLimit} PDV{pdvLimit !== 1 ? 's' : ''}
+                </span>
+              </span>
+            )}
           </p>
         </div>
+
         <button
           type="button"
           onClick={handleAdd}
-          disabled={adding}
+          disabled={adding || atingiuLimite}
+          title={atingiuLimite ? `Limite de ${pdvLimit} PDV${pdvLimit !== 1 ? 's' : ''} atingido` : undefined}
           className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5
             bg-[#1a4a8a] text-white rounded-lg hover:bg-[#1a4a8a]/90
-            disabled:opacity-50 transition-colors"
+            disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {adding
             ? <Loader2 size={13} className="animate-spin" />
-            : <Plus size={13} />
+            : atingiuLimite
+              ? <Lock size={13} />
+              : <Plus size={13} />
           }
           Adicionar PDV
         </button>
       </div>
+
+      {/* Banner de limite atingido */}
+      {!loading && atingiuLimite && (
+        <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-200
+          rounded-lg px-4 py-3 text-sm text-amber-800">
+          <Lock size={15} className="shrink-0 mt-0.5 text-amber-500" />
+          <span>
+            Para sua empresa só está disponível{' '}
+            <strong>{pdvLimit} PDV{pdvLimit !== 1 ? 's' : ''}</strong>.
+            Para aumentar o limite, fale com o administrador do sistema.
+          </span>
+        </div>
+      )}
 
       {/* Loading */}
       {loading && (
@@ -194,10 +231,10 @@ export function NfcePdvSection({ companyId, onError }: Props) {
 
       {/* Lista de PDVs */}
       {!loading && pdvs.map((pdv, idx) => {
-        const expanded  = expandedId === pdv.id
-        const isSaving  = savingId  === pdv.id
+        const expanded   = expandedId === pdv.id
+        const isSaving   = savingId   === pdv.id
         const isDeleting = deletingId === pdv.id
-        const wasSaved  = savedId   === pdv.id
+        const wasSaved   = savedId    === pdv.id
 
         return (
           <div
@@ -212,13 +249,11 @@ export function NfcePdvSection({ companyId, onError }: Props) {
                 hover:bg-gray-50 transition-colors select-none"
               onClick={() => setExpandedId(expanded ? null : pdv.id)}
             >
-              {/* Ícone + número */}
               <div className="w-8 h-8 rounded-lg bg-[#1a4a8a]/10 flex items-center
                 justify-center shrink-0">
                 <Store size={15} className="text-[#1a4a8a]" />
               </div>
 
-              {/* Infos */}
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-800 truncate">
                   {pdv.nome || `PDV ${idx + 1}`}
@@ -231,7 +266,6 @@ export function NfcePdvSection({ companyId, onError }: Props) {
                 </p>
               </div>
 
-              {/* Status */}
               <div className="flex items-center gap-2 shrink-0">
                 {!pdv.ativo && (
                   <span className="text-[10px] px-2 py-0.5 rounded-full
@@ -239,9 +273,7 @@ export function NfcePdvSection({ companyId, onError }: Props) {
                     Inativo
                   </span>
                 )}
-                {wasSaved && (
-                  <CheckCircle2 size={14} className="text-green-500" />
-                )}
+                {wasSaved && <CheckCircle2 size={14} className="text-green-500" />}
                 <div className="text-gray-300">
                   {expanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
                 </div>
@@ -251,10 +283,8 @@ export function NfcePdvSection({ companyId, onError }: Props) {
             {/* Painel expandido */}
             {expanded && (
               <div className="border-t border-gray-100 bg-gray-50/50 px-4 py-4 space-y-4">
-
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 
-                  {/* Nome */}
                   <div className="sm:col-span-2">
                     <label className={labelCls}>Nome do PDV</label>
                     <input
@@ -265,7 +295,6 @@ export function NfcePdvSection({ companyId, onError }: Props) {
                     />
                   </div>
 
-                  {/* Série */}
                   <div>
                     <label className={labelCls}>Série NFC-e *</label>
                     <input
@@ -278,12 +307,9 @@ export function NfcePdvSection({ companyId, onError }: Props) {
                       placeholder="001"
                       maxLength={3}
                     />
-                    <p className="text-[10px] text-gray-400 mt-1">
-                      Deve ser única por empresa
-                    </p>
+                    <p className="text-[10px] text-gray-400 mt-1">Deve ser única por empresa</p>
                   </div>
 
-                  {/* Último número */}
                   <div>
                     <label className={labelCls}>Último número emitido</label>
                     <input
@@ -291,9 +317,7 @@ export function NfcePdvSection({ companyId, onError }: Props) {
                       min={0}
                       className={inputCls}
                       value={pdv.ultimo}
-                      onChange={e => updateField(
-                        pdv.id, 'ultimo', Math.max(0, Number(e.target.value))
-                      )}
+                      onChange={e => updateField(pdv.id, 'ultimo', Math.max(0, Number(e.target.value)))}
                       placeholder="0"
                     />
                     <p className="text-[10px] text-gray-400 mt-1">
@@ -301,7 +325,6 @@ export function NfcePdvSection({ companyId, onError }: Props) {
                     </p>
                   </div>
 
-                  {/* CSC ID */}
                   <div>
                     <label className={labelCls}>CSC ID</label>
                     <input
@@ -312,7 +335,6 @@ export function NfcePdvSection({ companyId, onError }: Props) {
                     />
                   </div>
 
-                  {/* CSC Token */}
                   <div>
                     <label className={labelCls}>CSC Token</label>
                     <input
@@ -324,7 +346,7 @@ export function NfcePdvSection({ companyId, onError }: Props) {
                   </div>
                 </div>
 
-                {/* Ativo toggle */}
+                {/* Toggle ativo */}
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
@@ -360,10 +382,7 @@ export function NfcePdvSection({ companyId, onError }: Props) {
                     className="flex items-center gap-1.5 text-xs text-red-500
                       hover:text-red-700 disabled:opacity-40 transition-colors"
                   >
-                    {isDeleting
-                      ? <Loader2 size={13} className="animate-spin" />
-                      : <Trash2 size={13} />
-                    }
+                    {isDeleting ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
                     {isDeleting ? 'Excluindo...' : 'Excluir PDV'}
                   </button>
 
