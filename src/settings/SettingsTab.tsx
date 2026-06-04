@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { getFiscalConfig, saveFiscalConfig } from '@/services/fiscal'
 import { FiscalConfigPayload, CRT, AmbienteSEFAZ } from '@/types/fiscal'
 import { Save, Upload, ShieldCheck, AlertTriangle, CheckCircle2, Loader2 } from 'lucide-react'
+import { NfcePdvSection } from '@/components/billing/fiscal/NfcePdvSection'
 
 interface FiscalTabProps {
   onError: (msg: string) => void
@@ -499,53 +500,8 @@ export function FiscalTab({ onError }: FiscalTabProps) {
             </div>
           </div>
 
-          {/* Série e CSC (NFC-e) */}
-          <div className="bg-white rounded-xl shadow-sm p-5 space-y-4">
-            <h3 className="text-sm font-semibold text-gray-700 border-b border-gray-100 pb-3">
-              Série e CSC (NFC-e)
-            </h3>
+          <NfcePdvSection companyId={companyId!} onError={onError} />
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div>
-                <label className={labelCls}>Série NFC-e</label>
-                <input
-                  className={inputCls}
-                  value={form.nfce_serie}
-                  onChange={e => set('nfce_serie', e.target.value.replace(/\D/g, '').slice(0, 3))}
-                  placeholder="001"
-                  maxLength={3}
-                />
-              </div>
-
-              <div>
-                <label className={labelCls}>CSC ID</label>
-                <input
-                  className={inputCls}
-                  value={form.csc_id ?? ''}
-                  onChange={e => set('csc_id', e.target.value)}
-                  placeholder="000001"
-                />
-              </div>
-
-              <div>
-                <label className={labelCls}>CSC Token</label>
-                <input
-                  className={inputCls}
-                  value={form.csc_token ?? ''}
-                  onChange={e => set('csc_token', e.target.value)}
-                  placeholder="Token fornecido pela SEFAZ"
-                />
-              </div>
-            </div>
-
-            <div className="flex items-start gap-2.5 bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-700">
-              <span className="text-base leading-none">ℹ️</span>
-              <span>
-                O CSC (Código de Segurança do Contribuinte) é fornecido pela SEFAZ estadual durante
-                o credenciamento para emissão de NFC-e. Cada estado tem seu próprio portal.
-              </span>
-            </div>
-          </div>
 
           {/* ── Numeração — Última nota emitida ── */}
           <div className="bg-white rounded-xl shadow-sm p-5 space-y-4">

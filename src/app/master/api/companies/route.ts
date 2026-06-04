@@ -6,10 +6,9 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 
   const supabase = getSupabaseAdmin()
-
   const { data, error } = await supabase
     .from('companies')
-    .select('id, name, email, slug, created_at, mp_public_key, mp_secret_key')
+    .select('id, name, email, slug, created_at, mp_public_key, mp_secret_key, pdv_limit')
     .order('created_at', { ascending: false })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -20,7 +19,7 @@ export async function POST(req: NextRequest) {
   const session = await getMasterSession()
   if (!session) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 
-  const { name, email, password, slug } = await req.json()
+  const { name, email, password, slug, pdv_limit } = await req.json()
   const supabase = getSupabaseAdmin()
 
   if (!/^[a-z0-9-]+$/.test(slug)) {
@@ -59,13 +58,19 @@ export async function POST(req: NextRequest) {
     .maybeSingle()
 
   if (checkError || !company) {
-    // Trigger falhou — rollback do usuário no Auth
     await supabase.auth.admin.deleteUser(authData.user.id)
     return NextResponse.json(
       { error: 'Erro ao criar empresa no banco. Verifique o trigger.' },
       { status: 500 }
     )
   }
+
+  // Atualiza pdv_limit após criação (trigger cria com default 1)
+  const limit = Number(pdv_limit) > 0 ? Number(pdv_limit) : 1
+  await supabase
+    .from('companies')
+    .update({ pdv_limit: limit })
+    .eq('id', authData.user.id)
 
   return NextResponse.json({ ok: true, id: authData.user.id, slug })
 }
@@ -74,7 +79,7 @@ export async function PATCH(req: NextRequest) {
   const session = await getMasterSession()
   if (!session) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 
-  const { id, name, email, slug, password, mp_public_key, mp_secret_key } = await req.json()
+  const { id, name, email, slug, password, mp_public_key, mp_secret_key, pdv_limit } = await req.json()
   const supabase = getSupabaseAdmin()
 
   if (!id) return NextResponse.json({ error: 'ID obrigatório' }, { status: 400 })
@@ -90,14 +95,13 @@ export async function PATCH(req: NextRequest) {
       .eq('slug', slug)
       .neq('id', id)
       .maybeSingle()
-
     if (existing) return NextResponse.json({ error: 'Slug já em uso.' }, { status: 400 })
   }
 
-  const companyUpdate: Record<string, string | null> = { name, slug }
-
+  const companyUpdate: Record<string, string | number | null> = { name, slug }
   if (mp_public_key !== undefined) companyUpdate.mp_public_key = mp_public_key || null
   if (mp_secret_key !== undefined) companyUpdate.mp_secret_key = mp_secret_key || null
+  if (pdv_limit !== undefined)     companyUpdate.pdv_limit = Number(pdv_limit) > 0 ? Number(pdv_limit) : 1
 
   const { error: companyError } = await supabase
     .from('companies')
