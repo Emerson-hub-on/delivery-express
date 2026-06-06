@@ -76,13 +76,14 @@ export function FiscalTab({ onError }: FiscalTabProps) {
   const certRef = useRef<HTMLInputElement>(null)
 
   // ── Sequências de numeração ───────────────────────────────────────────────
+  // NFC-e: lido e salvo em nfce_pdv (campo ultimo)
   const [nfceSeq,   setNfceSeq]   = useState<number>(0)
+  // NF-e: lido e salvo em nfe_numero_seq
   const [nfeSeq,    setNfeSeq]    = useState<number>(0)
   const [nfeSerie,  setNfeSerie]  = useState<string>('001')
   const [loadingSeq, setLoadingSeq] = useState(false)
   const [savedSeq,  setSavedSeq]  = useState(false)
 
-  // Guarda o company_id para reusar nas operações de sequência
   const [companyId, setCompanyId] = useState<string | null>(null)
 
   useEffect(() => {
@@ -94,25 +95,27 @@ export function FiscalTab({ onError }: FiscalTabProps) {
           setForm({ ...EMPTY, ...rest })
           setCompanyId(company_id)
 
-          // Busca sequências NFC-e e NF-e em paralelo
-          const [{ data: seqNfce }, { data: seqNfe }] = await Promise.all([
-            supabase
-              .from('nfce_numero_seq')
-              .select('ultimo')
-              .eq('company_id', company_id)
-              .eq('serie', rest.nfce_serie ?? '001')
-              .maybeSingle(),
-            supabase
-              .from('nfe_numero_seq')
-              .select('ultimo, serie')
-              .eq('company_id', company_id)
-              .eq('serie', '001')
-              .maybeSingle(),
-          ])
+          const serieNfce = (rest.nfce_serie ?? '001').padStart(3, '0')
 
-          setNfceSeq(seqNfce?.ultimo ?? 0)
-          setNfeSeq(seqNfe?.ultimo   ?? 0)
-          setNfeSerie(seqNfe?.serie  ?? '001')
+          // NFC-e: busca o último número do nfce_pdv pela série ativa
+          const { data: pdv } = await supabase
+            .from('nfce_pdv')
+            .select('ultimo')
+            .eq('company_id', company_id)
+            .eq('serie', serieNfce)
+            .maybeSingle()
+
+          // NF-e: busca em nfe_numero_seq
+          const { data: seqNfe } = await supabase
+            .from('nfe_numero_seq')
+            .select('ultimo, serie')
+            .eq('company_id', company_id)
+            .eq('serie', '001')
+            .maybeSingle()
+
+          setNfceSeq(pdv?.ultimo    ?? 0)
+          setNfeSeq(seqNfe?.ultimo  ?? 0)
+          setNfeSerie(seqNfe?.serie ?? '001')
         }
       } catch (e: any) {
         onError(e.message)
@@ -188,19 +191,24 @@ export function FiscalTab({ onError }: FiscalTabProps) {
       const serieNfce = (form.nfce_serie ?? '001').padStart(3, '0')
       const serieNfe  = nfeSerie.padStart(3, '0')
 
-      const [resNfce, resNfe] = await Promise.all([
-        supabase.from('nfce_numero_seq').upsert(
-          { company_id: companyId, serie: serieNfce, ultimo: nfceSeq },
-          { onConflict: 'company_id,serie' }
-        ),
-        supabase.from('nfe_numero_seq').upsert(
+      // NFC-e: atualiza o campo `ultimo` no nfce_pdv (registro já existe via NfcePdvSection)
+      const { error: errNfce } = await supabase
+        .from('nfce_pdv')
+        .update({ ultimo: nfceSeq })
+        .eq('company_id', companyId)
+        .eq('serie', serieNfce)
+
+      if (errNfce) throw new Error(errNfce.message)
+
+      // NF-e: upsert em nfe_numero_seq
+      const { error: errNfe } = await supabase
+        .from('nfe_numero_seq')
+        .upsert(
           { company_id: companyId, serie: serieNfe, ultimo: nfeSeq },
           { onConflict: 'company_id,serie' }
-        ),
-      ])
+        )
 
-      if (resNfce.error) throw new Error(resNfce.error.message)
-      if (resNfe.error)  throw new Error(resNfe.error.message)
+      if (errNfe) throw new Error(errNfe.message)
 
       setSavedSeq(true)
       setTimeout(() => setSavedSeq(false), 3000)
@@ -502,7 +510,6 @@ export function FiscalTab({ onError }: FiscalTabProps) {
 
           <NfcePdvSection companyId={companyId!} onError={onError} />
 
-
           {/* ── Numeração — Última nota emitida ── */}
           <div className="bg-white rounded-xl shadow-sm p-5 space-y-4">
             <div className="border-b border-gray-100 pb-3">
@@ -553,11 +560,11 @@ export function FiscalTab({ onError }: FiscalTabProps) {
                         focus:outline-none focus:border-[#1a4a8a] text-center font-mono
                         bg-amber-50 text-amber-600 border-amber-200"
                       value={nfeSerie}
-                      onChange={e => setNfeSerie(
-                        e.target.value.replace(/\D/g, '').slice(0, 3).padStart(
-                          e.target.value.replace(/\D/g, '').length > 0 ? 3 : 0, '0'
-                        )
-                      )}
+                      onChange={e => setNfeSerie(e.target.value.replace(/\D/g, '').slice(0, 3))}
+                      onBlur={e => {
+                        const raw = e.target.value.replace(/\D/g, '')
+                        setNfeSerie(raw.length > 0 ? raw.padStart(3, '0') : '001')
+                      }}
                     />
                   </div>
                 </div>
