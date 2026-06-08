@@ -76,8 +76,6 @@ export function FiscalTab({ onError }: FiscalTabProps) {
   const certRef = useRef<HTMLInputElement>(null)
 
   // ── Sequências de numeração ───────────────────────────────────────────────
-  // NFC-e: lido e salvo em nfce_pdv (campo ultimo)
-  const [nfceSeq,   setNfceSeq]   = useState<number>(0)
   // NF-e: lido e salvo em nfe_numero_seq
   const [nfeSeq,    setNfeSeq]    = useState<number>(0)
   const [nfeSerie,  setNfeSerie]  = useState<string>('001')
@@ -95,16 +93,6 @@ export function FiscalTab({ onError }: FiscalTabProps) {
           setForm({ ...EMPTY, ...rest })
           setCompanyId(company_id)
 
-          const serieNfce = (rest.nfce_serie ?? '001').padStart(3, '0')
-
-          // NFC-e: busca o último número do nfce_pdv pela série ativa
-          const { data: pdv } = await supabase
-            .from('nfce_pdv')
-            .select('ultimo')
-            .eq('company_id', company_id)
-            .eq('serie', serieNfce)
-            .maybeSingle()
-
           // NF-e: busca em nfe_numero_seq
           const { data: seqNfe } = await supabase
             .from('nfe_numero_seq')
@@ -113,7 +101,6 @@ export function FiscalTab({ onError }: FiscalTabProps) {
             .eq('serie', '001')
             .maybeSingle()
 
-          setNfceSeq(pdv?.ultimo    ?? 0)
           setNfeSeq(seqNfe?.ultimo  ?? 0)
           setNfeSerie(seqNfe?.serie ?? '001')
         }
@@ -188,17 +175,7 @@ export function FiscalTab({ onError }: FiscalTabProps) {
     setLoadingSeq(true)
     setSavedSeq(false)
     try {
-      const serieNfce = (form.nfce_serie ?? '001').padStart(3, '0')
-      const serieNfe  = nfeSerie.padStart(3, '0')
-
-      // NFC-e: atualiza o campo `ultimo` no nfce_pdv (registro já existe via NfcePdvSection)
-      const { error: errNfce } = await supabase
-        .from('nfce_pdv')
-        .update({ ultimo: nfceSeq })
-        .eq('company_id', companyId)
-        .eq('serie', serieNfce)
-
-      if (errNfce) throw new Error(errNfce.message)
+      const serieNfe = nfeSerie.padStart(3, '0')
 
       // NF-e: upsert em nfe_numero_seq
       const { error: errNfe } = await supabase
@@ -514,7 +491,7 @@ export function FiscalTab({ onError }: FiscalTabProps) {
           <div className="bg-white rounded-xl shadow-sm p-5 space-y-4">
             <div className="border-b border-gray-100 pb-3">
               <h3 className="text-sm font-semibold text-gray-700">
-                Numeração — Última nota emitida
+                Numeração NF-e — Última nota emitida
               </h3>
               <p className="text-xs text-gray-400 mt-0.5">
                 Configure apenas ao migrar de outro sistema. Em uso normal, o sistema incrementa automaticamente.
@@ -522,30 +499,6 @@ export function FiscalTab({ onError }: FiscalTabProps) {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-
-              {/* NFC-e */}
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">NFC-e</span>
-                  <span className="text-[10px] bg-amber-50 text-amber-600 border border-amber-200 rounded px-1.5 py-0.5 font-medium">
-                    Série {(form.nfce_serie ?? '001').padStart(3, '0')}
-                  </span>
-                </div>
-                <label className={labelCls}>Último número emitido</label>
-                <input
-                  type="number"
-                  min={0}
-                  className={inputCls}
-                  value={nfceSeq}
-                  onChange={e => setNfceSeq(Math.max(0, Number(e.target.value)))}
-                  placeholder="0"
-                />
-                <p className="text-[11px] text-gray-400 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />
-                  Próxima NFC-e será emitida como n°{' '}
-                  <span className="font-semibold text-gray-600">{nfceSeq + 1}</span>
-                </p>
-              </div>
 
               {/* NF-e */}
               <div className="space-y-2">

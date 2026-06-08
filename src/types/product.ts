@@ -1,5 +1,7 @@
 // types/product.ts
 import type { CartAddon } from './addon'
+import type { NfceStatus } from './fiscal'
+
 export type Category = string
 
 // ── Tipos fiscais ─────────────────────────────────────────────
@@ -27,6 +29,7 @@ export type PIS_COFINS_CST =
   | '49'   // Outras saídas
 
 // ── Produto ───────────────────────────────────────────────────
+
 export type ProductSize = {
   value: string        // "P", "M", "42" …
   stock: number | null // null = não controla estoque
@@ -42,16 +45,16 @@ export type Product = {
   description?: string
   active?: boolean
   stock?: number | null
-  cost_price?: number | null  // Preço de custo
-  ean?: string | null 
+  cost_price?: number | null
+  ean?: string | null
   sizes?: ProductSize[] | null
-  unidade_estoque?: string   // interno — não vai para o XML fiscal
+  unidade_estoque?: string
   fator_conversao?: number
   ncm?: string
   cest?: string
   cfop?: string
-  unit_com?: UnitCom         // fiscal — tag <uCom> na NFC-e
-  unit_trib?: UnitCom 
+  unit_com?: UnitCom
+  unit_trib?: UnitCom
   origem?: OrigemMercadoria
   icms_csosn?: ICMS_CSOSN
   icms_aliq?: number
@@ -59,7 +62,7 @@ export type Product = {
   pis_aliq?: number
   cofins_cst?: PIS_COFINS_CST
   cofins_aliq?: number
-  ind_escala?: 'S' | 'N'  // padrão 'S'
+  ind_escala?: 'S' | 'N'
   cnpj_fabricante?: string
 }
 
@@ -72,21 +75,42 @@ export type CategoryItem = {
   label: string
   active?: boolean
   sort_order?: number
-  // ── Novos campos (já existem no banco) ────────────────────
-  category_type?: CategoryType   // 'clothing' | 'footwear' | 'other'
-  size_group?: SizeGroup         // 'adult' | 'kids'
-  sizes?: string[]               // ['P','M','G'] ou ['38','39','40']
+  category_type?: CategoryType
+  size_group?: SizeGroup
+  sizes?: string[]
 }
 
-// ── Pedido ────────────────────────────────────────────────────
+// ── Item de Pedido ────────────────────────────────────────────
+// Espelha a tabela order_items (relacional)
 
 export type OrderItem = {
-  product_id: number
+  id?: number | undefined          // PK — presente no SELECT, ausente no INSERT
+  order_id?: number | undefined    // FK — presente no SELECT, ausente no INSERT
+  product_id: number | null
   product_name: string
   quantity: number
   unit_price: number
-  addons?: CartAddon[]
+  discount?: number | null         // default 0
+  addons?: CartAddon[] | null
   observation?: string | null
+  // campos fiscais (preenchidos na emissão NFC-e)
+  unit?: string | null             // default 'UN'
+  ean?: string | null
+  cfop?: string | null
+  ncm?: string | null
+  cest?: string | null
+  cst?: string | null
+  csosn?: string | null
+  aliq_icms?: number | null
+  base_icms?: number | null
+  valor_icms?: number | null
+  aliq_pis?: number | null
+  valor_pis?: number | null
+  aliq_cofins?: number | null
+  valor_cofins?: number | null
+  ibpt_total?: number | null
+  item_order?: number | null
+  cancelado?: boolean
 }
 
 export type OrderAddress = {
@@ -98,16 +122,19 @@ export type OrderAddress = {
   state: string
 }
 
+// ── Pedido ────────────────────────────────────────────────────
+
 export type Order = {
   id: number
   code: string
   created_at: string
   total: number
   status: string
-  customer: string
+  customer: string | null
   customer_phone?: string | null
   customer_id?: string | null
   ifood_id?: string
+  /** @deprecated itens agora vêm de order_items via JOIN */
   raw?: Record<string, unknown> | null
   items: OrderItem[]
   address?: OrderAddress | null
@@ -122,9 +149,11 @@ export type Order = {
   delivery_pin?: string | null
   change?: number | null
   printed?: boolean
+  order_type?: 'delivery' | 'pdv'
+  notes?: string | null
 
   // ── Campos fiscais (NFC-e) ─────────────────────────────────
-  nfce_status?: import('./fiscal').NfceStatus | null
+  nfce_status?: NfceStatus | null
   nfce_numero?: number | null
   nfce_serie?: string | null
   nfce_chave?: string | null
@@ -138,23 +167,16 @@ export type Order = {
 
 // ── Cupom Fiscal ──────────────────────────────────────────────
 
-export type CupomFiscalStatus =
-  | 'pendente'
-  | 'emitido'
-  | 'cancelado'
-  | 'rejeitado'
+export type CupomFiscalStatus = NfceStatus  // alias — mesmos valores
 
 export type CupomFiscal = {
   id: number
   order_id: number
   numero: number
   serie: string
-  /** Chave de acesso de 44 dígitos retornada pela SEFAZ */
   chave_acesso?: string
-  /** URL do DANFE / QR-Code */
   danfe_url?: string
   status: CupomFiscalStatus
-  /** Mensagem xMotivo da SEFAZ */
   sefaz_motivo?: string
   emitido_at?: string
   cancelado_at?: string

@@ -10,10 +10,6 @@ import { ItensSection }        from './ItensSection'
 import { TotaisSection }       from './TotaisSection'
 import { DanfePreview }        from './DanfePreview'
 
-// ── Importa service e contrato unificado ────────────────────────────────────
-// buildPayload local foi removido — toda persistência passa pelo service,
-// que garante dest_ind_ie, forma_pagamento, informacoes_adicionais e
-// os status aceitos pelo CHECK constraint do banco.
 import {
   createNfSaida,
   emitirNfSaida,
@@ -33,7 +29,6 @@ import type {
   FormaPagamento,
 } from './types'
 
-// ── Tipos ────────────────────────────────────────────────────────────────────
 interface Props {
   companyId: string
   onError?: (msg: string) => void
@@ -53,7 +48,6 @@ type Emitente = {
   codigo_ibge: string
 }
 
-// ── Estado inicial ────────────────────────────────────────────────────────────
 const DEST_EMPTY: DestinatarioForm = {
   tipo: 'fisica',
   nome: '',
@@ -96,7 +90,6 @@ function emptyForm(): NfSaidaForm {
   }
 }
 
-// ── Componente ────────────────────────────────────────────────────────────────
 export function NfSaidaTab({ companyId, onError }: Props) {
   const [form, setForm]               = useState<NfSaidaForm>(emptyForm)
   const [saving, setSaving]           = useState(false)
@@ -104,16 +97,18 @@ export function NfSaidaTab({ companyId, onError }: Props) {
   const [showDanfe, setShowDanfe]     = useState(false)
   const [savedNumero, setSavedNumero] = useState<string | undefined>()
 
-  // Usa EmitirNfeResult importado do service — sem tipo local duplicado
   const [emissaoResult, setEmissaoResult] = useState<EmitirNfeResult | null>(null)
   const [copiedChave, setCopiedChave]     = useState(false)
 
   const [emitente, setEmitente]               = useState<Emitente | null>(null)
   const [loadingEmitente, setLoadingEmitente] = useState(true)
-  const [refreshing, setRefreshing] = useState(false)
+  const [refreshing, setRefreshing]           = useState(false)
 
+  // ── Próximo número NF-e ──────────────────────────────────────────────────
+  const [proximoNumero, setProximoNumero] = useState<number | null>(null)
+  const [nfeSerie, setNfeSerie]           = useState<string>('001')
 
-  // ── Busca dados do emitente ──────────────────────────────────────────────
+  // ── Busca dados do emitente + próximo número ─────────────────────────────
   useEffect(() => {
     if (!companyId) return
     async function fetchEmitente() {
@@ -141,87 +136,113 @@ export function NfSaidaTab({ companyId, onError }: Props) {
         uf:           data.uf.trim(),
         cep:          data.cep,
         fone:         data.telefone ?? undefined,
-        codigo_ibge: data.codigo_ibge ?? '',
+        codigo_ibge:  data.codigo_ibge ?? '',
       })
+
+      // Busca a série e o último número emitido para calcular o próximo
+      const { data: seq } = await supabase
+        .from('nfe_numero_seq')
+        .select('ultimo, serie')
+        .eq('company_id', companyId)
+        .order('serie', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      const serieAtiva = seq?.serie ?? '001'
+      setNfeSerie(serieAtiva)
+      setForm(prev => ({ ...prev, serie: serieAtiva }))
+      setProximoNumero((seq?.ultimo ?? 0) + 1)
+
       setLoadingEmitente(false)
     }
     fetchEmitente()
   }, [companyId])
 
-  // após o useEffect do emitente, adicione a função:
-const fetchEmitente = useCallback(async () => {
-  if (!companyId) return
-  const { data, error } = await supabase
-    .from('fiscal_configs')
-    .select('razao_social, cnpj, ie, codigo_ibge, logradouro, numero, bairro, municipio, uf, cep, telefone')
-    .eq('company_id', companyId)
-    .maybeSingle()
+  // ── fetchEmitente reutilizável (para o botão Sincronizar) ────────────────
+  const fetchEmitente = useCallback(async () => {
+    if (!companyId) return
+    const { data, error } = await supabase
+      .from('fiscal_configs')
+      .select('razao_social, cnpj, ie, codigo_ibge, logradouro, numero, bairro, municipio, uf, cep, telefone')
+      .eq('company_id', companyId)
+      .maybeSingle()
 
-  if (error || !data) return
-  setEmitente({
-    razao_social: data.razao_social,
-    cnpj:         data.cnpj,
-    ie:           data.ie ?? '',
-    logradouro:   data.logradouro,
-    numero:       data.numero,
-    bairro:       data.bairro,
-    municipio:    data.municipio,
-    uf:           data.uf.trim(),
-    cep:          data.cep,
-    fone:         data.telefone ?? undefined,
-    codigo_ibge:  data.codigo_ibge ?? '',
-  })
-}, [companyId])
+    if (error || !data) return
+    setEmitente({
+      razao_social: data.razao_social,
+      cnpj:         data.cnpj,
+      ie:           data.ie ?? '',
+      logradouro:   data.logradouro,
+      numero:       data.numero,
+      bairro:       data.bairro,
+      municipio:    data.municipio,
+      uf:           data.uf.trim(),
+      cep:          data.cep,
+      fone:         data.telefone ?? undefined,
+      codigo_ibge:  data.codigo_ibge ?? '',
+    })
 
-async function handleRefresh() {
-  setRefreshing(true)
-  try {
-    await fetchEmitente()
+    // Re-sincroniza a série e o próximo número também
+    const { data: seq } = await supabase
+      .from('nfe_numero_seq')
+      .select('ultimo, serie')
+      .eq('company_id', companyId)
+      .order('serie', { ascending: false })
+      .limit(1)
+      .maybeSingle()
 
-    const destId = (form.destinatario as any).dest_id
-    if (destId) {
-      const { data: cliente } = await supabase
-        .from('customers')
-        .select('id, name, razao_social, cpf, cnpj, ie, ind_ie_dest, contribuinte, pessoa_tipo, email, phone, codigo_municipio, logradouro, numero, complemento, bairro, municipio, uf, cep')
-        .eq('id', destId)
-        .single()
+    const serieAtiva = seq?.serie ?? '001'
+    setNfeSerie(serieAtiva)
+    setForm(prev => ({ ...prev, serie: serieAtiva }))
+    setProximoNumero((seq?.ultimo ?? 0) + 1)
+  }, [companyId])
 
-      if (cliente) {
-        setForm(prev => ({
-          ...prev,
-          destinatario: {
-            ...prev.destinatario,
-            nome:             cliente.razao_social ?? cliente.name,
-            cpf:              cliente.cpf          ?? '',
-            cnpj:             cliente.cnpj         ?? '',
-            ie:               cliente.ie           ?? '',
-            contribuinte:     cliente.contribuinte ?? '',
-            ind_ie_dest:      cliente.ind_ie_dest  ?? 9,
-            email:            cliente.email        ?? '',
-            telefone:         cliente.phone        ?? '',
-            logradouro:       cliente.logradouro   ?? '',
-            numero:           cliente.numero       ?? '',
-            complemento:      cliente.complemento  ?? '',
-            bairro:           cliente.bairro       ?? '',
-            municipio:        cliente.municipio    ?? '',
-            codigo_municipio: cliente.codigo_municipio ?? '',
-            uf:               cliente.uf           ?? 'PB',
-            cep:              cliente.cep          ?? '',
-          },
-        }))
+  async function handleRefresh() {
+    setRefreshing(true)
+    try {
+      await fetchEmitente()
+
+      const destId = (form.destinatario as any).dest_id
+      if (destId) {
+        const { data: cliente } = await supabase
+          .from('customers')
+          .select('id, name, razao_social, cpf, cnpj, ie, ind_ie_dest, contribuinte, pessoa_tipo, email, phone, codigo_municipio, logradouro, numero, complemento, bairro, municipio, uf, cep')
+          .eq('id', destId)
+          .single()
+
+        if (cliente) {
+          setForm(prev => ({
+            ...prev,
+            destinatario: {
+              ...prev.destinatario,
+              nome:             cliente.razao_social ?? cliente.name,
+              cpf:              cliente.cpf          ?? '',
+              cnpj:             cliente.cnpj         ?? '',
+              ie:               cliente.ie           ?? '',
+              contribuinte:     cliente.contribuinte ?? '',
+              ind_ie_dest:      cliente.ind_ie_dest  ?? 9,
+              email:            cliente.email        ?? '',
+              telefone:         cliente.phone        ?? '',
+              logradouro:       cliente.logradouro   ?? '',
+              numero:           cliente.numero       ?? '',
+              complemento:      cliente.complemento  ?? '',
+              bairro:           cliente.bairro       ?? '',
+              municipio:        cliente.municipio    ?? '',
+              codigo_municipio: cliente.codigo_municipio ?? '',
+              uf:               cliente.uf           ?? 'PB',
+              cep:              cliente.cep          ?? '',
+            },
+          }))
+        }
       }
+    } catch (e: any) {
+      onError?.(e.message ?? 'Erro ao sincronizar dados')
+    } finally {
+      setRefreshing(false)
     }
-  } catch (e: any) {
-    onError?.(e.message ?? 'Erro ao sincronizar dados')
-  } finally {
-    setRefreshing(false)
   }
-}
 
   // ── Tipo de nota ─────────────────────────────────────────────────────────
-  // Ao trocar o tipo, atualiza cfop_padrao E propaga o novo CFOP para todos
-  // os itens que ainda estejam com o CFOP anterior (ou em branco).
-  // Itens editados manualmente pelo usuário (CFOP diferente do padrão) são preservados.
   function handleTipoChange(tipo: TipoNota) {
     setForm(prev => {
       const cfopAntigo = prev.cfop_padrao
@@ -272,7 +293,6 @@ async function handleRefresh() {
   const showChaveRef = TIPOS_NOTA_REQUEREM_CHAVE_REF.includes(form.tipo_nota)
 
   // ── Salvar rascunho → abre DANFE ─────────────────────────────────────────
-  // Usa createNfSaida do service: garante dest_ind_ie e todos os campos corretos.
   async function handleSaveRascunho() {
     if (!emitente) { onError?.('Configuração fiscal não encontrada.'); return }
     try {
@@ -288,23 +308,20 @@ async function handleRefresh() {
   }
 
   // ── Emitir NF-e ──────────────────────────────────────────────────────────
-  // 1. Cria no banco como 'pendente' via service (status válido no CHECK constraint)
-  // 2. Invoca edge function via emitirNfSaida (que valida ok: false e lança erro)
-  // 3. Usa EmitirNfeResult importado — sem tipo local duplicado
   async function handleEmitir() {
     if (!emitente) { onError?.('Configuração fiscal não encontrada.'); return }
     try {
       setEmitting(true)
       setEmissaoResult(null)
 
-      // Persiste como 'pendente' — status aceito pelo CHECK constraint
       const nf = await createNfSaida(companyId, form, valorProdutos, valorTotal, 'pendente')
-
-      // Delega à edge function e obtém resultado tipado
       const result = await emitirNfSaida(nf.id)
 
       setEmissaoResult(result)
       setForm(emptyForm())
+
+      // Incrementa o próximo número localmente após emissão bem-sucedida
+      setProximoNumero(prev => prev !== null ? prev + 1 : null)
     } catch (e: any) {
       onError?.(e.message ?? 'Erro ao emitir NF-e')
     } finally {
@@ -320,7 +337,6 @@ async function handleRefresh() {
   }
 
   // ── Download XML ─────────────────────────────────────────────────────────
-  // Delegado ao service, que usa o bucket correto 'nfe-xmls'
   async function handleDownloadXml(xmlUrl: string, numero: string) {
     try {
       await downloadXmlNfe(xmlUrl, numero)
@@ -344,44 +360,54 @@ async function handleRefresh() {
 
       <div>
         {/* Cabeçalho */}
-      <div className="flex items-center gap-2">
-        {loadingEmitente && (
-          <span className="bg-[#2a2d30] border border-[#141516] rounded-md px-3 py-1.5 text-[12px] text-[#7a7f86] animate-pulse">
-            Carregando emitente…
+        <div className="flex items-center gap-2">
+          {loadingEmitente && (
+            <span className="bg-[#2a2d30] border border-[#141516] rounded-md px-3 py-1.5 text-[12px] text-[#7a7f86] animate-pulse">
+              Carregando emitente…
+            </span>
+          )}
+          {!loadingEmitente && !emitente && (
+            <span className="bg-[#3a1a1a] border border-[#6b2a2a] rounded-md px-3 py-1.5 text-[12px] text-[#f08080]">
+              ⚠ Config. fiscal não encontrada
+            </span>
+          )}
+
+          {/* Botão Sincronizar */}
+          <button
+            type="button"
+            onClick={handleRefresh}
+            disabled={refreshing || loadingEmitente}
+            className="flex items-center gap-1.5 bg-[#1a2a3a] border border-[#2a4a6a]
+              rounded-md px-3 py-1.5 mb-1 text-[12px] text-[#6c9fd4]
+              hover:bg-[#1e3448] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            <RefreshCw
+              size={12}
+              style={{ animation: refreshing ? 'spin 1s linear infinite' : 'none' }}
+            />
+            {refreshing ? 'Sincronizando…' : 'Sincronizar dados'}
+          </button>
+
+          <span className="mb-1 bg-[#2a2d30] border border-[#141516] rounded-md px-3 py-1.5 text-[12px] text-[#a0a5ad]">
+            Rascunho
           </span>
-        )}
-        {!loadingEmitente && !emitente && (
-          <span className="bg-[#3a1a1a] border border-[#6b2a2a] rounded-md px-3 py-1.5 text-[12px] text-[#f08080]">
-            ⚠ Config. fiscal não encontrada
+
+          {/* Badge de série e próximo número */}
+          <span className="mb-1 bg-[#2a2d30] border border-[#3a3d42] rounded-md px-3 py-1.5 text-[12px] text-[#a0a5ad]">
+            Série <span className="text-[#6c8ebf] font-semibold">{form.serie}</span>
+            {' · '}N°{' '}
+            <span className="text-[#6c8ebf] font-semibold">
+              {loadingEmitente
+                ? '…'
+                : proximoNumero !== null
+                  ? proximoNumero
+                  : '—'
+              }
+            </span>
           </span>
-        )}
+        </div>
 
-        {/* ── Botão Sincronizar ── */}
-        <button
-          type="button"
-          onClick={handleRefresh}
-          disabled={refreshing || loadingEmitente}
-          className="flex items-center gap-1.5 bg-[#1a2a3a] border border-[#2a4a6a]
-            rounded-md px-3 py-1.5 mb-1 text-[12px] text-[#6c9fd4]
-            hover:bg-[#1e3448] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          <RefreshCw
-            size={12}
-            style={{ animation: refreshing ? 'spin 1s linear infinite' : 'none' }}
-          />
-          {refreshing ? 'Sincronizando…' : 'Sincronizar dados'}
-        </button>
-
-        <span className="mb-1 bg-[#2a2d30] border border-[#141516] rounded-md px-3 py-1.5 text-[12px] text-[#a0a5ad]">
-          Rascunho
-        </span>
-        <span className="mb-1 bg-[#2a2d30] border border-[#3a3d42] rounded-md px-3 py-1.5 text-[12px] text-[#a0a5ad]">
-          Série <span className="text-[#6c8ebf] font-semibold">{form.serie}</span>
-          {' · '}N° <span className="text-[#6c8ebf] font-semibold">—</span>
-        </span>
-      </div>
-
-        {/* ── Banner de sucesso pós-emissão ── */}
+        {/* Banner de sucesso pós-emissão */}
         {emissaoResult && (
           <div style={{
             background: '#102a18', border: '1px solid #205a30',
@@ -389,7 +415,6 @@ async function handleRefresh() {
             marginBottom: '24px', display: 'flex',
             flexDirection: 'column', gap: '12px',
           }}>
-            {/* Título */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <CheckCircle2 size={18} color="#60c080" />
               <span style={{ fontSize: '14px', fontWeight: 600, color: '#60c080' }}>
@@ -400,7 +425,6 @@ async function handleRefresh() {
               </span>
             </div>
 
-            {/* Chave de acesso */}
             <div style={{
               background: '#0a1a10', border: '1px solid #1a3a20',
               borderRadius: '8px', padding: '10px 14px',
@@ -431,7 +455,6 @@ async function handleRefresh() {
               </button>
             </div>
 
-            {/* Ações pós-emissão */}
             <div style={{ display: 'flex', gap: '8px' }}>
               <button
                 onClick={() => handleDownloadXml(emissaoResult.xml_url, emissaoResult.numero)}
