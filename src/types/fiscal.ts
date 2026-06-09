@@ -4,7 +4,7 @@ export type NfceStatus = 'pendente' | 'emitido' | 'cancelado' | 'rejeitado'
 
 export type AmbienteSEFAZ = 1 | 2  // 1 = Produção | 2 = Homologação
 
-export type CRT = 1 | 2 | 3
+export type CRT = 1 | 2 | 3 | 4
 // 1 = Simples Nacional
 // 2 = Simples Nacional — Excesso de sublimite
 // 3 = Regime Normal

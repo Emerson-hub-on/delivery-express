@@ -4,19 +4,45 @@ export async function signUp(
   email: string,
   password: string,
   name: string,
-  phone: string,      // ✅ novo parâmetro
+  phone: string,
   companyId: string
 ) {
+  // Tenta criar no Auth
   const { data, error } = await supabase.auth.signUp({ email, password })
+  
+  // Se já existe no Auth, faz login direto
+  if (error?.message?.includes('already registered')) {
+    const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({ email, password })
+    if (loginError) throw new Error('Este e-mail já está cadastrado. Verifique sua senha.')
+    
+    const user = loginData.user!
+    
+    // Verifica se já tem perfil nessa empresa
+    const { data: existing } = await supabase
+      .from('customers')
+      .select('id')
+      .eq('auth_id', user.id)
+      .eq('company_id', companyId)
+      .maybeSingle()
+    
+    if (existing) throw new Error('Você já tem uma conta nesta loja. Faça o login.')
+    
+    // Cria o perfil na nova empresa
+    const { error: insertError } = await supabase
+      .from('customers')
+      .insert({ auth_id: user.id, name, email, phone, company_id: companyId })
+    if (insertError) throw insertError
+    
+    return user
+  }
+
   if (error) throw error
 
-  const user = data.user
-  if (!user) throw new Error('Usuário não criado.')
+  const user = data.user!
 
   const { error: profileError } = await supabase
     .from('customers')
-    .insert({ id: user.id, name, email, phone, company_id: companyId }) // ✅ phone incluído
-
+    .insert({ auth_id: user.id, name, email, phone, company_id: companyId })
   if (profileError) throw profileError
 
   return user
@@ -25,28 +51,22 @@ export async function signUp(
 export async function signIn(email: string, password: string, companyId: string) {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password })
   if (error) throw error
-  await supabase.auth.getSession()
 
   const user = data.user
   if (!user) throw new Error('Usuário não encontrado.')
 
-  // Valida se o cliente pertence à empresa
   const { data: customer, error: customerError } = await supabase
     .from('customers')
     .select('id, company_id')
-    .eq('id', user.id)
+    .eq('auth_id', user.id)          // ← auth_id
     .eq('company_id', companyId)
     .maybeSingle()
 
   if (customerError) throw customerError
 
-  // Cliente não tem perfil nesta empresa — cria automaticamente
   if (!customer) {
-    const { error: insertError } = await supabase
-      .from('customers')
-      .insert({ id: user.id, email: user.email ?? email, company_id: companyId })
-
-    if (insertError) throw insertError
+    await supabase.auth.signOut()
+    throw new Error('Você ainda não tem uma conta nesta loja. Por favor, faça o cadastro.')
   }
 
   return user

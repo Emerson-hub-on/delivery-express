@@ -138,6 +138,11 @@ export function buildNfceXml(p: NfceBuildPayload): string {
   const vNF  = parseFloat((vProdTotal - vDescTotal).toFixed(2))
 
   // ── Chave de acesso base (43 dígitos) ─────────────────────────────────────
+  const isMei     = p.config.crt === 4
+  // MEI pode usar CPF como identificador — padeia para 14 dígitos (zeros à esquerda)
+  const docEmit   = isMei && p.config.cpf
+    ? p.config.cpf.replace(/\D/g, '').padStart(14, '0')
+    : p.config.cnpj
   // Estrutura: cUF(2) + YYMM(4) + CNPJ(14) + mod(2) + serie(3) + nNF(9) + tpEmis(1) + cNF(8)
   // Total: 2+4+14+2+3+9+1+8 = 43 dígitos
   // O dígito verificador (1 dígito) é calculado pela Edge Function
@@ -145,7 +150,8 @@ export function buildNfceXml(p: NfceBuildPayload): string {
   // YYMM: 2 últimos dígitos do ano + mês com 2 dígitos
   const yymm = `${String(now.getFullYear()).slice(-2)}${String(now.getMonth()+1).padStart(2,'0')}`
 
-  const chaveBase43 = `${cUF}${yymm}${p.config.cnpj}${mod}${p.serie.padStart(3,'0')}${nNF}${tpEmis}${cNF}`
+  const chaveBase43 = `${cUF}${yymm}${docEmit}${mod}${p.serie.padStart(3,'0')}${nNF}${tpEmis}${cNF}`
+
 
   const consumerXml = p.consumer?.cpf
     ? `<dest>
@@ -183,8 +189,11 @@ export function buildNfceXml(p: NfceBuildPayload): string {
     <verProc>1.0.0</verProc>
     ${p.contingencia ? `<dhCont>${dhEmi}</dhCont><xJust>Contingencia por falha de comunicacao com a SEFAZ</xJust>` : ''}
   </ide>
-  <emit>
-    <CNPJ>${p.config.cnpj}</CNPJ>
+<emit>
+    ${isMei && p.config.cpf
+      ? `<CPF>${p.config.cpf.replace(/\D/g, '')}</CPF>`
+      : `<CNPJ>${p.config.cnpj}</CNPJ>`
+    }
     <xNome>${p.config.razao_social.substring(0,60).replace(/&/g,'&amp;')}</xNome>
     ${p.config.nome_fantasia ? `<xFant>${p.config.nome_fantasia.substring(0,60).replace(/&/g,'&amp;')}</xFant>` : ''}
     <enderEmit>

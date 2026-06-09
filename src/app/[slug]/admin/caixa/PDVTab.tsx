@@ -449,18 +449,30 @@ const handlePularNfce = () => {
   const dataHora = now.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 
   // ── Botões F-key ─────────────────────────────────────────────────────────────
-  const fkeys = [
-    { key: 'F1', label: 'Abertura',       fn: () => showToast('Abertura de caixa'),   danger: false, highlight: false },
-    { key: 'F2', label: 'Fechamento',     fn: () => showToast('Fechamento de caixa'), danger: false, highlight: false },
-    { key: 'F3', label: 'Desc. item',     fn: handleDescItem,                         danger: false, highlight: false },
-    { key: 'F4', label: 'Desc. total',    fn: handleDescTotal,                        danger: false, highlight: false },
-    { key: 'F5', label: 'Cancelar item',  fn: handleCancelarItem,                     danger: true,  highlight: false },
-    { key: 'F6', label: 'Cancelar cupom', fn: handleCancelarCupom,                    danger: true,  highlight: false },
-    { key: 'F7', label: 'Desfazer desc.', fn: handleDesfazer,                         danger: false, highlight: false },
-    { key: 'F8', label: 'Consumidor',     fn: () => openConsumerModal(false),         danger: false, highlight: true  },
-    { key: 'F9', label: 'Logs NFC-e', fn: () => setLogsModal(true), danger: false, highlight: false },
+const fkeys = [
+  { key: 'F1', label: 'Desc. item',     fn: handleDescItem,                         danger: false, highlight: false },
+  { key: 'F2', label: 'Desc. total',    fn: handleDescTotal,                        danger: false, highlight: false },
+  { key: 'F3', label: 'Cancelar item',  fn: handleCancelarItem,                     danger: true,  highlight: false },
+  { key: 'F4', label: 'Cancelar cupom', fn: handleCancelarCupom,                    danger: true,  highlight: false },
+  { key: 'F5', label: 'Desfazer desc.', fn: handleDesfazer,                         danger: false, highlight: false },
+  { key: 'F6', label: 'Consumidor',     fn: () => openConsumerModal(false),         danger: false, highlight: true  },
+  { key: 'F7', label: 'Logs NFC-e',     fn: () => setLogsModal(true),              danger: false, highlight: false },
+]
 
-  ]
+// Coloca logo após os outros useEffects, antes do return
+useEffect(() => {
+  const handler = (e: KeyboardEvent) => {
+    if (e.key === 'F1') { e.preventDefault(); handleDescItem() }
+    else if (e.key === 'F2') { e.preventDefault(); handleDescTotal() }
+    else if (e.key === 'F3') { e.preventDefault(); handleCancelarItem() }
+    else if (e.key === 'F4') { e.preventDefault(); handleCancelarCupom() }
+    else if (e.key === 'F5') { e.preventDefault(); handleDesfazer() }
+    else if (e.key === 'F6') { e.preventDefault(); openConsumerModal(false) }
+    else if (e.key === 'F7') { e.preventDefault(); setLogsModal(true) }
+  }
+  window.addEventListener('keydown', handler)
+  return () => window.removeEventListener('keydown', handler)
+}, [cart, selectedCartId, consumer])
 
   return (
     

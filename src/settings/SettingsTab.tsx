@@ -13,6 +13,7 @@ const CRT_OPTIONS: { value: CRT; label: string }[] = [
   { value: 1, label: '1 — Simples Nacional' },
   { value: 2, label: '2 — Simples Nacional (Excesso de sublimite)' },
   { value: 3, label: '3 — Regime Normal' },
+  { value: 4, label: '4 — Simples Nacional MEI' },
 ]
 
 const UF_OPTIONS = [
@@ -43,6 +44,9 @@ const EMPTY: FiscalConfigPayload = {
   csc_id: '',
   csc_token: '',
   nfce_serie: '001',
+  cpf: '',
+  cert_cpf_pfx_base64: '',
+  cert_cpf_senha: '',
 }
 
 type Section = 'emitente' | 'endereco' | 'nfce' | 'certificado'
@@ -74,6 +78,19 @@ export function FiscalTab({ onError }: FiscalTabProps) {
   const [section, setSection]     = useState<Section>('emitente')
   const [uploadingCert, setUploadingCert] = useState(false)
   const certRef = useRef<HTMLInputElement>(null)
+  const certCpfRef = useRef<HTMLInputElement>(null)
+
+  
+  const handleCertCpfUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      const b64 = (reader.result as string).split(',')[1]
+      set('cert_cpf_pfx_base64', b64)
+    }
+    reader.readAsDataURL(file)
+  }
 
   // ── Sequências de numeração ───────────────────────────────────────────────
   // NF-e: lido e salvo em nfe_numero_seq
@@ -326,6 +343,22 @@ export function FiscalTab({ onError }: FiscalTabProps) {
                 maxLength={15}
               />
             </div>
+
+            {form.crt === 4 && (
+            <div>
+              <label className={labelCls}>CPF do MEI *</label>
+              <input
+                className={inputCls}
+                value={form.cpf ?? ''}
+                onChange={e => set('cpf', e.target.value.replace(/\D/g, '').slice(0, 11))}
+                placeholder="00000000000"
+                maxLength={11}
+              />
+              <p className="text-[10px] text-gray-400 mt-1">
+                MEI pode emitir NF-e usando CPF como identificador fiscal
+              </p>
+            </div>
+          )}
           </div>
         </div>
       )}
@@ -575,6 +608,7 @@ export function FiscalTab({ onError }: FiscalTabProps) {
       )}
 
       {/* ── Certificado Digital ── */}
+      
       {section === 'certificado' && (
         <div className="bg-white rounded-xl shadow-sm p-5 space-y-4">
           <h3 className="text-sm font-semibold text-gray-700 border-b border-gray-100 pb-3">
@@ -633,6 +667,7 @@ export function FiscalTab({ onError }: FiscalTabProps) {
               />
             </div>
           </div>
+          
 
           <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-700">
             <span className="text-base leading-none">⚠️</span>
@@ -641,6 +676,47 @@ export function FiscalTab({ onError }: FiscalTabProps) {
               Recomendamos verificar a validade periodicamente para evitar interrupções na emissão.
             </span>
           </div>
+          {form.crt === 4 && (
+          <div className="space-y-4 border-t border-gray-100 pt-4">
+            <h4 className="text-xs font-semibold text-gray-600">
+              Certificado vinculado ao CPF (opcional para MEI)
+            </h4>
+            <div
+              onClick={() => certCpfRef.current?.click()}
+              className="border-2 border-dashed border-gray-200 rounded-xl p-5 text-center cursor-pointer hover:border-[#1a4a8a]/40 hover:bg-blue-50/30 transition-all"
+            >
+              <input
+                ref={certCpfRef}
+                type="file"
+                accept=".pfx,.p12"
+                className="hidden"
+                onChange={handleCertCpfUpload}
+              />
+              <div className="flex flex-col items-center gap-2">
+                {form.cert_cpf_pfx_base64
+                  ? <CheckCircle2 size={22} className="text-green-500" />
+                  : <Upload size={22} className="text-gray-300" />
+                }
+                <p className="text-sm font-medium text-gray-600">
+                  {form.cert_cpf_pfx_base64
+                    ? 'Certificado CPF carregado — clique para substituir'
+                    : 'Certificado .pfx vinculado ao CPF'}
+                </p>
+              </div>
+            </div>
+            <div>
+              <label className={labelCls}>Senha do certificado CPF</label>
+              <input
+                type="password"
+                className={inputCls}
+                value={form.cert_cpf_senha ?? ''}
+                onChange={e => set('cert_cpf_senha', e.target.value)}
+                placeholder="••••••••"
+                autoComplete="new-password"
+              />
+            </div>
+          </div>
+        )}
         </div>
       )}
 
