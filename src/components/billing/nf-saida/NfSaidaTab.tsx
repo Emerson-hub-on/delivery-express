@@ -293,41 +293,42 @@ export function NfSaidaTab({ companyId, onError }: Props) {
   const showChaveRef = TIPOS_NOTA_REQUEREM_CHAVE_REF.includes(form.tipo_nota)
 
   // ── Salvar rascunho → abre DANFE ─────────────────────────────────────────
-  async function handleSaveRascunho() {
-    if (!emitente) { onError?.('Configuração fiscal não encontrada.'); return }
-    try {
-      setSaving(true)
-      const nf = await createNfSaida(companyId, form, valorProdutos, valorTotal, 'rascunho')
-      setSavedNumero(nf.numero || undefined)
-      setShowDanfe(true)
-    } catch (e: any) {
-      onError?.(e.message ?? 'Erro ao salvar rascunho')
-    } finally {
-      setSaving(false)
-    }
+async function handleSaveRascunho() {
+  if (!emitente) { onError?.('Configuração fiscal não encontrada.'); return }
+  try {
+    setSaving(true)
+    const nf = await createNfSaida(companyId, form, valorProdutos, valorTotal, 'rascunho')
+    setSavedNumero(nf.numero || undefined)
+    setShowDanfe(true)
+    // ✅ Re-sincroniza caso a série tenha mudado externamente
+    await fetchEmitente()
+  } catch (e: any) {
+    onError?.(e.message ?? 'Erro ao salvar rascunho')
+  } finally {
+    setSaving(false)
   }
+}
 
   // ── Emitir NF-e ──────────────────────────────────────────────────────────
-  async function handleEmitir() {
-    if (!emitente) { onError?.('Configuração fiscal não encontrada.'); return }
-    try {
-      setEmitting(true)
-      setEmissaoResult(null)
+async function handleEmitir() {
+  if (!emitente) { onError?.('Configuração fiscal não encontrada.'); return }
+  try {
+    setEmitting(true)
+    setEmissaoResult(null)
 
-      const nf = await createNfSaida(companyId, form, valorProdutos, valorTotal, 'pendente')
-      const result = await emitirNfSaida(nf.id)
+    const nf = await createNfSaida(companyId, form, valorProdutos, valorTotal, 'pendente')
+    const result = await emitirNfSaida(nf.id)
 
-      setEmissaoResult(result)
-      setForm(emptyForm())
-
-      // Incrementa o próximo número localmente após emissão bem-sucedida
-      setProximoNumero(prev => prev !== null ? prev + 1 : null)
-    } catch (e: any) {
-      onError?.(e.message ?? 'Erro ao emitir NF-e')
-    } finally {
-      setEmitting(false)
-    }
+    setEmissaoResult(result)
+    setForm(emptyForm())
+  } catch (e: any) {
+    onError?.(e.message ?? 'Erro ao emitir NF-e')
+  } finally {
+    // Sempre re-sincroniza do banco — cobre sucesso, erro e número já consumido
+    await fetchEmitente()
+    setEmitting(false)
   }
+}
 
   // ── Copiar chave de acesso ────────────────────────────────────────────────
   function handleCopyChave(chave: string) {

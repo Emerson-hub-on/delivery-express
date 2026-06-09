@@ -7,7 +7,7 @@ import type { NfSaidaForm } from './types'
 import {
   FileText, Search, RefreshCw, ChevronDown, ChevronUp,
   Eye, Trash2, Send, X, CheckCircle2, Clock, AlertCircle,
-  Ban, Filter, Download, FileCode,
+  Ban, Filter, Download, FileCode, XCircle, Hash,
 } from 'lucide-react'
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
@@ -49,6 +49,7 @@ interface NfSaidaRow {
   sefaz_motivo: string | null
   finalidade: 1 | 2 | 3 | 4
   forma_pagamento: string | null
+  autorizada_em?: string | null  // timestamp da autorização para checar 24h
 }
 
 interface Emitente {
@@ -90,8 +91,13 @@ function esc(s: string) {
   return (s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
-// ── Geração de XML de rascunho (preview, sem assinatura) ─────────────────────
-// Usado quando a nota ainda não foi transmitida e não tem xml_url no Storage.
+/** Retorna true se a nota autorizada ainda está dentro do prazo de 24h */
+function dentroDoPrazoCancelamento(nota: NfSaidaRow): boolean {
+  const ref = nota.autorizada_em ?? nota.created_at
+  return Date.now() - new Date(ref).getTime() < 24 * 60 * 60 * 1000
+}
+
+// ── XML Rascunho ─────────────────────────────────────────────────────────────
 function gerarXmlRascunho(nota: NfSaidaRow, emitente: Emitente): string {
   const dhEmi = new Date(nota.created_at).toISOString().replace('Z', '-03:00')
   const fmt2  = (n: number) => n.toFixed(2)
@@ -135,6 +141,7 @@ function gerarXmlRascunho(nota: NfSaidaRow, emitente: Emitente): string {
 <NFe xmlns="http://www.portalfiscal.inf.br/nfe">
   <infNFe versao="4.00" Id="NFe_RASCUNHO_${nota.id}">
     <ide>
+      <cUF>25</cUF>
       <mod>55</mod>
       <serie>${(nota.serie ?? '001').padStart(3, '0')}</serie>
       <nNF>${nota.numero ? parseInt(nota.numero) : 0}</nNF>
@@ -212,78 +219,264 @@ function gerarXmlRascunho(nota: NfSaidaRow, emitente: Emitente): string {
 }
 
 // ── Status config ────────────────────────────────────────────────────────────
-const STATUS_CONFIG: Record<StatusNf, { label: string; color: string; bg: string; border: string; icon: React.ReactNode }> = {
-  rascunho:  { label: 'Rascunho',   color: '#a0a5ad', bg: '#22262b', border: '#3a3d42', icon: <Clock size={11} /> },
-  pendente:  { label: 'Pendente',   color: '#f0c060', bg: '#2a2410', border: '#5a4a10', icon: <AlertCircle size={11} /> },
-  autorizada:{ label: 'Autorizada', color: '#60c080', bg: '#102a18', border: '#205a30', icon: <CheckCircle2 size={11} /> },
-  cancelada: { label: 'Cancelada',  color: '#f08080', bg: '#2a1010', border: '#5a2020', icon: <Ban size={11} /> },
-  rejeitada: { label: 'Rejeitada',  color: '#f08080', bg: '#2a1010', border: '#5a2020', icon: <X size={11} /> },
+const STATUS_CONFIG: Record<StatusNf, {
+  label: string
+  textCls: string
+  bgCls: string
+  borderCls: string
+  icon: React.ReactNode
+}> = {
+  rascunho:   { label: 'Rascunho',   textCls: 'text-[#a0a5ad]', bgCls: 'bg-[#22262b]', borderCls: 'border-[#3a3d42]', icon: <Clock size={11} /> },
+  pendente:   { label: 'Pendente',   textCls: 'text-[#f0c060]', bgCls: 'bg-[#2a2410]', borderCls: 'border-[#5a4a10]', icon: <AlertCircle size={11} /> },
+  autorizada: { label: 'Autorizada', textCls: 'text-[#60c080]', bgCls: 'bg-[#102a18]', borderCls: 'border-[#205a30]', icon: <CheckCircle2 size={11} /> },
+  cancelada:  { label: 'Cancelada',  textCls: 'text-[#f08080]', bgCls: 'bg-[#2a1010]', borderCls: 'border-[#5a2020]', icon: <Ban size={11} /> },
+  rejeitada:  { label: 'Rejeitada',  textCls: 'text-[#f08080]', bgCls: 'bg-[#2a1010]', borderCls: 'border-[#5a2020]', icon: <X size={11} /> },
 }
 
 function StatusBadge({ status }: { status: StatusNf }) {
   const c = STATUS_CONFIG[status] ?? STATUS_CONFIG.rascunho
   return (
-    <span style={{
-      display: 'inline-flex', alignItems: 'center', gap: '4px',
-      background: c.bg, color: c.color, border: `1px solid ${c.border}`,
-      borderRadius: '6px', padding: '2px 8px', fontSize: '11px', fontWeight: 500,
-    }}>
+    <span className={`inline-flex items-center gap-1 ${c.bgCls} ${c.textCls} border ${c.borderCls} rounded-md px-2 py-0.5 text-[11px] font-medium`}>
       {c.icon} {c.label}
     </span>
   )
 }
 
-// ── Componente principal ──────────────────────────────────────────────────────
-export function NfSaidaGerenciador({ companyId, onError }: Props) {
-  const [notas, setNotas]               = useState<NfSaidaRow[]>([])
-  const [loading, setLoading]           = useState(true)
-  const [search, setSearch]             = useState('')
-  const [statusFilter, setStatusFilter] = useState<StatusNf | 'todas'>('todas')
-  const [expandedId, setExpandedId]     = useState<string | null>(null)
-  const [emitente, setEmitente]         = useState<Emitente | null>(null)
-  const [danfeNota, setDanfeNota]       = useState<NfSaidaRow | null>(null)
-  const [sortDir, setSortDir]           = useState<'desc' | 'asc'>('desc')
-  const [deletingId, setDeletingId]     = useState<string | null>(null)
-  const [downloadingId, setDownloadingId] = useState<string | null>(null)
-
-  // ── FIX: tabela correta é fiscal_configs (não fiscal_config) ─────────────
-// Substitua o useEffect do emitente por fetchEmitente + useEffect:
-const fetchEmitente = useCallback(async () => {
-  if (!companyId) return
-  const { data, error } = await supabase
-    .from('fiscal_configs')
-    .select('razao_social, cnpj, ie, crt, codigo_ibge, logradouro, numero, complemento, bairro, municipio, uf, cep, telefone, ambiente')
-    .eq('company_id', companyId)
-    .maybeSingle()
-
-  if (error) { onError?.(`Erro ao carregar config fiscal: ${error.message}`); return }
-  if (!data)  { onError?.('Nenhuma configuração fiscal encontrada.'); return }
-
-  setEmitente({
-    razao_social:  data.razao_social,
-    cnpj:          data.cnpj,
-    ie:            data.ie ?? '',
-    crt:           data.crt ?? 1,
-    codigo_ibge:   data.codigo_ibge ?? '',
-    logradouro:    data.logradouro,
-    numero:        data.numero,
-    complemento:   data.complemento ?? null,
-    bairro:        data.bairro,
-    municipio:     data.municipio,
-    uf:            data.uf?.trim(),
-    cep:           data.cep,
-    telefone:      data.telefone ?? null,
-    ambiente:      data.ambiente ?? 2,
-  })
-}, [companyId])
-
-useEffect(() => { fetchEmitente() }, [fetchEmitente])
-
-async function handleRefreshAll() {
-  await Promise.all([fetchNotas(), fetchEmitente()])
+// ── Modal base ───────────────────────────────────────────────────────────────
+function Modal({ title, onClose, children }: {
+  title: string
+  onClose: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center">
+      <div className="bg-[#1a1d20] border border-[#2e3238] rounded-2xl p-6 w-[480px] max-w-[90vw] flex flex-col gap-4">
+        <div className="flex justify-between items-center">
+          <span className="text-[15px] font-semibold text-[#e0e2e5]">{title}</span>
+          <button onClick={onClose} className="text-[#5a5f66] hover:text-[#9095a0] transition-colors">
+            <X size={16} />
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
+  )
 }
 
-  // ── Busca notas ─────────────────────────────────────────────────────────
+// ── Modal Cancelamento ───────────────────────────────────────────────────────
+function ModalCancelamento({ nota, onClose, onConfirm, loading }: {
+  nota: NfSaidaRow
+  onClose: () => void
+  onConfirm: (motivo: string) => void
+  loading: boolean
+}) {
+  const [motivo, setMotivo] = useState('')
+  const MIN = 15
+  const MAX = 255
+  const valido = motivo.trim().length >= MIN
+
+  return (
+    <Modal title="Cancelar NF-e" onClose={onClose}>
+      {/* Identificação */}
+      <div className="bg-[#141618] border border-[#252830] rounded-lg px-4 py-3 flex gap-6">
+        <div>
+          <p className="text-[10px] text-[#4a4f56] mb-0.5">NF-e</p>
+          <p className="text-[13px] font-semibold text-[#c0c5cc] font-mono">{nota.numero} · Série {nota.serie}</p>
+        </div>
+        <div>
+          <p className="text-[10px] text-[#4a4f56] mb-0.5">Destinatário</p>
+          <p className="text-[13px] text-[#9095a0]">{nota.dest_nome}</p>
+        </div>
+        <div>
+          <p className="text-[10px] text-[#4a4f56] mb-0.5">Valor</p>
+          <p className="text-[13px] font-semibold text-[#c0c5cc]">R$ {fmt(nota.valor_total)}</p>
+        </div>
+      </div>
+
+      {/* Aviso 24h */}
+      <div className="bg-[#2a1a08] border border-[#5a3a10] rounded-lg px-4 py-3 text-[12px] text-[#d09050]">
+        ⚠ O cancelamento só é permitido dentro do prazo de <strong>24 horas</strong> após a autorização.
+        Esta ação é irreversível e será registrada na SEFAZ.
+      </div>
+
+      {/* Motivo */}
+      <div>
+        <label className="block text-[12px] text-[#7a7f86] mb-1.5">
+          Motivo do cancelamento
+          <span className="text-[#5a5f66] ml-1">({motivo.trim().length}/{MIN} mínimo)</span>
+        </label>
+        <textarea
+          value={motivo}
+          onChange={e => setMotivo(e.target.value.slice(0, MAX))}
+          rows={3}
+          placeholder="Descreva o motivo do cancelamento…"
+          className={`w-full bg-[#141618] border ${valido ? 'border-[#2a4a2a]' : 'border-[#2e3238]'} rounded-lg p-3 text-[13px] text-[#d0d5dc] resize-y outline-none font-sans transition-colors placeholder:text-[#3a4050] focus:border-[#3a4a6a]`}
+        />
+        <p className="text-[11px] text-[#4a4f56] mt-1 text-right">{motivo.trim().length}/{MAX} caracteres</p>
+      </div>
+
+      {/* Ações */}
+      <div className="flex justify-end gap-2">
+        <button
+          onClick={onClose}
+          disabled={loading}
+          className="bg-[#22262b] border border-[#3a3d42] rounded-lg px-4 py-2 text-[13px] text-[#9095a0] cursor-pointer disabled:opacity-50"
+        >
+          Voltar
+        </button>
+        <button
+          onClick={() => onConfirm(motivo.trim())}
+          disabled={!valido || loading}
+          className="flex items-center gap-1.5 bg-[#4a1010] border border-[#7a2020] rounded-lg px-4 py-2 text-[13px] font-semibold text-[#f08080] disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
+        >
+          {loading
+            ? <><RefreshCw size={13} className="animate-spin" /> Cancelando…</>
+            : <><XCircle size={13} /> Confirmar cancelamento</>
+          }
+        </button>
+      </div>
+    </Modal>
+  )
+}
+
+// ── Modal Inutilização ───────────────────────────────────────────────────────
+function ModalInutilizacao({ nota, onClose, onConfirm, loading }: {
+  nota: NfSaidaRow
+  onClose: () => void
+  onConfirm: (motivo: string) => void
+  loading: boolean
+}) {
+  const [motivo, setMotivo] = useState('')
+  const MIN = 15
+  const valido = motivo.trim().length >= MIN
+
+  return (
+    <Modal title="Inutilizar NF-e" onClose={onClose}>
+      {/* Aviso */}
+      <div className="bg-[#1a1a2a] border border-[#3a3a6a] rounded-lg px-4 py-3 text-[12px] text-[#9090d0]">
+        Use quando esta nota <strong>não foi transmitida</strong> à SEFAZ e o número precisa ser
+        declarado como inutilizado para manter a sequência fiscal.
+      </div>
+
+      {/* Dados bloqueados */}
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-[11px] text-[#5a5f66] mb-1">Série</label>
+          <input
+            value={nota.serie}
+            readOnly
+            className="w-full bg-[#141618] border border-[#252830] rounded-lg px-3 py-2 text-[13px] text-[#6a6f78] outline-none cursor-not-allowed"
+          />
+        </div>
+        <div>
+          <label className="block text-[11px] text-[#5a5f66] mb-1">Número</label>
+          <input
+            value={nota.numero || '—'}
+            readOnly
+            className="w-full bg-[#141618] border border-[#252830] rounded-lg px-3 py-2 text-[13px] text-[#6a6f78] outline-none cursor-not-allowed"
+          />
+        </div>
+      </div>
+
+      {/* Nota de confirmação */}
+      <p className="text-[12px] text-[#6a9a6a]">
+        O número <span className="font-semibold font-mono">{nota.numero}</span> da série{' '}
+        <span className="font-semibold">{nota.serie}</span> será inutilizado na SEFAZ.
+      </p>
+
+      {/* Motivo */}
+      <div>
+        <label className="block text-[12px] text-[#7a7f86] mb-1.5">
+          Motivo da inutilização
+          <span className="text-[#5a5f66] ml-1">({motivo.trim().length}/{MIN} mínimo)</span>
+        </label>
+        <textarea
+          value={motivo}
+          onChange={e => setMotivo(e.target.value.slice(0, 255))}
+          rows={3}
+          placeholder="Descreva o motivo da inutilização…"
+          className={`w-full bg-[#141618] border ${valido ? 'border-[#2a4a2a]' : 'border-[#2e3238]'} rounded-lg p-3 text-[13px] text-[#d0d5dc] resize-y outline-none font-sans transition-colors placeholder:text-[#3a4050] focus:border-[#3a4a6a]`}
+        />
+      </div>
+
+      {/* Ações */}
+      <div className="flex justify-end gap-2">
+        <button
+          onClick={onClose}
+          disabled={loading}
+          className="bg-[#22262b] border border-[#3a3d42] rounded-lg px-4 py-2 text-[13px] text-[#9095a0] cursor-pointer disabled:opacity-50"
+        >
+          Voltar
+        </button>
+        <button
+          onClick={() => onConfirm(motivo.trim())}
+          disabled={!valido || loading}
+          className="flex items-center gap-1.5 bg-[#1a1a3a] border border-[#3a3a7a] rounded-lg px-4 py-2 text-[13px] font-semibold text-[#9090f0] disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
+        >
+          {loading
+            ? <><RefreshCw size={13} className="animate-spin" /> Inutilizando…</>
+            : <><Hash size={13} /> Confirmar inutilização</>
+          }
+        </button>
+      </div>
+    </Modal>
+  )
+}
+
+// ── Componente principal ──────────────────────────────────────────────────────
+export function NfSaidaGerenciador({ companyId, onError }: Props) {
+  const [notas, setNotas]                 = useState<NfSaidaRow[]>([])
+  const [loading, setLoading]             = useState(true)
+  const [search, setSearch]               = useState('')
+  const [statusFilter, setStatusFilter]   = useState<StatusNf | 'todas'>('todas')
+  const [expandedId, setExpandedId]       = useState<string | null>(null)
+  const [emitente, setEmitente]           = useState<Emitente | null>(null)
+  const [danfeNota, setDanfeNota]         = useState<NfSaidaRow | null>(null)
+  const [sortDir, setSortDir]             = useState<'desc' | 'asc'>('desc')
+  const [deletingId, setDeletingId]       = useState<string | null>(null)
+  const [downloadingId, setDownloadingId] = useState<string | null>(null)
+
+  // ── Cancelamento ─────────────────────────────────────────────────────────
+  const [cancelandoNota, setCancelandoNota] = useState<NfSaidaRow | null>(null)
+  const [cancelLoading, setCancelLoading]   = useState(false)
+
+  // ── Inutilização ─────────────────────────────────────────────────────────
+  const [inutilizandoNota, setInutilizandoNota]     = useState<NfSaidaRow | null>(null)
+  const [inutilizacaoLoading, setInutilizacaoLoading] = useState(false)
+
+  // ── Emitente ─────────────────────────────────────────────────────────────
+  const fetchEmitente = useCallback(async () => {
+    if (!companyId) return
+    const { data, error } = await supabase
+      .from('fiscal_configs')
+      .select('razao_social, cnpj, ie, crt, codigo_ibge, logradouro, numero, complemento, bairro, municipio, uf, cep, telefone, ambiente')
+      .eq('company_id', companyId)
+      .maybeSingle()
+
+    if (error) { onError?.(`Erro ao carregar config fiscal: ${error.message}`); return }
+    if (!data)  { onError?.('Nenhuma configuração fiscal encontrada.'); return }
+
+    setEmitente({
+      razao_social: data.razao_social,
+      cnpj:         data.cnpj,
+      ie:           data.ie ?? '',
+      crt:          data.crt ?? 1,
+      codigo_ibge:  data.codigo_ibge ?? '',
+      logradouro:   data.logradouro,
+      numero:       data.numero,
+      complemento:  data.complemento ?? null,
+      bairro:       data.bairro,
+      municipio:    data.municipio,
+      uf:           data.uf?.trim(),
+      cep:          data.cep,
+      telefone:     data.telefone ?? null,
+      ambiente:     data.ambiente ?? 2,
+    })
+  }, [companyId])
+
+  useEffect(() => { fetchEmitente() }, [fetchEmitente])
+
+  // ── Notas ─────────────────────────────────────────────────────────────────
   const fetchNotas = useCallback(async () => {
     setLoading(true)
     const { data, error } = await supabase
@@ -299,7 +492,11 @@ async function handleRefreshAll() {
 
   useEffect(() => { fetchNotas() }, [fetchNotas])
 
-  // ── Filtros ─────────────────────────────────────────────────────────────
+  async function handleRefreshAll() {
+    await Promise.all([fetchNotas(), fetchEmitente()])
+  }
+
+  // ── Filtros ───────────────────────────────────────────────────────────────
   const notasFiltradas = notas.filter(n => {
     const matchStatus = statusFilter === 'todas' || n.status === statusFilter
     const q = search.toLowerCase()
@@ -311,26 +508,21 @@ async function handleRefreshAll() {
     return matchStatus && matchSearch
   })
 
-  // ── Download XML ─────────────────────────────────────────────────────────
-  // Se a nota tem xml_url (foi transmitida), baixa do Storage via service.
-  // Caso contrário (rascunho puro), gera o XML localmente para conferência.
+  // ── Download XML ──────────────────────────────────────────────────────────
   async function handleDownloadXml(nota: NfSaidaRow) {
     if (!emitente) { onError?.('Configuração fiscal não carregada.'); return }
     setDownloadingId(nota.id)
     try {
       if (nota.xml_url) {
-        // Nota já transmitida → baixa o XML assinado do Storage
         await downloadXmlNfe(nota.xml_url, nota.numero || nota.id)
       } else {
-        // Rascunho / pendente sem transmissão → gera XML de conferência no browser
-        const xml      = gerarXmlRascunho(nota, emitente)
-        const blob     = new Blob([xml], { type: 'application/xml' })
-        const url      = URL.createObjectURL(blob)
-        const a        = document.createElement('a')
-        const filename = nota.numero
-          ? `nfe-rascunho-${nota.numero}.xml`
-          : `nfe-rascunho-${nota.id.slice(0, 8)}.xml`
-        a.href = url; a.download = filename; a.click()
+        const xml  = gerarXmlRascunho(nota, emitente)
+        const blob = new Blob([xml], { type: 'application/xml' })
+        const url  = URL.createObjectURL(blob)
+        const a    = document.createElement('a')
+        a.href     = url
+        a.download = nota.numero ? `nfe-rascunho-${nota.numero}.xml` : `nfe-rascunho-${nota.id.slice(0, 8)}.xml`
+        a.click()
         URL.revokeObjectURL(url)
       }
     } catch (e: any) {
@@ -340,19 +532,23 @@ async function handleRefreshAll() {
     }
   }
 
-  // ── Deletar rascunho ────────────────────────────────────────────────────
-  async function handleDelete(id: string) {
-    if (!confirm('Excluir este rascunho? Esta ação não pode ser desfeita.')) return
-    setDeletingId(id)
-    const { error } = await supabase
-      .from('nf_saida').delete()
-      .eq('id', id).eq('status', 'rascunho') // garante só rascunho
-    if (error) onError?.(error.message)
-    else setNotas(prev => prev.filter(n => n.id !== id))
-    setDeletingId(null)
-  }
+  // ── Deletar rascunho ──────────────────────────────────────────────────────
+async function handleDelete(id: string) {
+  if (!confirm('Excluir esta nota? Esta ação não pode ser desfeita.')) return
+  setDeletingId(id)
+  const { error } = await supabase
+    .from('nf_saida')
+    .delete()
+    .eq('id', id)
+    // ✅ Permite excluir rascunho OU pendente sem número
+    .in('status', ['rascunho', 'pendente'])
+    .is('numero', null)  // segurança: só deleta se número ainda for nulo
+  if (error) onError?.(error.message)
+  else setNotas(prev => prev.filter(n => n.id !== id))
+  setDeletingId(null)
+}
 
-  // ── Emitir pelo gerenciador ─────────────────────────────────────────────
+  // ── Emitir ────────────────────────────────────────────────────────────────
   async function handleEmitir(nota: NfSaidaRow) {
     const { data, error } = await supabase.functions.invoke('emitir-nfe', {
       body: { nf_saida_id: nota.id },
@@ -362,43 +558,88 @@ async function handleRefreshAll() {
     fetchNotas()
   }
 
-  // ── Montar form para DanfePreview ────────────────────────────────────────
-  function buildFormFromRow(row: NfSaidaRow): NfSaidaForm {
-    return {
-      tipo_nota:          row.tipo_nota,
-      natureza_operacao:  row.natureza_operacao,
-      cfop_padrao:        row.itens?.[0]?.cfop ?? '',
-      finalidade:         ([1, 2, 3, 4].includes(row.finalidade) ? row.finalidade : 1) as 1 | 2 | 3 | 4,
-      serie:              row.serie,
-      destinatario: {
-        tipo:             (row.dest_tipo as any) ?? 'fisica',
-        nome:             row.dest_nome ?? '',
-        cpf:              row.dest_tipo !== 'juridica' ? row.dest_cpf_cnpj ?? '' : '',
-        cnpj:             row.dest_tipo === 'juridica' ? row.dest_cpf_cnpj ?? '' : '',
-        ie:               row.dest_ie ?? '',
-        email:            row.dest_email ?? '',
-        telefone:         row.dest_telefone ?? '',
-        cep:              row.dest_cep ?? '',
-        logradouro:       row.dest_logradouro ?? '',
-        numero:           row.dest_numero ?? '',
-        complemento:      row.dest_complemento ?? '',
-        bairro:           row.dest_bairro ?? '',
-        municipio:        row.dest_municipio ?? '',
-        codigo_municipio: row.dest_codigo_mun ?? '',
-        uf:               row.dest_uf ?? 'PB',
-        contribuinte:     '',
-        ind_ie_dest:      (row.dest_ind_ie as any) ?? 9,
-      },
-      itens:                 row.itens ?? [],
-      valor_desconto:        row.valor_desconto ?? 0,
-      valor_frete:           row.valor_frete ?? 0,
-      forma_pagamento:       (row.forma_pagamento as any) ?? 'boleto',
-      informacoes_adicionais: row.informacoes_adicionais ?? '',
-      chave_ref:             row.chave_ref ?? '',
+  // ── Cancelar ──────────────────────────────────────────────────────────────
+  async function handleCancelar(motivo: string) {
+    if (!cancelandoNota) return
+    setCancelLoading(true)
+    try {
+      const { data, error } = await supabase.functions.invoke('cancelar-nfe', {
+        body: { nf_saida_id: cancelandoNota.id, motivo },
+      })
+      if (error) throw new Error(error.message)
+      if (!data?.ok) throw new Error(data?.error ?? 'Erro no cancelamento')
+      setNotas(prev => prev.map(n =>
+        n.id === cancelandoNota.id ? { ...n, status: 'cancelada' as StatusNf } : n
+      ))
+      setCancelandoNota(null)
+    } catch (e: any) {
+      onError?.(e.message ?? 'Erro ao cancelar NF-e')
+    } finally {
+      setCancelLoading(false)
     }
   }
 
-  // ── Totais do rodapé ────────────────────────────────────────────────────
+  // ── Inutilizar ────────────────────────────────────────────────────────────
+  async function handleInutilizar(motivo: string) {
+    if (!inutilizandoNota) return
+    setInutilizacaoLoading(true)
+    try {
+      const { data, error } = await supabase.functions.invoke('inutilizar-nfe', {
+        body: {
+          company_id: companyId,
+          serie:      inutilizandoNota.serie,
+          n_inicio:   parseInt(inutilizandoNota.numero),
+          n_fim:      parseInt(inutilizandoNota.numero),
+          motivo,
+        },
+      })
+      if (error) throw new Error(error.message)
+      if (!data?.ok) throw new Error(data?.error ?? 'Erro na inutilização')
+      setNotas(prev => prev.filter(n => n.id !== inutilizandoNota.id))
+      setInutilizandoNota(null)
+    } catch (e: any) {
+      onError?.(e.message ?? 'Erro ao inutilizar numeração')
+    } finally {
+      setInutilizacaoLoading(false)
+    }
+  }
+
+  // ── buildFormFromRow ──────────────────────────────────────────────────────
+  function buildFormFromRow(row: NfSaidaRow): NfSaidaForm {
+    return {
+      tipo_nota:           row.tipo_nota,
+      natureza_operacao:   row.natureza_operacao,
+      cfop_padrao:         row.itens?.[0]?.cfop ?? '',
+      finalidade:          ([1,2,3,4].includes(row.finalidade) ? row.finalidade : 1) as 1|2|3|4,
+      serie:               row.serie,
+      destinatario: {
+        tipo:             (row.dest_tipo as any) ?? 'fisica',
+        nome:              row.dest_nome ?? '',
+        cpf:               row.dest_tipo !== 'juridica' ? row.dest_cpf_cnpj ?? '' : '',
+        cnpj:              row.dest_tipo === 'juridica' ? row.dest_cpf_cnpj ?? '' : '',
+        ie:                row.dest_ie ?? '',
+        email:             row.dest_email ?? '',
+        telefone:          row.dest_telefone ?? '',
+        cep:               row.dest_cep ?? '',
+        logradouro:        row.dest_logradouro ?? '',
+        numero:            row.dest_numero ?? '',
+        complemento:       row.dest_complemento ?? '',
+        bairro:            row.dest_bairro ?? '',
+        municipio:         row.dest_municipio ?? '',
+        codigo_municipio:  row.dest_codigo_mun ?? '',
+        uf:                row.dest_uf ?? 'PB',
+        contribuinte:      '',
+        ind_ie_dest:       (row.dest_ind_ie as any) ?? 9,
+      },
+      itens:                  row.itens ?? [],
+      valor_desconto:         row.valor_desconto ?? 0,
+      valor_frete:            row.valor_frete ?? 0,
+      forma_pagamento:        (row.forma_pagamento as any) ?? 'boleto',
+      informacoes_adicionais: row.informacoes_adicionais ?? '',
+      chave_ref:              row.chave_ref ?? '',
+    }
+  }
+
   const totalAutorizadas = notas
     .filter(n => n.status === 'autorizada')
     .reduce((s, n) => s + n.valor_total, 0)
@@ -416,92 +657,89 @@ async function handleRefreshAll() {
         />
       )}
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      {cancelandoNota && (
+        <ModalCancelamento
+          nota={cancelandoNota}
+          onClose={() => !cancelLoading && setCancelandoNota(null)}
+          onConfirm={handleCancelar}
+          loading={cancelLoading}
+        />
+      )}
+
+      {inutilizandoNota && (
+        <ModalInutilizacao
+          nota={inutilizandoNota}
+          onClose={() => !inutilizacaoLoading && setInutilizandoNota(null)}
+          onConfirm={handleInutilizar}
+          loading={inutilizacaoLoading}
+        />
+      )}
+
+      <div className="flex flex-col gap-4">
 
         {/* ── Cabeçalho ── */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '4px' }}>
+        <div className="flex items-start justify-between mb-1">
           <div>
-            <h2 style={{ fontSize: '18px', fontWeight: 600, color: '#f0f2f4', margin: 0 }}>
-              Notas Fiscais de Saída
-            </h2>
-            <p style={{ fontSize: '12px', color: '#7a7f86', marginTop: '2px' }}>
+            <h2 className="text-[18px] font-semibold text-[#f0f2f4] m-0">Notas Fiscais de Saída</h2>
+            <p className="text-[12px] text-[#7a7f86] mt-0.5">
               {notasFiltradas.length} nota{notasFiltradas.length !== 1 ? 's' : ''} encontrada{notasFiltradas.length !== 1 ? 's' : ''}
               {statusFilter !== 'todas' ? ` · filtro: ${STATUS_CONFIG[statusFilter]?.label}` : ''}
             </p>
           </div>
           <button
-          onClick={handleRefreshAll}
-          disabled={loading}
-          style={{
-            display: 'flex', alignItems: 'center', gap: '6px',
-            background: '#22262b', border: '1px solid #3a3d42',
-            borderRadius: '8px', padding: '7px 14px',
-            fontSize: '12px', color: '#a0a5ad', cursor: 'pointer',
-            opacity: loading ? 0.5 : 1,
-          }}
-        >
-          <RefreshCw size={13} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
-          Atualizar
-        </button>
+            onClick={handleRefreshAll}
+            disabled={loading}
+            className="flex items-center gap-1.5 bg-[#22262b] border border-[#3a3d42] rounded-lg px-3.5 py-1.5 text-[12px] text-[#a0a5ad] cursor-pointer disabled:opacity-50 transition-opacity"
+          >
+            <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+            Atualizar
+          </button>
         </div>
 
         {/* ── Busca + filtros ── */}
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-          <div style={{ position: 'relative', flex: 1, minWidth: '200px' }}>
-            <Search size={13} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#5a5f66', pointerEvents: 'none' }} />
+        <div className="flex gap-2 flex-wrap">
+          <div className="relative flex-1 min-w-[200px]">
+            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#5a5f66] pointer-events-none" />
             <input
               type="text"
               placeholder="Buscar por destinatário, número ou CNPJ/CPF…"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              style={{
-                width: '100%', background: '#1a1d20', border: '1px solid #2e3238',
-                borderRadius: '8px', padding: '7px 10px 7px 30px',
-                fontSize: '12px', color: '#e0e2e5', outline: 'none',
-              }}
+              className="w-full bg-[#1a1d20] border border-[#2e3238] rounded-lg py-1.5 pl-8 pr-8 text-[12px] text-[#e0e2e5] outline-none placeholder:text-[#3a4050] focus:border-[#3a4a6a]"
             />
             {search && (
-              <button onClick={() => setSearch('')} style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#5a5f66' }}>
+              <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-[#5a5f66] hover:text-[#9095a0]">
                 <X size={12} />
               </button>
             )}
           </div>
 
-          <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-            {(['todas', 'rascunho', 'pendente', 'autorizada', 'cancelada', 'rejeitada'] as const).map(s => (
-              <button
-                key={s}
-                onClick={() => setStatusFilter(s)}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: '4px',
-                  padding: '5px 10px', borderRadius: '6px', fontSize: '11px', cursor: 'pointer',
-                  fontWeight: statusFilter === s ? 600 : 400,
-                  background: statusFilter === s
-                    ? (s === 'todas' ? '#2a3040' : STATUS_CONFIG[s]?.bg ?? '#22262b')
-                    : '#1a1d20',
-                  border: statusFilter === s
-                    ? `1px solid ${s === 'todas' ? '#4a5a80' : STATUS_CONFIG[s]?.border ?? '#3a3d42'}`
-                    : '1px solid #2a2d30',
-                  color: statusFilter === s
-                    ? (s === 'todas' ? '#6c9fd4' : STATUS_CONFIG[s]?.color ?? '#a0a5ad')
-                    : '#5a5f66',
-                  transition: 'all 0.15s',
-                }}
-              >
-                {s === 'todas' ? <Filter size={10} /> : STATUS_CONFIG[s]?.icon}
-                {s === 'todas' ? 'Todas' : STATUS_CONFIG[s]?.label}
-              </button>
-            ))}
+          <div className="flex gap-1 flex-wrap">
+            {(['todas', 'rascunho', 'pendente', 'autorizada', 'cancelada', 'rejeitada'] as const).map(s => {
+              const active = statusFilter === s
+              const cfg    = s !== 'todas' ? STATUS_CONFIG[s] : null
+              return (
+                <button
+                  key={s}
+                  onClick={() => setStatusFilter(s)}
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] cursor-pointer transition-all border
+                    ${active
+                      ? s === 'todas'
+                        ? 'bg-[#2a3040] border-[#4a5a80] text-[#6c9fd4] font-semibold'
+                        : `${cfg!.bgCls} ${cfg!.borderCls} ${cfg!.textCls} font-semibold`
+                      : 'bg-[#1a1d20] border-[#2a2d30] text-[#5a5f66]'
+                    }`}
+                >
+                  {s === 'todas' ? <Filter size={10} /> : cfg!.icon}
+                  {s === 'todas' ? 'Todas' : cfg!.label}
+                </button>
+              )
+            })}
           </div>
 
           <button
             onClick={() => setSortDir(d => d === 'desc' ? 'asc' : 'desc')}
-            style={{
-              display: 'flex', alignItems: 'center', gap: '5px',
-              background: '#1a1d20', border: '1px solid #2a2d30',
-              borderRadius: '6px', padding: '5px 10px',
-              fontSize: '11px', color: '#6a6f78', cursor: 'pointer',
-            }}
+            className="flex items-center gap-1 bg-[#1a1d20] border border-[#2a2d30] rounded-md px-2.5 py-1 text-[11px] text-[#6a6f78] cursor-pointer"
           >
             {sortDir === 'desc' ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
             {sortDir === 'desc' ? 'Mais recentes' : 'Mais antigas'}
@@ -509,21 +747,17 @@ async function handleRefreshAll() {
         </div>
 
         {/* ── Lista ── */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+        <div className="flex flex-col gap-1">
           {loading && (
-            <div style={{ textAlign: 'center', padding: '40px', color: '#5a5f66', fontSize: '13px' }}>
-              <RefreshCw size={18} style={{ animation: 'spin 1s linear infinite', marginBottom: '8px', display: 'block', margin: '0 auto 8px' }} />
+            <div className="text-center py-10 text-[#5a5f66] text-[13px]">
+              <RefreshCw size={18} className="animate-spin mx-auto mb-2" />
               Carregando notas…
             </div>
           )}
 
           {!loading && notasFiltradas.length === 0 && (
-            <div style={{
-              textAlign: 'center', padding: '48px 20px',
-              border: '1px dashed #2e3238', borderRadius: '12px',
-              color: '#5a5f66', fontSize: '13px',
-            }}>
-              <FileText size={28} style={{ margin: '0 auto 10px', display: 'block', opacity: 0.4 }} />
+            <div className="text-center py-12 border border-dashed border-[#2e3238] rounded-xl text-[#5a5f66] text-[13px]">
+              <FileText size={28} className="mx-auto mb-2.5 opacity-40" />
               {search || statusFilter !== 'todas'
                 ? 'Nenhuma nota encontrada com os filtros aplicados.'
                 : 'Nenhuma nota fiscal emitida ainda.'}
@@ -533,75 +767,55 @@ async function handleRefreshAll() {
           {!loading && notasFiltradas.map(nota => {
             const expanded = expandedId === nota.id
 
+            // ── Lógica de ações por status ──────────────────────────────
+            const podeInutilizar = ['rascunho', 'pendente', 'rejeitada'].includes(nota.status) && !!nota.numero
+            const podeCancelar   = nota.status === 'autorizada' && dentroDoPrazoCancelamento(nota)
+            const foraDosPrazo   = nota.status === 'autorizada' && !dentroDoPrazoCancelamento(nota)
+
             return (
-              <div key={nota.id} style={{
-                background: '#1a1d20',
-                border: `1px solid ${expanded ? '#3a4050' : '#252830'}`,
-                borderRadius: '10px',
-                overflow: 'hidden',
-                transition: 'border-color 0.15s',
-              }}>
+              <div
+                key={nota.id}
+                className={`bg-[#1a1d20] border ${expanded ? 'border-[#3a4050]' : 'border-[#252830]'} rounded-xl overflow-hidden transition-colors`}
+              >
                 {/* Linha principal */}
                 <div
                   onClick={() => setExpandedId(expanded ? null : nota.id)}
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: '110px 1fr 1fr 120px 110px 110px auto',
-                    alignItems: 'center',
-                    gap: '12px',
-                    padding: '12px 14px',
-                    cursor: 'pointer',
-                    userSelect: 'none',
-                  }}
+                  className="grid gap-3 px-3.5 py-3 cursor-pointer select-none"
+                  style={{ gridTemplateColumns: '110px 1fr 1fr 120px 110px 110px auto' }}
                 >
                   <div>
-                    <div style={{ fontSize: '11px', color: '#5a5f66', marginBottom: '2px' }}>NF-e</div>
-                    <div style={{ fontSize: '13px', fontWeight: 600, color: '#c0c5cc', fontFamily: 'monospace', letterSpacing: '0.5px' }}>
-                      {nota.numero || '—'}
-                    </div>
-                    <div style={{ fontSize: '10px', color: '#4a4f56' }}>Série {nota.serie}</div>
+                    <p className="text-[11px] text-[#5a5f66] mb-0.5">NF-e</p>
+                    <p className="text-[13px] font-semibold text-[#c0c5cc] font-mono tracking-wide">{nota.numero || '—'}</p>
+                    <p className="text-[10px] text-[#4a4f56]">Série {nota.serie}</p>
                   </div>
-
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: '13px', fontWeight: 500, color: '#d0d5dc', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {nota.dest_nome || '—'}
-                    </div>
-                    <div style={{ fontSize: '11px', color: '#5a5f66', marginTop: '2px' }}>
-                      {fmtDoc(nota.dest_cpf_cnpj)} · {nota.dest_uf}
-                    </div>
+                  <div className="min-w-0">
+                    <p className="text-[13px] font-medium text-[#d0d5dc] truncate">{nota.dest_nome || '—'}</p>
+                    <p className="text-[11px] text-[#5a5f66] mt-0.5">{fmtDoc(nota.dest_cpf_cnpj)} · {nota.dest_uf}</p>
                   </div>
-
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: '11px', color: '#5a5f66', marginBottom: '2px' }}>Natureza</div>
-                    <div style={{ fontSize: '12px', color: '#9095a0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {nota.natureza_operacao}
-                    </div>
+                  <div className="min-w-0">
+                    <p className="text-[11px] text-[#5a5f66] mb-0.5">Natureza</p>
+                    <p className="text-[12px] text-[#9095a0] truncate">{nota.natureza_operacao}</p>
                   </div>
-
                   <div>
-                    <div style={{ fontSize: '11px', color: '#5a5f66', marginBottom: '2px' }}>Emissão</div>
-                    <div style={{ fontSize: '12px', color: '#9095a0' }}>{fmtDate(nota.created_at)}</div>
+                    <p className="text-[11px] text-[#5a5f66] mb-0.5">Emissão</p>
+                    <p className="text-[12px] text-[#9095a0]">{fmtDate(nota.created_at)}</p>
                   </div>
-
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: '11px', color: '#5a5f66', marginBottom: '2px' }}>Valor total</div>
-                    <div style={{ fontSize: '13px', fontWeight: 600, color: '#c0c5cc' }}>R$ {fmt(nota.valor_total)}</div>
+                  <div className="text-right">
+                    <p className="text-[11px] text-[#5a5f66] mb-0.5">Valor total</p>
+                    <p className="text-[13px] font-semibold text-[#c0c5cc]">R$ {fmt(nota.valor_total)}</p>
                   </div>
-
                   <div><StatusBadge status={nota.status} /></div>
-
-                  <div style={{ color: '#3a3d42' }}>
+                  <div className="text-[#3a3d42]">
                     {expanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
                   </div>
                 </div>
 
                 {/* ── Painel expandido ── */}
                 {expanded && (
-                  <div style={{ borderTop: '1px solid #252830', padding: '14px', background: '#161820' }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '14px' }}>
-
+                  <div className="border-t border-[#252830] p-3.5 bg-[#161820]">
+                    <div className="grid grid-cols-3 gap-3 mb-3.5">
                       {/* Destinatário */}
-                      <div style={{ background: '#1a1d20', border: '1px solid #252830', borderRadius: '8px', padding: '10px 12px' }}>
+                      <div className="bg-[#1a1d20] border border-[#252830] rounded-lg p-3">
                         <SectionTitle>Destinatário</SectionTitle>
                         <InfoLine label="Nome"     value={nota.dest_nome} />
                         <InfoLine label="CNPJ/CPF" value={fmtDoc(nota.dest_cpf_cnpj)} />
@@ -609,64 +823,65 @@ async function handleRefreshAll() {
                         <InfoLine label="E-mail"   value={nota.dest_email} />
                         <InfoLine label="Telefone" value={nota.dest_telefone} />
                       </div>
-
                       {/* Endereço */}
-                      <div style={{ background: '#1a1d20', border: '1px solid #252830', borderRadius: '8px', padding: '10px 12px' }}>
+                      <div className="bg-[#1a1d20] border border-[#252830] rounded-lg p-3">
                         <SectionTitle>Endereço</SectionTitle>
                         <InfoLine label="Logradouro" value={`${nota.dest_logradouro ?? ''}${nota.dest_numero ? `, ${nota.dest_numero}` : ''}`} />
                         <InfoLine label="Bairro"     value={nota.dest_bairro} />
                         <InfoLine label="Município"  value={`${nota.dest_municipio ?? ''} — ${nota.dest_uf ?? ''}`} />
                         <InfoLine label="CEP"        value={nota.dest_cep} />
                       </div>
-
-                      {/* Financeiro */}
-                      <div style={{ background: '#1a1d20', border: '1px solid #252830', borderRadius: '8px', padding: '10px 12px' }}>
+                      {/* Valores */}
+                      <div className="bg-[#1a1d20] border border-[#252830] rounded-lg p-3">
                         <SectionTitle>Valores</SectionTitle>
                         <InfoLine label="Produtos" value={`R$ ${fmt(nota.valor_produtos ?? nota.valor_total)}`} />
                         <InfoLine label="Frete"    value={`R$ ${fmt(nota.valor_frete)}`} />
                         <InfoLine label="Desconto" value={`R$ ${fmt(nota.valor_desconto)}`} />
-                        <div style={{ borderTop: '1px solid #252830', marginTop: '6px', paddingTop: '6px', display: 'flex', justifyContent: 'space-between' }}>
-                          <span style={{ fontSize: '11px', color: '#5a5f66' }}>Total</span>
-                          <span style={{ fontSize: '13px', fontWeight: 700, color: '#60c080' }}>R$ {fmt(nota.valor_total)}</span>
+                        <div className="border-t border-[#252830] mt-1.5 pt-1.5 flex justify-between">
+                          <span className="text-[11px] text-[#5a5f66]">Total</span>
+                          <span className="text-[13px] font-bold text-[#60c080]">R$ {fmt(nota.valor_total)}</span>
                         </div>
                       </div>
                     </div>
 
-                    {/* Protocolo / chave — só para autorizadas */}
+                    {/* Autorização SEFAZ */}
                     {nota.status === 'autorizada' && (nota.chave_acesso || nota.xml_protocolo) && (
-                      <div style={{
-                        background: '#102a18', border: '1px solid #1a4a28',
-                        borderRadius: '8px', padding: '10px 14px', marginBottom: '14px',
-                      }}>
-                        <SectionTitle color="#3a7a48">Autorização SEFAZ</SectionTitle>
-                        <InfoLine label="Protocolo"      value={nota.xml_protocolo} />
+                      <div className="bg-[#102a18] border border-[#1a4a28] rounded-lg px-3.5 py-2.5 mb-3.5">
+                        <SectionTitle color="text-[#3a7a48]">Autorização SEFAZ</SectionTitle>
+                        <InfoLine label="Protocolo"       value={nota.xml_protocolo} />
                         <InfoLine label="Chave de acesso" value={nota.chave_acesso} mono />
+                      </div>
+                    )}
+
+                    {/* Fora do prazo — aviso nota anulatória */}
+                    {foraDosPrazo && (
+                      <div className="bg-[#2a1a08] border border-[#5a3a10] rounded-lg px-3.5 py-2.5 mb-3.5 text-[12px] text-[#d09050]">
+                        ⚠ Esta nota foi autorizada há mais de 24 horas e <strong>não pode ser cancelada</strong>.
+                        Para anular os efeitos fiscais, emita uma <strong>Nota Anulatória</strong> referenciando
+                        a chave de acesso desta NF-e.
                       </div>
                     )}
 
                     {/* Motivo rejeição */}
                     {nota.status === 'rejeitada' && nota.sefaz_motivo && (
-                      <div style={{
-                        background: '#2a1010', border: '1px solid #4a2020',
-                        borderRadius: '8px', padding: '10px 14px', marginBottom: '14px',
-                      }}>
-                        <SectionTitle color="#8a4040">Motivo da Rejeição</SectionTitle>
-                        <p style={{ fontSize: '12px', color: '#c08080', margin: 0 }}>{nota.sefaz_motivo}</p>
+                      <div className="bg-[#2a1010] border border-[#4a2020] rounded-lg px-3.5 py-2.5 mb-3.5">
+                        <SectionTitle color="text-[#8a4040]">Motivo da Rejeição</SectionTitle>
+                        <p className="text-[12px] text-[#c08080] m-0">{nota.sefaz_motivo}</p>
                       </div>
                     )}
 
                     {/* Itens */}
                     {nota.itens?.length > 0 && (
-                      <div style={{ marginBottom: '14px' }}>
-                        <div style={{ fontSize: '10px', color: '#4a4f56', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px', fontWeight: 600 }}>
+                      <div className="mb-3.5">
+                        <p className="text-[10px] text-[#4a4f56] uppercase tracking-wide font-semibold mb-1.5">
                           Itens ({nota.itens.length})
-                        </div>
-                        <div style={{ border: '1px solid #252830', borderRadius: '8px', overflow: 'hidden' }}>
-                          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
+                        </p>
+                        <div className="border border-[#252830] rounded-lg overflow-hidden">
+                          <table className="w-full border-collapse text-[11px]">
                             <thead>
-                              <tr style={{ background: '#1e2125' }}>
+                              <tr className="bg-[#1e2125]">
                                 {['Descrição', 'NCM', 'CFOP', 'Un.', 'Qtd.', 'Vl. Unit.', 'Vl. Total'].map(h => (
-                                  <th key={h} style={{ padding: '6px 10px', textAlign: h === 'Descrição' ? 'left' : 'right', color: '#4a4f56', fontWeight: 600, fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.3px' }}>
+                                  <th key={h} className={`px-2.5 py-1.5 text-[#4a4f56] font-semibold text-[10px] uppercase tracking-wide ${h === 'Descrição' ? 'text-left' : 'text-right'}`}>
                                     {h}
                                   </th>
                                 ))}
@@ -674,14 +889,14 @@ async function handleRefreshAll() {
                             </thead>
                             <tbody>
                               {nota.itens.map((item: any, i: number) => (
-                                <tr key={i} style={{ borderTop: '1px solid #1e2125' }}>
-                                  <td style={{ padding: '7px 10px', color: '#9095a0' }}>{item.produto_desc || '—'}</td>
-                                  <td style={{ padding: '7px 10px', textAlign: 'right', color: '#6a6f78' }}>{item.ncm || '—'}</td>
-                                  <td style={{ padding: '7px 10px', textAlign: 'right', color: '#6a6f78' }}>{item.cfop || '—'}</td>
-                                  <td style={{ padding: '7px 10px', textAlign: 'right', color: '#6a6f78' }}>UN</td>
-                                  <td style={{ padding: '7px 10px', textAlign: 'right', color: '#9095a0' }}>{item.quantidade}</td>
-                                  <td style={{ padding: '7px 10px', textAlign: 'right', color: '#9095a0' }}>R$ {fmt(item.valor_unit)}</td>
-                                  <td style={{ padding: '7px 10px', textAlign: 'right', color: '#c0c5cc', fontWeight: 600 }}>R$ {fmt(item.valor_total)}</td>
+                                <tr key={i} className="border-t border-[#1e2125]">
+                                  <td className="px-2.5 py-1.5 text-[#9095a0]">{item.produto_desc || '—'}</td>
+                                  <td className="px-2.5 py-1.5 text-right text-[#6a6f78]">{item.ncm || '—'}</td>
+                                  <td className="px-2.5 py-1.5 text-right text-[#6a6f78]">{item.cfop || '—'}</td>
+                                  <td className="px-2.5 py-1.5 text-right text-[#6a6f78]">UN</td>
+                                  <td className="px-2.5 py-1.5 text-right text-[#9095a0]">{item.quantidade}</td>
+                                  <td className="px-2.5 py-1.5 text-right text-[#9095a0]">R$ {fmt(item.valor_unit)}</td>
+                                  <td className="px-2.5 py-1.5 text-right text-[#c0c5cc] font-semibold">R$ {fmt(item.valor_total)}</td>
                                 </tr>
                               ))}
                             </tbody>
@@ -690,52 +905,45 @@ async function handleRefreshAll() {
                       </div>
                     )}
 
-                    {/* Ações */}
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <div style={{ fontSize: '10px', color: '#3a3f46' }}>ID: {nota.id}</div>
-                      <div style={{ display: 'flex', gap: '6px' }}>
+                    {/* ── Ações ── */}
+                    <div className="flex items-center justify-between">
+                      <p className="text-[10px] text-[#3a3f46]">ID: {nota.id}</p>
+                      <div className="flex gap-1.5">
 
-                        {/* Ver DANFE */}
-                        <ActionBtn
-                          icon={<Eye size={13} />}
-                          label="Ver DANFE"
-                          onClick={() => setDanfeNota(nota)}
-                          variant="default"
-                        />
+                        <ActionBtn icon={<Eye size={13} />} label="Ver DANFE"
+                          onClick={() => setDanfeNota(nota)} variant="default" />
 
-                        {/* Download XML — disponível para QUALQUER status */}
                         <ActionBtn
                           icon={downloadingId === nota.id
-                            ? <RefreshCw size={13} style={{ animation: 'spin 1s linear infinite' }} />
+                            ? <RefreshCw size={13} className="animate-spin" />
                             : nota.xml_url ? <Download size={13} /> : <FileCode size={13} />
                           }
-                          label={
-                            downloadingId === nota.id ? 'Baixando…'
-                            : nota.xml_url            ? 'XML assinado'
-                            :                           'XML rascunho'
-                          }
-                          title={
-                            nota.xml_url
-                              ? 'Baixar XML assinado transmitido à SEFAZ'
-                              : 'Baixar XML de rascunho para conferência (sem assinatura)'
-                          }
+                          label={downloadingId === nota.id ? 'Baixando…' : nota.xml_url ? 'XML assinado' : 'XML rascunho'}
+                          title={nota.xml_url ? 'Baixar XML assinado' : 'Baixar XML de rascunho (sem assinatura)'}
                           onClick={() => handleDownloadXml(nota)}
                           variant="default"
                           disabled={downloadingId === nota.id}
                         />
 
-                        {/* Emitir (rascunho ou pendente) */}
                         {(nota.status === 'rascunho' || nota.status === 'pendente') && (
-                          <ActionBtn
-                            icon={<Send size={13} />}
-                            label="Emitir"
-                            onClick={() => handleEmitir(nota)}
-                            variant="primary"
-                          />
+                          <ActionBtn icon={<Send size={13} />} label="Emitir"
+                            onClick={() => handleEmitir(nota)} variant="primary" />
                         )}
 
-                        {/* Excluir rascunho */}
-                        {nota.status === 'rascunho' && (
+                        {/* Cancelar — só autorizada dentro de 24h */}
+                        {podeCancelar && (
+                          <ActionBtn icon={<XCircle size={13} />} label="Cancelar"
+                            onClick={() => setCancelandoNota(nota)} variant="danger" />
+                        )}
+
+                        {/* Inutilizar — rascunho, pendente ou rejeitada com número */}
+                        {podeInutilizar && (
+                          <ActionBtn icon={<Hash size={13} />} label="Inutilizar"
+                            onClick={() => setInutilizandoNota(nota)} variant="warning" />
+                        )}
+
+                        {/* Excluir — só rascunho (sem número ainda, não precisa inutilizar) */}
+                        {['rascunho', 'pendente'].includes(nota.status) && !nota.numero && (
                           <ActionBtn
                             icon={<Trash2 size={13} />}
                             label={deletingId === nota.id ? 'Excluindo…' : 'Excluir'}
@@ -744,6 +952,7 @@ async function handleRefreshAll() {
                             disabled={deletingId === nota.id}
                           />
                         )}
+
                       </div>
                     </div>
                   </div>
@@ -755,89 +964,70 @@ async function handleRefreshAll() {
 
         {/* ── Rodapé ── */}
         {!loading && notas.length > 0 && (
-          <div style={{
-            display: 'flex', justifyContent: 'flex-end', gap: '24px',
-            borderTop: '1px solid #2e3238', paddingTop: '12px', marginTop: '4px',
-          }}>
+          <div className="flex justify-end gap-6 border-t border-[#2e3238] pt-3 mt-1">
             <Stat label="Total de notas"        value={String(notas.length)} />
-            <Stat label="Autorizadas"            value={String(notas.filter(n => n.status === 'autorizada').length)} color="#60c080" />
-            <Stat label="Rascunhos"              value={String(notas.filter(n => n.status === 'rascunho').length)}   color="#a0a5ad" />
-            <Stat label="Faturado (autorizadas)" value={`R$ ${fmt(totalAutorizadas)}`} color="#6c9fd4" />
+            <Stat label="Autorizadas"            value={String(notas.filter(n => n.status === 'autorizada').length)} color="text-[#60c080]" />
+            <Stat label="Canceladas"             value={String(notas.filter(n => n.status === 'cancelada').length)}  color="text-[#f08080]" />
+            <Stat label="Rascunhos"              value={String(notas.filter(n => n.status === 'rascunho').length)}   color="text-[#a0a5ad]" />
+            <Stat label="Faturado (autorizadas)" value={`R$ ${fmt(totalAutorizadas)}`} color="text-[#6c9fd4]" />
           </div>
         )}
       </div>
-
-      <style>{`
-        @keyframes spin { to { transform: rotate(360deg); } }
-        input::placeholder { color: #3a4050; }
-        input:focus { border-color: #3a4a6a !important; }
-      `}</style>
     </>
   )
 }
 
 // ── Sub-componentes ───────────────────────────────────────────────────────────
-function SectionTitle({ children, color = '#4a4f56' }: { children: React.ReactNode; color?: string }) {
+function SectionTitle({ children, color = 'text-[#4a4f56]' }: { children: React.ReactNode; color?: string }) {
   return (
-    <div style={{ fontSize: '10px', color, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px', fontWeight: 600 }}>
+    <p className={`text-[10px] ${color} uppercase tracking-wide font-semibold mb-1.5`}>
       {children}
-    </div>
+    </p>
   )
 }
 
 function InfoLine({ label, value, mono }: { label: string; value?: string | null; mono?: boolean }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', marginBottom: '3px' }}>
-      <span style={{ fontSize: '11px', color: '#4a4f56', flexShrink: 0 }}>{label}</span>
-      <span style={{
-        fontSize: '11px', color: '#8a8f98', textAlign: 'right',
-        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-        fontFamily: mono ? 'monospace' : undefined, letterSpacing: mono ? '0.5px' : undefined,
-      }}>
+    <div className="flex justify-between gap-2 mb-0.5">
+      <span className="text-[11px] text-[#4a4f56] shrink-0">{label}</span>
+      <span className={`text-[11px] text-[#8a8f98] text-right truncate ${mono ? 'font-mono tracking-wide' : ''}`}>
         {value || '—'}
       </span>
     </div>
   )
 }
 
-function ActionBtn({
-  icon, label, title, onClick, variant = 'default', disabled = false,
-}: {
+function ActionBtn({ icon, label, title, onClick, variant = 'default', disabled = false }: {
   icon: React.ReactNode
   label: string
   title?: string
   onClick: () => void
-  variant?: 'default' | 'primary' | 'danger'
+  variant?: 'default' | 'primary' | 'danger' | 'warning'
   disabled?: boolean
 }) {
-  const styles: Record<string, React.CSSProperties> = {
-    default: { background: '#22262b', border: '1px solid #3a3d42', color: '#9095a0' },
-    primary: { background: '#1e4a7a', border: '1px solid #2a6aad', color: '#90c8f0' },
-    danger:  { background: '#2a1010', border: '1px solid #5a2020', color: '#f08080' },
+  const variants = {
+    default: 'bg-[#22262b] border-[#3a3d42] text-[#9095a0]',
+    primary: 'bg-[#1e4a7a] border-[#2a6aad] text-[#90c8f0]',
+    danger:  'bg-[#2a1010] border-[#5a2020] text-[#f08080]',
+    warning: 'bg-[#1a1a2a] border-[#3a3a7a] text-[#9090f0]',
   }
   return (
     <button
       onClick={onClick}
       disabled={disabled}
       title={title}
-      style={{
-        display: 'flex', alignItems: 'center', gap: '5px',
-        padding: '6px 12px', borderRadius: '7px', fontSize: '12px',
-        cursor: disabled ? 'not-allowed' : 'pointer', fontWeight: 500,
-        opacity: disabled ? 0.4 : 1, transition: 'opacity 0.15s',
-        ...styles[variant],
-      }}
+      className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-[12px] font-medium border cursor-pointer transition-opacity disabled:opacity-40 disabled:cursor-not-allowed ${variants[variant]}`}
     >
       {icon} {label}
     </button>
   )
 }
 
-function Stat({ label, value, color = '#7a7f86' }: { label: string; value: string; color?: string }) {
+function Stat({ label, value, color = 'text-[#7a7f86]' }: { label: string; value: string; color?: string }) {
   return (
-    <div style={{ textAlign: 'right' }}>
-      <div style={{ fontSize: '10px', color: '#4a4f56', marginBottom: '2px' }}>{label}</div>
-      <div style={{ fontSize: '14px', fontWeight: 600, color }}>{value}</div>
+    <div className="text-right">
+      <p className="text-[10px] text-[#4a4f56] mb-0.5">{label}</p>
+      <p className={`text-[14px] font-semibold ${color}`}>{value}</p>
     </div>
   )
 }

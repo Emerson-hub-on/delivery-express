@@ -252,7 +252,7 @@ export function ProductModal({ product, onClose }: Props) {
             <p className="text-sm font-semibold text-gray-800 mb-2">Alguma observação?</p>
             <textarea
               rows={2}
-              placeholder="Ex: sem cebola, ponto da carne bem passado..."
+              placeholder="Digite aqui sua abservação..."
               value={observation}
               onChange={e => setObservation(e.target.value)}
               className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-black resize-none"
