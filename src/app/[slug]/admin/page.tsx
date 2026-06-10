@@ -325,6 +325,7 @@ useEffect(() => {
         )}
         {tab === 'orders' && (
           <OrdersTab
+            companyId={companyId}
             orders={orders}
             setOrders={setOrders}
             loading={loadingOrders}
