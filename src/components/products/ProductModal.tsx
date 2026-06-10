@@ -22,6 +22,7 @@ export function ProductModal({ product, onClose }: Props) {
   const [addonQtys, setAddonQtys] = useState<Record<string, number>>({})
   const [observation, setObservation] = useState('')
   const [qty, setQty] = useState(1)
+  const [selectedSize, setSelectedSize] = useState<string | null>(null)
 
   useEffect(() => {
     getAddonGroupsByProduct(product.id)
@@ -43,7 +44,9 @@ export function ProductModal({ product, onClose }: Props) {
     return errors
   }, [groups, addonQtys])
 
-  const canAdd = Object.keys(groupErrors).length === 0
+  const hasSizes = Array.isArray(product.sizes) && product.sizes.length > 0
+
+  const canAdd = Object.keys(groupErrors).length === 0 && (!hasSizes || !!selectedSize)
 
   // Constrói CartAddon[] a partir das qtys selecionadas
   const selectedAddons = useMemo((): CartAddon[] => {
@@ -87,9 +90,9 @@ export function ProductModal({ product, onClose }: Props) {
 
   const handleAdd = () => {
     if (!canAdd) return
-    addToCart(product, qty, selectedAddons, observation)
+    addToCart(product, qty, selectedAddons, observation, selectedSize ?? undefined)
     toast.success('Adicionado ao carrinho!', {
-      description: product.name,
+      description: `${product.name}${selectedSize ? ` — ${selectedSize}` : ''}`,
       action: {
         label: 'Ver carrinho',
         onClick: () => window.dispatchEvent(new Event('open-cart')),
@@ -246,6 +249,51 @@ export function ProductModal({ product, onClose }: Props) {
               </div>
             )
           })}
+
+          {/* Tamanhos disponíveis */}
+          {hasSizes && (
+            <div className="px-5 py-4 border-b border-gray-100">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-sm font-semibold text-gray-800">Tamanho</p>
+                <span className="text-xs text-red-500 font-medium">Obrigatório</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {(product.sizes as { value: string; stock: number | null }[]).map(s => {
+                  const outOfStock = s.stock !== null && s.stock <= 0
+                  const isSelected = selectedSize === s.value
+                  return (
+                    <button
+                      key={s.value}
+                      disabled={outOfStock}
+                      onClick={() => setSelectedSize(s.value)}
+                      className={`
+                        relative px-4 py-2 rounded-xl text-sm font-semibold border-2 transition-all
+                        ${outOfStock
+                          ? 'border-gray-100 bg-gray-50 text-gray-300 cursor-not-allowed line-through'
+                          : isSelected
+                            ? 'border-gray-900 bg-gray-900 text-white'
+                            : 'border-gray-200 bg-white text-gray-700 hover:border-gray-400'
+                        }
+                      `}
+                    >
+                      {s.value}
+                      {s.stock !== null && s.stock > 0 && (
+                        <span className={`
+                          ml-1.5 text-[10px] font-normal
+                          ${isSelected ? 'text-gray-300' : 'text-gray-400'}
+                        `}>
+                          ({s.stock})
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+              {hasSizes && !selectedSize && (
+                <p className="text-xs text-red-400 mt-2">Selecione um tamanho para continuar</p>
+              )}
+            </div>
+          )}
 
           {/* Observação */}
           <div className="px-5 py-4 border-b border-gray-100">

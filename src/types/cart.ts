@@ -7,5 +7,6 @@ export type Cart = {
   quantity: number
   addons: CartAddon[]
   observation: string
+  selectedSize?: string
   totalWithAddons: number
 }

@@ -6,6 +6,8 @@ import { getPaymentLabel } from '@/lib/payment-labels'
 import { getAllMotoboys } from '@/services/motoboys'
 import { Motoboy } from '@/types/motoboy'
 import { exportOrderPdf } from '@/lib/exportOrderPdf'
+import { emitirNfce } from '@/services/nfce-transmissao'
+import { supabase } from '@/lib/supabase'
 import React from 'react';
 
 const STATUS_ORDER_DELIVERY = ['pending', 'confirmed', 'delivering', 'completed', 'cancelled'] as const
@@ -95,12 +97,13 @@ interface OrdersTabProps {
   searchedOrder: Order | null
   searchingOrder: boolean
   onClearSearch: () => void
+  companyId: string   // necessário para emitir NFC-e
 }
 
 export function OrdersTab({
   orders, setOrders, loading, onError,
   dateFrom, dateTo, onDateFromChange, onDateToChange,
-  onFilter, onClearFilter,
+  onFilter, onClearFilter, companyId,
 }: OrdersTabProps) {
   const [expandedOrder, setExpandedOrder]               = useState<number | null>(null)
   const [mobileTab, setMobileTab]                       = useState<KanbanColumn>('all')
@@ -195,11 +198,102 @@ export function OrdersTab({
     } catch (e: any) { onError(e.message) }
   }
 
-  const handleAssignMotoboy = async (orderId: number, motoboyId: string | null) => {
+  // ── Emitir NFC-e de um pedido da área de pedidos ─────────────────────────
+  // Replica exatamente a lógica do onRetentar do NfceLogsModal no PDVTab,
+  // mas acionada manualmente pelo operador na OrderCard.
+  const handleEmitirNfceOrder = async (order: Order) => {
+    if (!confirm(`Emitir NFC-e para o pedido #${order.code ?? order.id}?`)) return
+
+    // Busca dados completos do pedido no banco (inclui campos fiscais)
+    const { data: fullOrder, error } = await supabase
+      .from('orders')
+      .select('id, nfce_numero, nfce_serie, items, total, payment_method, amount_received, change, consumer_name, cpf_cnpj_consumidor')
+      .eq('id', order.id)
+      .single()
+
+    if (error || !fullOrder) {
+      onError('Não foi possível carregar os dados do pedido para emissão.')
+      return
+    }
+
+    // Reconstrói os itens fiscais a partir do jsonb salvo
+    const nfceItems = (fullOrder.items as any[]).map((item: any, idx: number) => ({
+      order:        idx + 1,
+      product_id:   item.product_id,
+      product_name: item.product_name,
+      ean:          item.ean ?? null,
+      quantity:     item.quantity,
+      unit_price:   item.unit_price,
+      discount:     item.discount ?? 0,
+      ncm:          item.ncm   ?? '99999999',
+      cfop:         item.cfop  ?? '5102',
+      cst:          item.cst   ?? '400',
+      unit:         item.unit  ?? 'UN',
+    }))
+
+    const totalNum    = Number(fullOrder.total ?? 0)
+    const receivedNum = Number(fullOrder.amount_received ?? 0)
+    const troco       = fullOrder.payment_method === 'dinheiro' && receivedNum > totalNum
+      ? receivedNum - totalNum
+      : 0
+
+    // Marca visualmente como "emitindo" no estado local
+    setOrders(prev => prev.map(o =>
+      o.id === order.id ? { ...o, nfce_status: 'emitindo' } : o
+    ))
+
     try {
-      const updated = await assignMotoboy(orderId, motoboyId)
-      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, motoboy_id: updated.motoboy_id } : o))
-    } catch (e: any) { onError(e.message) }
+      const result = await emitirNfce({
+        companyId,
+        orderId:       fullOrder.id,
+        nfceNumero:    fullOrder.nfce_numero,
+        serie:         fullOrder.nfce_serie,
+        items:         nfceItems,
+        paymentMethod: fullOrder.payment_method as any,
+        total:         totalNum,
+        troco,
+        consumer:      fullOrder.cpf_cnpj_consumidor
+          ? { name: fullOrder.consumer_name ?? '', cpf: fullOrder.cpf_cnpj_consumidor }
+          : null,
+        contingencia:  false,
+      })
+
+      if (result.ok) {
+        // Atualiza estado local com NFC-e autorizada
+        setOrders(prev => prev.map(o =>
+          o.id === order.id
+            ? { ...o, nfce_status: 'autorizada', nfce_chave: result.chaveAcesso }
+            : o
+        ))
+      } else {
+        // Persiste rejeição no banco e atualiza estado local
+        const motivo = result.cStat
+          ? `[cStat ${result.cStat}] ${result.xMotivo}`
+          : result.error ?? 'Erro desconhecido'
+
+        await supabase
+          .from('orders')
+          .update({ nfce_status: 'rejeitado', nfce_motivo: motivo, nfce_cstat: result.cStat ?? null })
+          .eq('id', order.id)
+
+        setOrders(prev => prev.map(o =>
+          o.id === order.id ? { ...o, nfce_status: 'rejeitado', nfce_motivo: motivo } : o
+        ))
+        onError(`NFC-e rejeitada: ${motivo}`)
+      }
+    } catch (e: any) {
+      const motivo = e.message ?? 'Erro desconhecido na transmissão'
+
+      await supabase
+        .from('orders')
+        .update({ nfce_status: 'rejeitado', nfce_motivo: motivo, nfce_cstat: null })
+        .eq('id', order.id)
+
+      setOrders(prev => prev.map(o =>
+        o.id === order.id ? { ...o, nfce_status: 'rejeitado', nfce_motivo: motivo } : o
+      ))
+      onError(motivo)
+    }
   }
 
   const getOrdersForColumn = (column: Exclude<KanbanColumn, 'all'>) =>
@@ -245,31 +339,19 @@ export function OrdersTab({
             <option value="cancelled">Cancelado</option>
           </select>
 
-          <input
-            type="date"
-            value={dateFrom}
-            onChange={e => onDateFromChange(e.target.value)}
-            className="flex-1 sm:flex-none text-sm border border-gray-200 rounded-lg px-3 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-black"
-          />
-          <input
-            type="date"
-            value={dateTo}
-            onChange={e => onDateToChange(e.target.value)}
-            className="flex-1 sm:flex-none text-sm border border-gray-200 rounded-lg px-3 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-black"
-          />
+          <input type="date" value={dateFrom} onChange={e => onDateFromChange(e.target.value)}
+            className="flex-1 sm:flex-none text-sm border border-gray-200 rounded-lg px-3 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-black" />
+          <input type="date" value={dateTo} onChange={e => onDateToChange(e.target.value)}
+            className="flex-1 sm:flex-none text-sm border border-gray-200 rounded-lg px-3 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-black" />
 
-          <button
-            onClick={onFilter}
-            className="text-sm px-4 py-2 bg-gray-900 text-white rounded-lg font-medium hover:bg-gray-700 transition-colors"
-          >
+          <button onClick={onFilter}
+            className="text-sm px-4 py-2 bg-gray-900 text-white rounded-lg font-medium hover:bg-gray-700 transition-colors">
             Filtrar
           </button>
 
           {!isFilteredToday && (
-            <button
-              onClick={onClearFilter}
-              className="text-sm px-4 py-2 bg-gray-100 text-gray-600 rounded-lg font-medium hover:bg-gray-200 transition-colors"
-            >
+            <button onClick={onClearFilter}
+              className="text-sm px-4 py-2 bg-gray-100 text-gray-600 rounded-lg font-medium hover:bg-gray-200 transition-colors">
               Hoje
             </button>
           )}
@@ -329,6 +411,7 @@ export function OrdersTab({
                   onUpdateStatus={handleUpdateStatus}
                   onChangeMotoboy={id => setMotoboyDialogOrderId(id)}
                   onAcceptIfood={handleAcceptIfood}
+                  onEmitirNfce={handleEmitirNfceOrder}
                   isPickup={isPickup(order)}
                   isIfood={isIfoodOrder(order)}
                   isAccepting={acceptingId === order.id}
@@ -367,6 +450,7 @@ export function OrdersTab({
                           onUpdateStatus={handleUpdateStatus}
                           onChangeMotoboy={id => setMotoboyDialogOrderId(id)}
                           onAcceptIfood={handleAcceptIfood}
+                          onEmitirNfce={handleEmitirNfceOrder}
                           isPickup={isPickup(order)}
                           isIfood={isIfoodOrder(order)}
                           isAccepting={acceptingId === order.id}
@@ -400,6 +484,13 @@ export function OrdersTab({
       )}
     </div>
   )
+
+  async function handleAssignMotoboy(orderId: number, motoboyId: string | null) {
+    try {
+      const updated = await assignMotoboy(orderId, motoboyId)
+      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, motoboy_id: updated.motoboy_id } : o))
+    } catch (e: any) { onError(e.message) }
+  }
 }
 
 // ── Card de pedido ────────────────────────────────────────────
@@ -411,6 +502,7 @@ interface OrderCardProps {
   onUpdateStatus: (id: number, status: string) => void
   onChangeMotoboy: (orderId: number) => void
   onAcceptIfood: (order: Order) => void
+  onEmitirNfce: (order: Order) => void   // ← novo
   isPickup: boolean
   isIfood: boolean
   isAccepting: boolean
@@ -422,25 +514,46 @@ interface OrderCardProps {
 
 function OrderCard({
   order, expanded, onToggle, onUpdateStatus, onChangeMotoboy,
-  onAcceptIfood, isPickup, isIfood, isAccepting,
+  onAcceptIfood, onEmitirNfce, isPickup, isIfood, isAccepting,
   statusOptions, statusOrder, motoboys, highlighted,
 }: OrderCardProps) {
 
-  const [exportingPdf, setExportingPdf] = useState(false)
+  const [exportingPdf, setExportingPdf]   = useState(false)
+  const [emittingNfce, setEmittingNfce]   = useState(false)
 
   const isPending      = order.status === 'pending'
+  const isCancelled    = order.status === 'cancelled'
   const isNotFinished  = !['completed', 'cancelled'].includes(order.status)
+
+  // Mostra o botão NFC-e apenas quando:
+  //   • O pedido NÃO está cancelado
+  //   • A NFC-e ainda não foi autorizada
+  const nfceStatus    = (order as any).nfce_status as string | undefined
+  const nfceAutorizada = nfceStatus === 'autorizada'
+  const showNfceBtn    = !isCancelled && !nfceAutorizada
+
+  // Label e cor do badge de status NFC-e
+  const nfceBadge = (() => {
+    if (!nfceStatus || nfceStatus === 'emitindo') return null
+    if (nfceStatus === 'autorizada') return { label: '✓ NFC-e autorizada', cls: 'bg-green-50 text-green-700 border-green-200' }
+    if (nfceStatus === 'rejeitado')  return { label: '✗ NFC-e rejeitada',  cls: 'bg-red-50 text-red-700 border-red-200' }
+    if (nfceStatus === 'pendente')   return { label: '◷ NFC-e pendente',   cls: 'bg-yellow-50 text-yellow-700 border-yellow-200' }
+    return null
+  })()
 
   const handleExportPdf = async (e: React.MouseEvent) => {
     e.stopPropagation()
     setExportingPdf(true)
-    try {
-      await exportOrderPdf(order)
-    } catch (err) {
-      console.error('[PDF Export]', err)
-    } finally {
-      setExportingPdf(false)
-    }
+    try { await exportOrderPdf(order) }
+    catch (err) { console.error('[PDF Export]', err) }
+    finally { setExportingPdf(false) }
+  }
+
+  const handleNfceClick = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setEmittingNfce(true)
+    try { await onEmitirNfce(order) }
+    finally { setEmittingNfce(false) }
   }
 
   return (
@@ -477,8 +590,21 @@ function OrderCard({
               <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-100 text-orange-600 font-medium">iFood</span>
             )}
           </div>
-          <div className="flex items-center gap-2">
-            {/* ── Botão PDF ── */}
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+
+            {/* Badge status NFC-e */}
+            {nfceBadge && (
+              <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${nfceBadge.cls}`}>
+                {nfceBadge.label}
+              </span>
+            )}
+            {nfceStatus === 'emitindo' && (
+              <span className="text-[10px] px-2 py-0.5 rounded-full border bg-blue-50 text-blue-600 border-blue-200 font-medium animate-pulse">
+                ⏳ Emitindo…
+              </span>
+            )}
+
+            {/* Botão PDF */}
             <button
               onClick={handleExportPdf}
               disabled={exportingPdf}
@@ -486,8 +612,7 @@ function OrderCard({
               className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-md border border-gray-200 text-gray-500 hover:bg-red-50 hover:border-red-300 hover:text-red-600 transition-colors disabled:opacity-40 shrink-0"
             >
               {exportingPdf ? (
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-                  className="animate-spin">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="animate-spin">
                   <path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" opacity=".25"/>
                   <path d="M21 12a9 9 0 01-9-9" />
                 </svg>
@@ -502,6 +627,29 @@ function OrderCard({
               )}
               PDF
             </button>
+
+            {/* ── Botão NFC-e ── */}
+            {showNfceBtn && (
+              <button
+                onClick={handleNfceClick}
+                disabled={emittingNfce || nfceStatus === 'emitindo'}
+                title={nfceStatus === 'rejeitado' ? 'Retentar emissão da NFC-e' : 'Emitir NFC-e'}
+                className={`flex items-center gap-1 text-[10px] px-2 py-1 rounded-md border font-medium
+                  transition-colors disabled:opacity-40 shrink-0
+                  ${nfceStatus === 'rejeitado'
+                    ? 'border-red-200 text-red-600 bg-red-50 hover:bg-red-100'
+                    : 'border-indigo-200 text-indigo-600 bg-indigo-50 hover:bg-indigo-100'
+                  }`}
+              >
+                {emittingNfce || nfceStatus === 'emitindo' ? (
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="animate-spin">
+                    <path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" opacity=".25"/>
+                    <path d="M21 12a9 9 0 01-9-9" />
+                  </svg>
+                ) : '🧾'}
+                {nfceStatus === 'rejeitado' ? 'Retentar NFC-e' : 'Emitir NFC-e'}
+              </button>
+            )}
 
             {order.delivery_type && (
               <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium
@@ -524,6 +672,13 @@ function OrderCard({
             </span>
           )}
         </div>
+
+        {/* Motivo de rejeição NFC-e */}
+        {nfceStatus === 'rejeitado' && (order as any).nfce_motivo && (
+          <p className="text-[10px] text-red-500 mt-0.5 leading-tight">
+            ⚠ {(order as any).nfce_motivo}
+          </p>
+        )}
 
         <span className="text-sm font-medium text-green-600">R$ {fmt(order.total)}</span>
 
@@ -615,9 +770,7 @@ function OrderCard({
                     </tr>
                     {(item.addons ?? []).map((addon, j) => (
                       <tr key={`addon-${i}-${j}`}>
-                        <td className="pb-1 pl-3 text-gray-400 text-[10px]" colSpan={2}>
-                          ↳ {addon.qty}× {addon.itemName}
-                        </td>
+                        <td className="pb-1 pl-3 text-gray-400 text-[10px]" colSpan={2}>↳ {addon.qty}× {addon.itemName}</td>
                         <td className="pb-1 text-right text-gray-400 text-[10px]">
                           {addon.subtotal > 0 ? `+R$ ${fmt(addon.subtotal)}` : ''}
                         </td>
@@ -645,13 +798,11 @@ function OrderCard({
 
                 {order.status === 'confirmed' && order.payment_method === 'pix' ? (
                   <span className="inline-flex items-center gap-1.5 text-xs font-medium text-green-600 mt-0.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                    Pago online
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-500" />Pago online
                   </span>
                 ) : !['completed', 'cancelled'].includes(order.status) ? (
                   <span className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-400 mt-0.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-gray-300" />
-                    Cobrar do cliente
+                    <span className="w-1.5 h-1.5 rounded-full bg-gray-300" />Cobrar do cliente
                   </span>
                 ) : null}
 
@@ -672,12 +823,40 @@ function OrderCard({
             </div>
           </div>
 
-          {/* ── Botão PDF expandido ── */}
-          <div className="flex justify-end pt-1">
+          {/* Ações no rodapé expandido */}
+          <div className="flex items-center justify-between pt-1 gap-2 flex-wrap">
+
+            {/* NFC-e no rodapé expandido (retentar rejeição) */}
+            {showNfceBtn && (
+              <button
+                onClick={handleNfceClick}
+                disabled={emittingNfce || nfceStatus === 'emitindo'}
+                className={`flex items-center gap-2 text-xs px-3 py-2 rounded-lg border font-medium
+                  transition-colors disabled:opacity-40
+                  ${nfceStatus === 'rejeitado'
+                    ? 'border-red-200 text-red-600 bg-red-50 hover:bg-red-100'
+                    : 'border-indigo-200 text-indigo-600 bg-indigo-50 hover:bg-indigo-100'
+                  }`}
+              >
+                {emittingNfce ? (
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="animate-spin">
+                    <path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" opacity=".25"/>
+                    <path d="M21 12a9 9 0 01-9-9" />
+                  </svg>
+                ) : '🧾'}
+                {emittingNfce
+                  ? 'Emitindo NFC-e…'
+                  : nfceStatus === 'rejeitado'
+                    ? 'Retentar NFC-e'
+                    : 'Emitir NFC-e'
+                }
+              </button>
+            )}
+
             <button
               onClick={handleExportPdf}
               disabled={exportingPdf}
-              className="flex items-center gap-2 text-xs px-3 py-2 rounded-lg border border-red-200 text-red-600 bg-red-50 hover:bg-red-100 transition-colors disabled:opacity-40 font-medium"
+              className="flex items-center gap-2 text-xs px-3 py-2 rounded-lg border border-red-200 text-red-600 bg-red-50 hover:bg-red-100 transition-colors disabled:opacity-40 font-medium ml-auto"
             >
               {exportingPdf ? (
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="animate-spin">

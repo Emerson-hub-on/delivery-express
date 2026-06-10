@@ -10,7 +10,7 @@ type States = {
 }
 
 type Actions = {
-  addToCart: (product: Product, quantity: number, addons: CartAddon[], observation: string) => void
+  addToCart: (product: Product, quantity: number, addons: CartAddon[], observation: string, selectedSize?: string) => void
   upsertCartItem: (product: Product, quantity: number) => void  // mantido para compatibilidade
   removeFromCart: (cartId: string) => void
   updateQty: (cartId: string, quantity: number) => void
@@ -29,7 +29,7 @@ function genId(): string {
 export const useCartStore = create<States & Actions>()((set) => ({
   cart: [],
 
-  addToCart: (product, quantity, addons, observation) =>
+  addToCart: (product, quantity, addons, observation, selectedSize) =>
     set(state => {
       const totalWithAddons = calcTotal(product, quantity, addons)
       const newItem: Cart = {
@@ -38,6 +38,7 @@ export const useCartStore = create<States & Actions>()((set) => ({
         quantity,
         addons,
         observation,
+        selectedSize,
         totalWithAddons,
       }
       return { cart: [...state.cart, newItem] }

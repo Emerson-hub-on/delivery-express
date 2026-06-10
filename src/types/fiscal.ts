@@ -1,6 +1,6 @@
 // types/fiscal.ts
 
-export type NfceStatus = 'pendente' | 'emitido' | 'cancelado' | 'rejeitado'
+export type NfceStatus = 'pendente' | 'emitido' | 'cancelado' | 'rejeitado' | 'autorizada' | 'emitindo'
 
 export type AmbienteSEFAZ = 1 | 2  // 1 = Produção | 2 = Homologação
 
