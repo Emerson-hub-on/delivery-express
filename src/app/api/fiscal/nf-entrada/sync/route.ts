@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { supabase } from '@/lib/supabase'
 import https from 'https'
 import { XMLParser } from 'fast-xml-parser'
 import { upsertSupplier, resolverContribuinte } from '@/lib/fiscal/upsertSupplier'
 
+// FIX: usa supabaseAdmin (service role) em TODAS as queries.
+// O client anon não passa pelo RLS sem o JWT do usuário,
+// causando "Configuração fiscal não encontrada" mesmo com companyId correto.
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -167,8 +169,8 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // 1. Busca configuração fiscal
-    const { data: cfg, error: cfgError } = await supabase
+    // 1. Busca configuração fiscal — usa supabaseAdmin para bypassar RLS
+    const { data: cfg, error: cfgError } = await supabaseAdmin
       .from('fiscal_configs')
       .select(`
         cnpj,
@@ -227,7 +229,45 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const pfxBuffer = Buffer.from(pfxBase64, 'base64')
+    // ── Sanitiza e valida o base64 do PFX ────────────────────────────────────
+    // Remove whitespace e o prefixo data:...;base64, se o upload salvou errado
+    let pfxBase64Clean = pfxBase64.replace(/\s+/g, '')
+    if (pfxBase64Clean.includes(',')) {
+      // Salvo com prefixo data:application/...;base64,MIACA...
+      pfxBase64Clean = pfxBase64Clean.split(',')[1] ?? pfxBase64Clean
+    }
+    // Remove qualquer caractere não-base64
+    pfxBase64Clean = pfxBase64Clean.replace(/[^A-Za-z0-9+/=]/g, '')
+    const pfxBuffer = Buffer.from(pfxBase64Clean, 'base64')
+
+    // Valida magic byte do PKCS#12 (deve começar com 0x30)
+    if (pfxBuffer.length < 4 || pfxBuffer[0] !== 0x30) {
+      return NextResponse.json(
+        { message: `PFX inválido: magic byte incorreto (0x${pfxBuffer[0]?.toString(16)}). O base64 pode estar corrompido ao salvar.` },
+        { status: 400 }
+      )
+    }
+
+    // Testa se o Node consegue criar um contexto TLS com o PFX+senha
+    // Se a senha estiver errada, lança ERR_OSSL_BAD_DECRYPT ou similar
+    try {
+      const { createSecureContext } = await import('tls')
+      createSecureContext({
+        pfx:        pfxBuffer,
+        passphrase: pfxSenha,
+      })
+    } catch (cryptoErr: any) {
+      const msg = (cryptoErr?.message ?? String(cryptoErr)).toLowerCase()
+      const hint = msg.includes('bad decrypt') || msg.includes('wrong password') || msg.includes('mac')
+        ? 'Senha incorreta para este certificado.'
+        : msg.includes('unsupported') || msg.includes('pkcs12')
+        ? 'Formato PFX não suportado. O arquivo pode estar corrompido.'
+        : cryptoErr?.message ?? String(cryptoErr)
+      return NextResponse.json(
+        { message: `Certificado rejeitado: ${hint}` },
+        { status: 400 }
+      )
+    }
 
     // 4. cUFAutor = 2 primeiros dígitos IBGE
     const cUFAutor = cfg.codigo_ibge?.substring(0, 2)
@@ -239,7 +279,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 5. Recupera último NSU
-    const { data: nsuRow } = await supabase
+    const { data: nsuRow } = await supabaseAdmin
       .from('nf_entrada_nsu')
       .select('ult_nsu')
       .eq('company_id', companyId)
@@ -266,7 +306,7 @@ export async function POST(req: NextRequest) {
 
     // 9. Salva no banco + upsert de fornecedores
     if (notas.length > 0) {
-      await supabase
+      await supabaseAdmin
         .from('nf_entrada')
         .upsert(
           notas.map((n) => ({
@@ -284,7 +324,7 @@ export async function POST(req: NextRequest) {
           { onConflict: 'company_id,chave', ignoreDuplicates: true }
         )
 
-      // ── Upsert fornecedores — silencioso, falha individual não bloqueia o sync
+      // Upsert fornecedores — silencioso, falha individual não bloqueia o sync
       await Promise.allSettled(
         notas.map(async (n) => {
           if (!n.emit) return
@@ -315,7 +355,7 @@ export async function POST(req: NextRequest) {
 
       // Atualiza último NSU
       const maiorNSU = notas[notas.length - 1].nsu
-      await supabase
+      await supabaseAdmin
         .from('nf_entrada_nsu')
         .upsert(
           { company_id: companyId, ult_nsu: maiorNSU },

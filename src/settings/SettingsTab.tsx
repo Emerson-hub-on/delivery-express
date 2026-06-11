@@ -85,11 +85,14 @@ export function FiscalTab({ onError }: FiscalTabProps) {
     const file = e.target.files?.[0]
     if (!file) return
     const reader = new FileReader()
-    reader.onload = () => {
-      const b64 = (reader.result as string).split(',')[1]
+    reader.onload = async () => {
+      const buffer = await file.arrayBuffer()
+      const bytes  = new Uint8Array(buffer)
+      const binary = bytes.reduce((acc, byte) => acc + String.fromCharCode(byte), '')
+      const b64    = btoa(binary)
       set('cert_cpf_pfx_base64', b64)
     }
-    reader.readAsDataURL(file)
+    reader.readAsArrayBuffer(file)
   }
 
   // ── Sequências de numeração ───────────────────────────────────────────────
@@ -157,12 +160,13 @@ export function FiscalTab({ onError }: FiscalTabProps) {
     if (!file) return
     setUploadingCert(true)
     try {
-      const reader = new FileReader()
-      reader.onload = () => {
-        const b64 = (reader.result as string).split(',')[1]
-        set('cert_pfx_base64', b64)
-      }
-      reader.readAsDataURL(file)
+      const buffer = await file.arrayBuffer()
+      // Converte ArrayBuffer → base64 puro (sem prefixo data:...)
+      // Usando Uint8Array para garantir binário correto
+      const bytes  = new Uint8Array(buffer)
+      const binary = bytes.reduce((acc, byte) => acc + String.fromCharCode(byte), '')
+      const b64    = btoa(binary)
+      set('cert_pfx_base64', b64)
     } finally {
       setUploadingCert(false)
     }
