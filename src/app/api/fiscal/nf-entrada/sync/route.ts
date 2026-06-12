@@ -26,16 +26,16 @@ function soapRequest(
       rejectUnauthorized: true,
     })
 
+    const bodyBuffer = Buffer.from(xmlBody, 'utf-8')
+
     const options = {
       hostname: 'www1.nfe.fazenda.gov.br',
       path: '/NFeDistribuicaoDFe/NFeDistribuicaoDFe.asmx',
       method: 'POST',
       agent,
       headers: {
-        'Content-Type': 'text/xml; charset=utf-8',
-        SOAPAction:
-          'http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe/nfeDistDFeInt',
-        'Content-Length': Buffer.byteLength(xmlBody),
+        'Content-Type': 'application/soap+xml; charset=utf-8; action="http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe/nfeDistDFeInteresse"',
+        'Content-Length': bodyBuffer.length,
       },
     }
 
@@ -46,51 +46,24 @@ function soapRequest(
     })
 
     req.on('error', reject)
-    req.write(xmlBody)
+    req.write(bodyBuffer)
     req.end()
   })
 }
 
-function buildSoapEnvelope({
-  tipo,
-  valor,
-  ultNSU,
-  ambiente,
-  cUFAutor,
-}: {
+function buildSoapEnvelope({ tipo, valor, ultNSU, ambiente, cUFAutor }: {
   tipo: 'cpf' | 'cnpj'
   valor: string
   ultNSU: string
   ambiente: number
   cUFAutor: string
 }) {
-  const docTag =
-    tipo === 'cpf'
-      ? `<CPF>${valor}</CPF>`
-      : `<CNPJ>${valor}</CNPJ>`
+  const docTag = tipo === 'cpf' ? `<CPF>${valor}</CPF>` : `<CNPJ>${valor}</CNPJ>`
 
-  const nfeDist = `
-    <distNSU xmlns="http://www.portalfiscal.inf.br/nfe">
-      <tpAmb>${ambiente}</tpAmb>
-      <cUFAutor>${cUFAutor}</cUFAutor>
-      ${docTag}
-      <distNSU>
-        <ultNSU>${ultNSU}</ultNSU>
-      </distNSU>
-    </distNSU>
-  `.trim()
+  // distDFeInt: XML interno que vai dentro de nfeDadosMsg
+  const distDFeInt = `<distDFeInt versao="1.01" xmlns="http://www.portalfiscal.inf.br/nfe"><tpAmb>${ambiente}</tpAmb><cUFAutor>${cUFAutor}</cUFAutor>${docTag}<distNSU><ultNSU>${ultNSU}</ultNSU></distNSU></distDFeInt>`
 
-  return `<?xml version="1.0" encoding="utf-8"?>
-<soap12:Envelope
-  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xmlns:xsd="http://www.w3.org/2001/XMLSchema"
-  xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">
-  <soap12:Body>
-    <nfeDistDFeInt xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe">
-      <nfeDist>${nfeDist}</nfeDist>
-    </nfeDistDFeInt>
-  </soap12:Body>
-</soap12:Envelope>`
+  return `<?xml version="1.0" encoding="utf-8"?><soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope" xmlns:nfed="http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe"><soap:Header/><soap:Body><nfed:nfeDistDFeInteresse><nfed:nfeDadosMsg>${distDFeInt}</nfed:nfeDadosMsg></nfed:nfeDistDFeInteresse></soap:Body></soap:Envelope>`
 }
 
 async function extrairNotas(xmlResposta: string) {
@@ -101,8 +74,13 @@ async function extrairNotas(xmlResposta: string) {
     parsed?.['soap:Envelope']?.['soap:Body'] ??
     parsed?.['soap12:Envelope']?.['soap12:Body']
 
+  // Método correto é nfeDistDFeInteresse, não nfeDistDFeInt
   const retorno =
-    body?.nfeDistDFeIntResponse?.nfeDistDFeIntResult?.retDistDFeInt
+    body?.nfeDistDFeInteresseResponse?.nfeDistDFeInteresseResult?.retDistDFeInt ??
+    body?.nfeDistDFeIntResponse?.nfeDistDFeIntResult?.retDistDFeInt // fallback legado
+
+  console.log('cStat:', retorno?.cStat)
+  console.log('xMotivo:', retorno?.xMotivo)
 
   if (!retorno) return []
 
@@ -300,10 +278,14 @@ export async function POST(req: NextRequest) {
         { status: 502 }
       )
     }
+    // ── LOG TEMPORÁRIO — remover após diagnóstico ──────────────
+    console.log('=== RESPOSTA SEFAZ RAW ===')
+    console.log(xmlResposta)
+    console.log('=== FIM RESPOSTA ===')
 
     // 8. Extrai notas
     const notas = await extrairNotas(xmlResposta)
-
+    console.log('Notas extraídas:', notas.length)
     // 9. Salva no banco + upsert de fornecedores
     if (notas.length > 0) {
       await supabaseAdmin

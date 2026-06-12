@@ -31,6 +31,17 @@ export const saveFiscalConfig = async (
 ): Promise<FiscalConfig> => {
   const company_id = await getCompanyId()
 
+  // Remove campos de certificado que são apenas marcadores visuais do frontend
+  // ou undefined — nunca devem sobrescrever o valor real no banco
+  const CERT_FIELDS = ['cert_pfx_base64', 'cert_cpf_pfx_base64'] as const
+  const clean = Object.fromEntries(
+    Object.entries(payload).filter(([key, value]) => {
+      if (value === undefined) return false
+      if (CERT_FIELDS.includes(key as any) && (value === '__saved__' || value === '')) return false
+      return true
+    })
+  ) as Partial<FiscalConfigPayload>
+
   const { data: existing } = await supabase
     .from('fiscal_configs')
     .select('id')
@@ -40,7 +51,7 @@ export const saveFiscalConfig = async (
   if (existing?.id) {
     const { data, error } = await supabase
       .from('fiscal_configs')
-      .update(payload)
+      .update(clean)
       .eq('id', existing.id)
       .select()
       .single()
@@ -50,7 +61,7 @@ export const saveFiscalConfig = async (
 
   const { data, error } = await supabase
     .from('fiscal_configs')
-    .insert([{ ...payload, company_id }])
+    .insert([{ ...clean, company_id }])
     .select()
     .single()
   if (error) throw new Error(error.message)

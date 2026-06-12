@@ -237,6 +237,9 @@ export function FiscalTab({ onError }: FiscalTabProps) {
       const payload = {
         ...form,
         nfce_serie: (form.nfce_serie ?? '').padStart(3, '0') || '001',
+        // Nunca sobrescreve o certificado com marcador visual
+        cert_pfx_base64:     form.cert_pfx_base64     === '__saved__' ? undefined : form.cert_pfx_base64,
+        cert_cpf_pfx_base64: form.cert_cpf_pfx_base64 === '__saved__' ? undefined : form.cert_cpf_pfx_base64,
       }
       await saveFiscalConfig(payload)
       setSaved(true)
