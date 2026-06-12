@@ -79,20 +79,49 @@ export function FiscalTab({ onError }: FiscalTabProps) {
   const [uploadingCert, setUploadingCert] = useState(false)
   const certRef = useRef<HTMLInputElement>(null)
   const certCpfRef = useRef<HTMLInputElement>(null)
+  const [certError, setCertError] = useState<string | null>(null)
+  const [uploadingCertCpf, setUploadingCertCpf] = useState(false)
 
   
-  const handleCertCpfUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCertCpfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    const reader = new FileReader()
-    reader.onload = async () => {
-      const buffer = await file.arrayBuffer()
-      const bytes  = new Uint8Array(buffer)
-      const binary = bytes.reduce((acc, byte) => acc + String.fromCharCode(byte), '')
-      const b64    = btoa(binary)
-      set('cert_cpf_pfx_base64', b64)
+
+    if (!companyId) { onError('Salve as configurações fiscais antes de enviar o certificado.'); return }
+    if (!form.cert_cpf_senha) { onError('Informe a senha do certificado CPF antes de fazer o upload.'); return }
+
+    setUploadingCertCpf(true)
+    setCertError(null)
+    try {
+      const buffer  = await file.arrayBuffer()
+      const bytes   = new Uint8Array(buffer)
+      const binary  = bytes.reduce((acc, b) => acc + String.fromCharCode(b), '')
+      const b64     = btoa(binary)
+
+      const res = await fetch('/api/fiscal/cert/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          companyId,
+          pfxBase64: b64,
+          senha:     form.cert_cpf_senha,
+          campo:     'cert_cpf_pfx_base64',
+        }),
+      })
+
+      const data = await res.json()
+      if (!res.ok) {
+        setCertError(data.message ?? 'Erro ao processar certificado CPF.')
+        return
+      }
+
+      set('cert_cpf_pfx_base64', '__saved__')
+    } catch (e: any) {
+      setCertError(e.message ?? 'Erro inesperado.')
+    } finally {
+      setUploadingCertCpf(false)
+      if (certCpfRef.current) certCpfRef.current.value = ''
     }
-    reader.readAsArrayBuffer(file)
   }
 
   // ── Sequências de numeração ───────────────────────────────────────────────
@@ -158,17 +187,46 @@ export function FiscalTab({ onError }: FiscalTabProps) {
   const handleCertUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
+
+    if (!companyId) { onError('Salve as configurações fiscais antes de enviar o certificado.'); return }
+    if (!form.cert_senha) { onError('Informe a senha do certificado antes de fazer o upload.'); return }
+
     setUploadingCert(true)
+    setCertError(null)
     try {
-      const buffer = await file.arrayBuffer()
-      // Converte ArrayBuffer → base64 puro (sem prefixo data:...)
-      // Usando Uint8Array para garantir binário correto
-      const bytes  = new Uint8Array(buffer)
-      const binary = bytes.reduce((acc, byte) => acc + String.fromCharCode(byte), '')
-      const b64    = btoa(binary)
-      set('cert_pfx_base64', b64)
+      const buffer  = await file.arrayBuffer()
+      const bytes   = new Uint8Array(buffer)
+      const binary  = bytes.reduce((acc, b) => acc + String.fromCharCode(b), '')
+      const b64     = btoa(binary)
+
+      const res = await fetch('/api/fiscal/cert/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          companyId,
+          pfxBase64: b64,
+          senha:     form.cert_senha,
+          campo:     'cert_pfx_base64',
+        }),
+      })
+
+      const data = await res.json()
+      if (!res.ok) {
+        setCertError(data.message ?? 'Erro ao processar certificado.')
+        return
+      }
+
+      // Marca visualmente como carregado (o base64 no form não precisa ser atualizado,
+      // pois já foi salvo direto no banco pela route)
+      set('cert_pfx_base64', '__saved__')
+      if (data.convertido) {
+        setCertError('⚠️ Certificado convertido de formato legado para moderno automaticamente.')
+      }
+    } catch (e: any) {
+      setCertError(e.message ?? 'Erro inesperado.')
     } finally {
       setUploadingCert(false)
+      if (certRef.current) certRef.current.value = ''
     }
   }
 
@@ -619,7 +677,32 @@ export function FiscalTab({ onError }: FiscalTabProps) {
             Certificado Digital A1 (.pfx)
           </h3>
 
-          {/* Upload area */}
+
+
+          {certError && (
+            <div className={`flex items-start gap-2 rounded-lg px-4 py-3 text-xs
+              ${certError.startsWith('⚠️')
+                ? 'bg-amber-50 border border-amber-200 text-amber-700'
+                : 'bg-red-50 border border-red-100 text-red-600'}`}>
+              <span className="shrink-0">{certError.startsWith('⚠️') ? '' : '❌'}</span>
+              <span>{certError.replace('⚠️ ', '')}</span>
+              <button onClick={() => setCertError(null)} className="ml-auto opacity-60 hover:opacity-100">✕</button>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className={labelCls}>Senha do Certificado</label>
+              <input
+                type="password"
+                className={inputCls}
+                value={form.cert_senha ?? ''}
+                onChange={e => set('cert_senha', e.target.value)}
+                placeholder="••••••••"
+                autoComplete="new-password"
+              />
+            </div>
+                      {/* Upload area */}
           <div
             onClick={() => certRef.current?.click()}
             className="border-2 border-dashed border-gray-200 rounded-xl p-6 text-center cursor-pointer hover:border-[#1a4a8a]/40 hover:bg-blue-50/30 transition-all"
@@ -647,19 +730,6 @@ export function FiscalTab({ onError }: FiscalTabProps) {
               <p className="text-xs text-gray-400">Certificado A1 no formato PFX / PKCS#12</p>
             </div>
           </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className={labelCls}>Senha do Certificado</label>
-              <input
-                type="password"
-                className={inputCls}
-                value={form.cert_senha ?? ''}
-                onChange={e => set('cert_senha', e.target.value)}
-                placeholder="••••••••"
-                autoComplete="new-password"
-              />
-            </div>
 
             <div>
               <label className={labelCls}>Validade do Certificado</label>
