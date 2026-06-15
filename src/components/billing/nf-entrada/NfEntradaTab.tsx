@@ -1,7 +1,6 @@
 'use client'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
-import { VincularItensCard } from './VincularItensCard'
 import { NfEntradaDetalhe } from './NfEntradaDetalhe'
 import {
   type NfEntrada,
@@ -35,8 +34,6 @@ export function NfEntradaTab({ companyId, onError }: Props) {
   const [search, setSearch]       = useState('')
   const [statusFilter, setStatus] = useState<NfEntrada['status'] | 'todas'>('todas')
   const [cfg, setCfg]             = useState<{ cpf?: string | null } | null>(null)
-  const [notasParaVincular, setNotasParaVincular] = useState<NfEntrada[]>([])
-  const [cardsDescartados, setCardsDescartados]   = useState<Set<string>>(new Set())
   const [notaDetalhe, setNotaDetalhe] = useState<NfEntrada | null>(null)
 
   const xmlInputRef = useRef<HTMLInputElement>(null)
@@ -52,76 +49,38 @@ export function NfEntradaTab({ companyId, onError }: Props) {
   }, [companyId])
 
   // ── Carregamento de notas ──────────────────────────────────
-  const loadNotas = useCallback(async () => {
-    setLoading(true)
-    try {
-      const { data, error } = await supabase
-        .from('nf_entrada')
-        .select(`
-          id,
-          company_id,
-          chave,
-          numero,
-          serie,
-          emitente_razao,
-          emitente_cnpj,
-          valor_total,
-          data_emissao,
-          status,
-          xml_url,
-          created_at,
-          itens_convertidos,
-          requer_revisao,
-          finalidade
-        `)
-        .eq('company_id', companyId)
-        .order('data_emissao', { ascending: false })
+const loadNotas = useCallback(async () => {
+  setLoading(true)
+  try {
+    const { data, error } = await supabase
+      .from('nf_entrada')
+      .select(`
+        id,
+        chave,
+        numero,
+        serie,
+        emitente_razao,
+        emitente_cnpj,
+        valor_total,
+        data_emissao,
+        status,
+        xml_url,
+        created_at,
+        itens_convertidos,
+        requer_revisao,
+        finalidade
+      `)
+      .eq('company_id', companyId)
+      .order('data_emissao', { ascending: false })
 
-      if (error) throw error
-
-      const lista = data ?? []
-      setNotas(lista)
-
-      // Detecta notas pendentes com itens sem vínculo na tabela relacional
-      if (lista.length > 0) {
-        const ids = lista
-          .filter(n => n.status === 'pendente')
-          .map(n => n.id)
-          .filter(Boolean) as string[]
-
-        if (ids.length > 0) {
-          const { data: itensPendentes } = await supabase
-            .from('nf_entrada_itens')
-            .select('nf_entrada_id')
-            .in('nf_entrada_id', ids)
-            .is('produto_id', null)
-
-          const idsComPendentes = new Set(
-            (itensPendentes ?? []).map((i: any) => i.nf_entrada_id)
-          )
-
-          const notasParaCard = lista.filter(n => idsComPendentes.has(n.id))
-
-          if (notasParaCard.length > 0) {
-            setNotasParaVincular(prev => {
-              const mapa = new Map(prev.map(n => [n.chave, n]))
-              notasParaCard.forEach(n => mapa.set(n.chave, n))
-              return Array.from(mapa.values())
-            })
-            setCardsDescartados(prev => {
-              const next = new Set(prev)
-              notasParaCard.forEach(n => next.delete(n.chave))
-              return next
-            })
-          }
-        }
-      }
-    } catch (e) {
-      onError(e instanceof Error ? e.message : 'Erro interno')
-    } finally {
-      setLoading(false)
-    }
-  }, [companyId, onError])
+    if (error) throw error
+    setNotas(data ?? [])
+  } catch (e) {
+    onError(e instanceof Error ? e.message : 'Erro interno')
+  } finally {
+    setLoading(false)
+  }
+}, [companyId, onError])
 
   useEffect(() => { loadNotas() }, [loadNotas])
 
@@ -181,17 +140,6 @@ export function NfEntradaTab({ companyId, onError }: Props) {
     await loadNotas()
     setImporting(false)
   }
-
-  // ── Handlers de vinculação ─────────────────────────────────
-  const handleDismissCard = (chave: string) =>
-    setCardsDescartados(prev => new Set([...prev, chave]))
-
-  const handleConfirmado = (chave: string) => {
-    setCardsDescartados(prev => new Set([...prev, chave]))
-    loadNotas()
-  }
-
-  const cardsVisiveis = notasParaVincular.filter(n => !cardsDescartados.has(n.chave))
 
   // ── Detalhe: updated / deleted ─────────────────────────────
   const handleNotaUpdated = (updated: NfEntrada) => {
@@ -277,18 +225,6 @@ export function NfEntradaTab({ companyId, onError }: Props) {
           </div>
         </div>
       </div>
-
-      {/* Cards de vinculação */}
-      {cardsVisiveis.map(nota => (
-        <VincularItensCard
-          key={nota.chave}
-          companyId={companyId}
-          nota={nota}
-          onConfirmado={() => handleConfirmado(nota.chave)}
-          onDismiss={() => handleDismissCard(nota.chave)}
-          onError={onError}
-        />
-      ))}
 
       {/* Resultado da importação */}
       {importResult && (
