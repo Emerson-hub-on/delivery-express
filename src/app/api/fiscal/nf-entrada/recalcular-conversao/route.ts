@@ -7,25 +7,10 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-type ItemNota = {
-  ean: string
-  codigo: string
-  descricao: string
-  ncm: string
-  cfop: string
-  cst: string
-  unidade: string
-  quantidade: number
-  valor_unitario: number
-  valor_total: number
-  produto_id: number | null
-  produto_nome: string | null
-}
-
 export async function POST(req: NextRequest) {
   const { companyId, chave, finalidade } = (await req.json()) as {
     companyId: string
-    chave: string
+    chave:     string
     finalidade: Finalidade
   }
 
@@ -34,48 +19,37 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    // 1. Busca a nota com os itens originais
-    const { data: nota, error: notaError } = await supabaseAdmin
-      .from('nf_entrada')
-      .select('itens_nota')
+    // 1. Busca CFOPs/CSTs dos itens na tabela relacional
+    const { data: itens, error: itensError } = await supabaseAdmin
+      .from('nf_entrada_itens')
+      .select('cfop, cst')
       .eq('company_id', companyId)
       .eq('chave', chave)
-      .single<{ itens_nota: ItemNota[] }>()
 
-    if (notaError || !nota) {
-      return NextResponse.json({ message: 'Nota não encontrada' }, { status: 404 })
+    if (itensError) throw itensError
+    if (!itens || itens.length === 0) {
+      return NextResponse.json({ message: 'Nenhum item encontrado para esta nota' }, { status: 404 })
     }
 
-    const itens: ItemNota[] = nota.itens_nota ?? []
-
-    // 2. Recalcula conversão com a nova finalidade usando regras do banco
-    const itensOriginais = itens.map(i => ({ cfop: i.cfop, cst: i.cst }))
-
+    // 2. Recalcula conversão com a nova finalidade
     const itensConvertidos = await converterCfopCst({
       companyId,
-      itens: itensOriginais,
+      itens: itens.map(i => ({ cfop: i.cfop, cst: i.cst })),
       finalidade,
     })
 
     const requer_revisao = itensConvertidos.some(i => !i.convertido)
 
-    // 3. Salva finalidade e itens convertidos
+    // 3. Salva finalidade e itens convertidos na nota
     const { error: updateError } = await supabaseAdmin
       .from('nf_entrada')
-      .update({
-        finalidade,
-        itens_convertidos: itensConvertidos,
-        requer_revisao,
-      })
+      .update({ finalidade, itens_convertidos: itensConvertidos, requer_revisao })
       .eq('company_id', companyId)
       .eq('chave', chave)
 
     if (updateError) throw updateError
 
-    return NextResponse.json({
-      itens_convertidos: itensConvertidos,
-      requer_revisao,
-    })
+    return NextResponse.json({ itens_convertidos: itensConvertidos, requer_revisao })
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Erro interno'
     return NextResponse.json({ message }, { status: 500 })
