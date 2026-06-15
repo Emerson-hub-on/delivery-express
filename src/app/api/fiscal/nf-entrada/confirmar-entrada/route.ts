@@ -6,26 +6,12 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-type ItemNota = {
-  ean: string
-  codigo: string
-  descricao: string
-  ncm: string
-  cfop: string
-  cst: string
-  unidade: string
-  quantidade: number
-  valor_unitario: number
-  valor_total: number
-  produto_id: number | null
-  produto_nome: string | null
-}
-
 export async function POST(req: NextRequest) {
-  const { companyId, chave, atualizacoes } = await req.json() as {
-    companyId: string
-    chave: string
+  const { companyId, chave, atualizacoes, fatores } = await req.json() as {
+    companyId:   string
+    chave:       string
     atualizacoes: { produtoId: number; novoPrecoVenda: number }[]
+    fatores?:    { itemId?: string; itemCodigo?: string; fatorConversao: number }[]
   }
 
   if (!companyId || !chave) {
@@ -33,55 +19,64 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { data: nota, error: notaError } = await supabaseAdmin
-      .from('nf_entrada')
-      .select('itens_nota')
+    // 1. Busca itens vinculados na tabela relacional
+    const { data: itens, error: itensError } = await supabaseAdmin
+      .from('nf_entrada_itens')
+      .select('id, codigo, produto_id, quantidade, valor_unitario')
       .eq('company_id', companyId)
       .eq('chave', chave)
-      .single<{ itens_nota: ItemNota[] }>()
+      .not('produto_id', 'is', null)
 
-    if (notaError || !nota) {
-      return NextResponse.json({ message: 'Nota não encontrada' }, { status: 404 })
+    if (itensError) throw itensError
+    if (!itens || itens.length === 0) {
+      return NextResponse.json({ message: 'Nenhum item vinculado encontrado' }, { status: 404 })
     }
 
-    const itens: ItemNota[] = nota.itens_nota ?? []
-
-    // Atualiza custo e estoque de todos os itens com produto_id
+    // 2. Atualiza custo, estoque e preço de cada produto
     await Promise.all(
-      itens
-        .filter((i): i is ItemNota & { produto_id: number } => i.produto_id !== null)
-        .map(async item => {
-          const { data: prod } = await supabaseAdmin
-            .from('products')
-            .select('stock')
-            .eq('id', item.produto_id)
-            .eq('company_id', companyId)
-            .single<{ stock: number | null }>()
+      itens.map(async (item) => {
+        // Fator de conversão para este item
+        const fatorItem = fatores?.find(f => f.itemId === item.id || f.itemCodigo === item.codigo)
+        const fator = fatorItem?.fatorConversao ?? 1
 
-            const updates: Record<string, number> = {
-            cost_price: item.valor_unitario,
-            }
+        const { data: prod } = await supabaseAdmin
+          .from('products')
+          .select('stock')
+          .eq('id', item.produto_id)
+          .eq('company_id', companyId)
+          .single<{ stock: number | null }>()
 
-            if (prod) {
-            updates.stock = prod.stock === null
-                ? item.quantidade
-                : prod.stock + item.quantidade
-            }
+        const qtdEstoque = item.quantidade * fator
 
-          const decisao = atualizacoes.find(a => a.produtoId === item.produto_id)
-          if (decisao) {
-            updates.price = decisao.novoPrecoVenda
-          }
+        const updates: Record<string, number> = {
+          cost_price: item.valor_unitario,
+          stock: prod?.stock === null || prod?.stock === undefined
+            ? qtdEstoque
+            : prod.stock + qtdEstoque,
+        }
 
+        const decisao = atualizacoes?.find(a => a.produtoId === item.produto_id)
+        if (decisao) {
+          updates.price = decisao.novoPrecoVenda
+        }
+
+        await supabaseAdmin
+          .from('products')
+          .update(updates)
+          .eq('id', item.produto_id)
+          .eq('company_id', companyId)
+
+        // Persiste o fator usado na tabela de itens
+        if (fator !== 1) {
           await supabaseAdmin
-            .from('products')
-            .update(updates)
-            .eq('id', item.produto_id)
-            .eq('company_id', companyId)
-        })
+            .from('nf_entrada_itens')
+            .update({ fator_conversao: fator })
+            .eq('id', item.id)
+        }
+      })
     )
 
-    // Marca a nota como confirmada
+    // 3. Marca nota como confirmada
     const { error: updateError } = await supabaseAdmin
       .from('nf_entrada')
       .update({ status: 'confirmada' })
