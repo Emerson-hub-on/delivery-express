@@ -3,19 +3,21 @@ import { useRef, useState } from 'react'
 import { Product, CategoryItem, ICMS_CSOSN, PIS_COFINS_CST, UnitCom, ProductSize } from '@/types/product'
 import { AddonSection } from '@/components/products/AddonSection'
 import { ProductSizeStock } from '@/components/products/ProductSizeStock'
+import { VariantSection } from '../products/VariantSection'
 
 interface ProductFormProps {
   form: Omit<Product, 'id' | 'code'>
   editingId: number | null
+  companyId: string | null          // ← novo
   categories: CategoryItem[]
   loadingCats: boolean
   saving: boolean
   uploading: boolean
   imagePreview: string | null
   onFieldChange: (
-  field: keyof Omit<Product, 'id' | 'code'>,
-  value: string | number | boolean | null | ProductSize[]
-) => void
+    field: keyof Omit<Product, 'id' | 'code'>,
+    value: string | number | boolean | null | ProductSize[]
+  ) => void
   onImageChange: (e: React.ChangeEvent<HTMLInputElement>) => void
   onSubmit: () => void
   onCancel: () => void
@@ -23,15 +25,15 @@ interface ProductFormProps {
 }
 
 const UNIT_OPTIONS: { value: UnitCom; label: string }[] = [
-  { value: 'UN', label: 'UN — Unidade' },
-  { value: 'KG', label: 'KG — Quilograma' },
-  { value: 'G',  label: 'G — Grama' },
-  { value: 'L',  label: 'L — Litro' },
-  { value: 'ML', label: 'ML — Mililitro' },
-  { value: 'CX', label: 'CX — Caixa' },
+  { value: 'UN',  label: 'UN — Unidade' },
+  { value: 'KG',  label: 'KG — Quilograma' },
+  { value: 'G',   label: 'G — Grama' },
+  { value: 'L',   label: 'L — Litro' },
+  { value: 'ML',  label: 'ML — Mililitro' },
+  { value: 'CX',  label: 'CX — Caixa' },
   { value: 'PCT', label: 'PCT — Pacote' },
-  { value: 'M',  label: 'M — Metro' },
-  { value: 'M2', label: 'M² — Metro quadrado' },
+  { value: 'M',   label: 'M — Metro' },
+  { value: 'M2',  label: 'M² — Metro quadrado' },
 ]
 
 const CFOP_OPTIONS = [
@@ -77,13 +79,12 @@ function FieldLabel({ children, required }: { children: React.ReactNode; require
   )
 }
 
-function InputCls() {
-  return 'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black'
-}
+const inputCls = 'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black'
 
 export function ProductForm({
   form,
   editingId,
+  companyId,
   categories,
   loadingCats,
   saving,
@@ -97,17 +98,13 @@ export function ProductForm({
 }: ProductFormProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [fiscalOpen, setFiscalOpen] = useState(false)
+
   const currentCategory = categories.find(c => c.name === form.category)
-  const availableSizes = currentCategory?.sizes ?? []
-  // Detecta se algum campo fiscal já está preenchido (modo edição)
-  const hasFiscalData = !!(form.ncm || form.cfop || form.icms_csosn)
+  const availableSizes  = currentCategory?.sizes ?? []
+  const hasFiscalData   = !!(form.ncm || form.cfop || form.icms_csosn)
 
-  const inputCls = InputCls()
-
-  // NCM: aplica máscara XXXX.XX.XX enquanto digita
   const handleNcm = (raw: string) => {
-    const digits = raw.replace(/\D/g, '').slice(0, 8)
-    onFieldChange('ncm', digits)
+    onFieldChange('ncm', raw.replace(/\D/g, '').slice(0, 8))
   }
 
   return (
@@ -151,7 +148,7 @@ export function ProductForm({
           <FieldLabel required>Nome</FieldLabel>
           <input
             type="text"
-            placeholder="Ex: Sushi Salmão"
+            placeholder="Ex: Camisa Básica Mengotti"
             value={form.name}
             onChange={e => onFieldChange('name', e.target.value)}
             className={inputCls}
@@ -237,54 +234,59 @@ export function ProductForm({
           <FieldLabel>Descrição</FieldLabel>
           <input
             type="text"
-            placeholder="Ex: 8 peças de salmão com cream cheese"
+            placeholder="Ex: Camisa tradicional manga curta"
             value={form.description || ''}
             onChange={e => onFieldChange('description', e.target.value)}
             className={inputCls}
           />
-        </div>    
+        </div>
       </div>
 
-        {/* ── Estoque / Tamanhos (mutuamente exclusivos) ───────── */}
-        {availableSizes.length > 0 ? (
-          <div className="mt-4">
-            <ProductSizeStock
-              availableSizes={availableSizes}
-              value={form.sizes ?? []}
-              onChange={sizes => onFieldChange('sizes', sizes)}
-            />
-          </div>
-        ) : (
-          <div className="mt-4">
-            <FieldLabel>Estoque</FieldLabel>
-            <input
-              type="number"
-              min={0}
-              step="1"
-              placeholder="Deixe vazio para não controlar"
-              value={form.stock ?? ''}
-              onChange={e => onFieldChange('stock', e.target.value === '' ? null : Number(e.target.value))}
-              className={inputCls}
-            />
-            <p className="text-xs text-gray-400 mt-1">Deixe vazio para não controlar estoque</p>
-          </div>
-        )}
-      {editingId !== null && <AddonSection productId={editingId} />}
-
-      {/* Estoque */}
-      <div>
-        <FieldLabel>Estoque</FieldLabel>
-        <input
-          type="number"
-          min={0}
-          step="1"
-          placeholder="Deixe vazio para não controlar"
-          value={form.stock ?? ''}
-          onChange={e => onFieldChange('stock', e.target.value === '' ? null : Number(e.target.value))}
-          className={inputCls}
+      {/* ── Estoque / Tamanhos / Variantes ───────────────────── */}
+      {/*
+        Lógica de exibição:
+        - Produto salvo (editingId) + categoria com tamanhos → VariantSection (cor × tamanho)
+        - Produto salvo (editingId) + categoria sem tamanhos → VariantSection (cor × estoque simples)
+        - Produto novo                                       → estoque/tamanhos simples (FK ainda não existe)
+      */}
+      {editingId !== null && companyId ? (
+        <VariantSection
+          productId={editingId}
+          companyId={companyId}
+          availableSizes={availableSizes}
         />
-        <p className="text-xs text-gray-400 mt-1">Deixe vazio para não controlar estoque</p>
-      </div>
+      ) : availableSizes.length > 0 ? (
+        <div className="mt-4">
+          <ProductSizeStock
+            availableSizes={availableSizes}
+            value={form.sizes ?? []}
+            onChange={sizes => onFieldChange('sizes', sizes)}
+          />
+          <p className="text-xs text-amber-600 mt-2">
+            💡 Variantes de cor ficam disponíveis após salvar o produto.
+          </p>
+        </div>
+      ) : (
+        <div className="mt-4">
+          <FieldLabel>Estoque</FieldLabel>
+          <input
+            type="number"
+            min={0}
+            step="1"
+            placeholder="Deixe vazio para não controlar"
+            value={form.stock ?? ''}
+            onChange={e => onFieldChange('stock', e.target.value === '' ? null : Number(e.target.value))}
+            className={inputCls}
+          />
+          <p className="text-xs text-gray-400 mt-1">Deixe vazio para não controlar estoque</p>
+          <p className="text-xs text-amber-600 mt-1">
+            💡 Variantes de cor ficam disponíveis após salvar o produto.
+          </p>
+        </div>
+      )}
+
+      {/* ── Complementos (addons) ─────────────────────────────── */}
+      {editingId !== null && <AddonSection productId={editingId} />}
 
       {/* ── Seção Fiscal (colapsável) ────────────────────────── */}
       <div className="mt-6 border border-gray-100 rounded-xl overflow-hidden">
@@ -322,7 +324,7 @@ export function ProductForm({
               <FieldLabel required>NCM</FieldLabel>
               <input
                 type="text"
-                placeholder="Ex: 21069090"
+                placeholder="Ex: 61051000"
                 maxLength={8}
                 value={form.ncm || ''}
                 onChange={e => handleNcm(e.target.value)}
@@ -390,18 +392,19 @@ export function ProductForm({
             </div>
 
             {form.unit_trib && (
-            <div>
-              <FieldLabel>Fator de conversão</FieldLabel>
-              <input type="number" min={1} step={1}
-                value={form.fator_conversao ?? 1}
-                onChange={e => onFieldChange('fator_conversao', Number(e.target.value))}
-                className={inputCls}
-              />
-              <p className="text-xs text-gray-400 mt-1">
-                Ex: 1 CX = 12 UN → fator 12
-              </p>
-            </div>
-          )}
+              <div>
+                <FieldLabel>Fator de conversão</FieldLabel>
+                <input
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={form.fator_conversao ?? 1}
+                  onChange={e => onFieldChange('fator_conversao', Number(e.target.value))}
+                  className={inputCls}
+                />
+                <p className="text-xs text-gray-400 mt-1">Ex: 1 CX = 12 UN → fator 12</p>
+              </div>
+            )}
 
             {/* Origem */}
             <div>
@@ -416,6 +419,7 @@ export function ProductForm({
                 ))}
               </select>
             </div>
+
             {/* Indicador de Escala */}
             <div>
               <FieldLabel required>Escala Relevante</FieldLabel>
@@ -448,7 +452,8 @@ export function ProductForm({
                 />
               </div>
             )}
-            {/* Divisor visual */}
+
+            {/* Divisor ICMS */}
             <div className="sm:col-span-2 lg:col-span-3">
               <p className="text-xs font-semibold uppercase tracking-widest text-gray-400">ICMS – Simples Nacional</p>
               <div className="border-t border-gray-100 mt-2" />
@@ -467,7 +472,7 @@ export function ProductForm({
                 ))}
               </select>
               <p className="text-xs text-gray-400 mt-1">
-                Para a maioria dos estabelecimentos alimentícios no Simples: <strong>400</strong>
+                Para a maioria dos estabelecimentos no Simples: <strong>400</strong>
               </p>
             </div>
 
@@ -524,7 +529,6 @@ export function ProductForm({
               <p className="text-xs text-gray-400 mt-1">0% para Simples Nacional</p>
             </div>
 
-            {/* Spacer no grid de 3 colunas */}
             <div className="hidden lg:block" />
 
             {/* COFINS CST */}

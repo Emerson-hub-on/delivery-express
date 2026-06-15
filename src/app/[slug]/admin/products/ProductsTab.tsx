@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Product, CategoryItem, ProductSize } from '@/types/product'
 import { createProduct, updateProduct, deleteProduct, archiveProduct, checkProductHasOrders } from '@/services/product'
 import { supabase } from '@/lib/supabase'
@@ -54,10 +54,11 @@ export function ProductsTab({
     ...EMPTY_PRODUCT,
     category: categories[0]?.name ?? '',
   })
-  const [editingId, setEditingId] = useState<number | null>(null)
-  const [saving, setSaving] = useState(false)
-  const [uploading, setUploading] = useState(false)
+  const [editingId, setEditingId]     = useState<number | null>(null)
+  const [saving, setSaving]           = useState(false)
+  const [uploading, setUploading]     = useState(false)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [companyId, setCompanyId]     = useState<string | null>(null)  // ← novo
 
   const [deleteModal, setDeleteModal] = useState<{
     productId: number
@@ -66,9 +67,29 @@ export function ProductsTab({
   } | null>(null)
   const [deleteChecking, setDeleteChecking] = useState(false)
 
-const handleFieldChange = (field: keyof Omit<Product, 'id' | 'code'>, value: string | number | boolean | null | ProductSize[]) => {
-  setForm(f => ({ ...f, [field]: value }))
-}
+  // ── Busca companyId uma única vez ─────────────────────────
+  useEffect(() => {
+    async function fetchCompanyId() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      const { data: company } = await supabase
+        .from('companies')
+        .select('id')
+        .eq('user_id', user.id)
+        .single()
+
+      if (company) setCompanyId(company.id)
+    }
+    fetchCompanyId()
+  }, [])
+
+  const handleFieldChange = (
+    field: keyof Omit<Product, 'id' | 'code'>,
+    value: string | number | boolean | null | ProductSize[]
+  ) => {
+    setForm(f => ({ ...f, [field]: value }))
+  }
 
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -95,32 +116,21 @@ const handleFieldChange = (field: keyof Omit<Product, 'id' | 'code'>, value: str
   }
 
   const handleSubmit = async () => {
-    // Validações individuais para mensagens claras
-    if (!form.name.trim())
-      return onError('Informe o nome do produto.')
-
-    if (!form.category)
-      return onError('Selecione uma categoria.')
-
-    if (form.price <= 0)
-      return onError('Informe um preço válido.')
-
-    if (uploading)
-      return onError('Aguarde o upload da imagem terminar antes de salvar.')
-
-    if (!form.image)
-      return onError('Adicione uma imagem ao produto antes de salvar.')
+    if (!form.name.trim())   return onError('Informe o nome do produto.')
+    if (!form.category)      return onError('Selecione uma categoria.')
+    if (form.price <= 0)     return onError('Informe um preço válido.')
+    if (uploading)           return onError('Aguarde o upload da imagem terminar antes de salvar.')
+    if (!form.image)         return onError('Adicione uma imagem ao produto antes de salvar.')
 
     if (form.ncm && !/^\d{8}$/.test(form.ncm))
       return onError('NCM deve ter exatamente 8 dígitos numéricos.')
-
     if (form.cest && !/^\d{7}$/.test(form.cest))
       return onError('CEST deve ter exatamente 7 dígitos numéricos.')
 
     const payload: Omit<Product, 'id' | 'code'> = {
       ...form,
-      ncm: form.ncm || undefined,
-      cest: form.cest || undefined,
+      ncm:      form.ncm      || undefined,
+      cest:     form.cest     || undefined,
       unit_trib: form.unit_trib || undefined,
       icms_aliq: form.icms_csosn === '900' ? (form.icms_aliq ?? undefined) : undefined,
     }
@@ -151,7 +161,6 @@ const handleFieldChange = (field: keyof Omit<Product, 'id' | 'code'>, value: str
     setImagePreview(product.image)
   }
 
-  // Ao abrir o form para novo produto, garante que category já vem preenchida
   const handleShowForm = () => {
     setForm({ ...EMPTY_PRODUCT, category: categories[0]?.name ?? '' })
     setEditingId(null)
@@ -163,7 +172,6 @@ const handleFieldChange = (field: keyof Omit<Product, 'id' | 'code'>, value: str
   const handleDeleteRequest = async (id: number) => {
     const product = products.find(p => p.id === id)
     if (!product) return
-
     try {
       setDeleteChecking(true)
       onError(null)
@@ -232,6 +240,7 @@ const handleFieldChange = (field: keyof Omit<Product, 'id' | 'code'>, value: str
         <ProductForm
           form={form}
           editingId={editingId}
+          companyId={companyId}          // ← passado aqui
           categories={categories}
           loadingCats={loadingCats}
           saving={saving}
@@ -252,10 +261,9 @@ const handleFieldChange = (field: keyof Omit<Product, 'id' | 'code'>, value: str
         onDelete={handleDeleteRequest}
         deletingId={deleteChecking ? -1 : null}
         onToggleActive={handleToggleActive}
-
       />
 
-      {/* Modal de confirmação */}
+      {/* Modal de confirmação de exclusão */}
       {deleteModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div

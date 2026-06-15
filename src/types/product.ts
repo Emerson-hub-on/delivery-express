@@ -48,6 +48,7 @@ export type Product = {
   cost_price?: number | null
   ean?: string | null
   sizes?: ProductSize[] | null
+  variants?: ProductVariant[] | null
   unidade_estoque?: string
   fator_conversao?: number
   ncm?: string
@@ -64,6 +65,27 @@ export type Product = {
   cofins_aliq?: number
   ind_escala?: 'S' | 'N'
   cnpj_fabricante?: string
+}
+
+// ── Variantes (cor × produto) ─────────────────────────────────
+
+export type ProductColor = {
+  id: number
+  company_id: string
+  name: string        // "AMARELO", "VINHO"
+  hex_code?: string | null
+}
+
+export type ProductVariant = {
+  id: number
+  product_id: number
+  color_id: number
+  color?: ProductColor          // preenchido via join
+  image?: string | null         // override da imagem principal
+  sizes?: ProductSize[] | null  // mesma estrutura de products.sizes
+  stock?: number | null
+  active?: boolean
+  created_at?: string
 }
 
 export type CategoryType = 'clothing' | 'footwear' | 'other'
