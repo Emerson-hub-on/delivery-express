@@ -37,7 +37,7 @@ function extrairItensDoXml(xmlRaw: string) {
       ean:             ean && ean !== 'SEM GTIN' ? ean : null,
       ncm:             det.prod?.NCM?.toString()   ?? '',
       cfop:            det.prod?.CFOP?.toString()  ?? '',
-      cst,
+      cst: (icmsValores[0]?.CST?.toString() ?? icmsValores[0]?.CSOSN?.toString() ?? '').padStart(3, '0'),
       unidade:         det.prod?.uCom?.toString()  ?? '',
       quantidade:      parseFloat(det.prod?.qCom   ?? '0'),
       valor_unitario:  parseFloat(det.prod?.vUnCom ?? '0'),

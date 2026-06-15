@@ -200,24 +200,39 @@ export function NfEntradaDetalhe({ nota, companyId, onBack, onUpdated, onDeleted
   const [itens,         setItens]         = useState<ItemEntrada[]>([])
   const [loadingItens,  setLoadingItens]  = useState(true)
 
-  useEffect(() => {
-    setLoadingItens(true)
-    supabase
-      .from('nf_entrada_itens')
-      .select('*')
-      .eq('nf_entrada_id', nota.id)
-      .order('id')
-      .then(({ data, error }) => {
-        if (error) onError(error.message)
-        const lista = (data ?? []) as ItemEntrada[]
-        setItens(lista)
-        // inicializa fatores com os valores salvos
-        const fat: Record<string, number> = {}
-        lista.forEach(i => { fat[i.id] = i.fator_conversao ?? 1 })
-        setFatores(fat)
-        setLoadingItens(false)
-      })
-  }, [nota.id])
+useEffect(() => {
+  setLoadingItens(true)
+  supabase
+    .from('nf_entrada_itens')
+    .select('*')
+    .eq('nf_entrada_id', nota.id)
+    .order('id')
+    .then(async ({ data, error }) => {
+      if (error) onError(error.message)
+      const lista = (data ?? []) as ItemEntrada[]
+      setItens(lista)
+      const fat: Record<string, number> = {}
+      lista.forEach(i => { fat[i.id] = i.fator_conversao ?? 1 })
+      setFatores(fat)
+      setLoadingItens(false)
+
+      // ← Auto-converte se ainda não tem conversão salva
+      if (lista.length > 0 && (!nota.itens_convertidos || (nota.itens_convertidos as any[]).length === 0)) {
+        try {
+          const res = await fetch('/api/fiscal/nf-entrada/recalcular-conversao', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ companyId, chave: nota.chave, finalidade }),
+          })
+          if (res.ok) {
+            const { itens_convertidos: conv, requer_revisao } = await res.json()
+            setItensConvertidos(conv)
+            onUpdated({ ...nota, itens_convertidos: conv, requer_revisao })
+          }
+        } catch { /* silencioso */ }
+      }
+    })
+}, [nota.id])
 
   const badge      = STATUS_BADGE[nota.status]
   const totalItens = itens.reduce((s, i) => s + i.valor_total, 0)

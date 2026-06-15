@@ -245,7 +245,7 @@ export function ProductForm({
         </div>    
       </div>
 
-                        {/* ── Estoque / Tamanhos (mutuamente exclusivos) ───────── */}
+        {/* ── Estoque / Tamanhos (mutuamente exclusivos) ───────── */}
         {availableSizes.length > 0 ? (
           <div className="mt-4">
             <ProductSizeStock
