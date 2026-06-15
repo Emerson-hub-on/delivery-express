@@ -52,12 +52,12 @@ const load = async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error('Não autenticado')
 
-    const { data: company, error: coErr } = await supabase
-      .from('companies')
-      .select('id')
-      .eq('owner_id', user.id)
-      .single()
-    if (coErr || !company) throw new Error('Empresa não encontrada')
+  const { data: company, error: coErr } = await supabase
+    .from('companies')
+    .select('id')
+    .eq('id', user.id)
+    .single()
+  if (coErr || !company) throw new Error('Empresa não encontrada')
 
     // ── busca caixas filtrados pela empresa ──────────────────────────
     const { data: registers, error: regErr } = await supabase
