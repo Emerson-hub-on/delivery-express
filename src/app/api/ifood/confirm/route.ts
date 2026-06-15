@@ -4,7 +4,6 @@ import { getIfoodToken } from '@/lib/ifood-token'
 
 const IFOOD_API = 'https://merchant-api.ifood.com.br'
 
-export const dynamic = 'force-dynamic' // ← obrigatório em toda route com env de servidor
 
 export async function POST(req: NextRequest) {
   // ← createClient AQUI DENTRO, nunca no topo do módulo

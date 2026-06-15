@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
-export const dynamic = 'force-dynamic' // ← garante que a route nunca é estática
+
 
 export async function GET(req: NextRequest) {
   // ── Instancia aqui dentro para evitar erro no build ──────────

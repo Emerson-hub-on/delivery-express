@@ -6,7 +6,6 @@ import { mapIfoodToOrder, IfoodOrder } from '@/services/ifood-mapper'
 
 const IFOOD_API = 'https://merchant-api.ifood.com.br'
 
-export const dynamic = 'force-dynamic'
 
 function getSupabaseAdmin() {
   return createClient(

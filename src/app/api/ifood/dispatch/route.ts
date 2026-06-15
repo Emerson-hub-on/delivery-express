@@ -4,7 +4,6 @@ import { getIfoodToken } from '@/lib/ifood-token'
 
 const IFOOD_API = 'https://merchant-api.ifood.com.br'
 
-export const dynamic = 'force-dynamic'
 
 export async function POST(req: NextRequest) {
   const supabaseAdmin = createClient(
