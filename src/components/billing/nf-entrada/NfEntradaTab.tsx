@@ -5,11 +5,8 @@ import { VincularItensCard } from './VincularItensCard'
 import { NfEntradaDetalhe } from './NfEntradaDetalhe'
 import {
   type NfEntrada,
-  type ItemNota,
-  type Evento,
   STATUS_LABEL,
   STATUS_COLOR,
-  CONFIRM_MESSAGES,
 } from './types'
 
 interface Props {
@@ -40,9 +37,6 @@ export function NfEntradaTab({ companyId, onError }: Props) {
   const [cfg, setCfg]             = useState<{ cpf?: string | null } | null>(null)
   const [notasParaVincular, setNotasParaVincular] = useState<NfEntrada[]>([])
   const [cardsDescartados, setCardsDescartados]   = useState<Set<string>>(new Set())
-  const [excluindo, setExcluindo] = useState<string | null>(null)
-
-  // ── Detalhe ────────────────────────────────────────────────
   const [notaDetalhe, setNotaDetalhe] = useState<NfEntrada | null>(null)
 
   const xmlInputRef = useRef<HTMLInputElement>(null)
@@ -63,32 +57,64 @@ export function NfEntradaTab({ companyId, onError }: Props) {
     try {
       const { data, error } = await supabase
         .from('nf_entrada')
-        .select('*')
+        .select(`
+          id,
+          company_id,
+          chave,
+          numero,
+          serie,
+          emitente_razao,
+          emitente_cnpj,
+          valor_total,
+          data_emissao,
+          status,
+          xml_url,
+          created_at,
+          itens_convertidos,
+          requer_revisao,
+          finalidade
+        `)
         .eq('company_id', companyId)
         .order('data_emissao', { ascending: false })
+
       if (error) throw error
 
       const lista = data ?? []
       setNotas(lista)
 
-      const comItensPendentes = lista.filter(
-        n =>
-          n.status === 'pendente' &&
-          Array.isArray(n.itens_nota) &&
-          (n.itens_nota as ItemNota[]).some(i => i.produto_id === null)
-      )
+      // Detecta notas pendentes com itens sem vínculo na tabela relacional
+      if (lista.length > 0) {
+        const ids = lista
+          .filter(n => n.status === 'pendente')
+          .map(n => n.id)
+          .filter(Boolean) as string[]
 
-      if (comItensPendentes.length > 0) {
-        setNotasParaVincular(prev => {
-          const mapa = new Map(prev.map(n => [n.chave, n]))
-          comItensPendentes.forEach(n => mapa.set(n.chave, n))
-          return Array.from(mapa.values())
-        })
-        setCardsDescartados(prev => {
-          const next = new Set(prev)
-          comItensPendentes.forEach(n => next.delete(n.chave))
-          return next
-        })
+        if (ids.length > 0) {
+          const { data: itensPendentes } = await supabase
+            .from('nf_entrada_itens')
+            .select('nf_entrada_id')
+            .in('nf_entrada_id', ids)
+            .is('produto_id', null)
+
+          const idsComPendentes = new Set(
+            (itensPendentes ?? []).map((i: any) => i.nf_entrada_id)
+          )
+
+          const notasParaCard = lista.filter(n => idsComPendentes.has(n.id))
+
+          if (notasParaCard.length > 0) {
+            setNotasParaVincular(prev => {
+              const mapa = new Map(prev.map(n => [n.chave, n]))
+              notasParaCard.forEach(n => mapa.set(n.chave, n))
+              return Array.from(mapa.values())
+            })
+            setCardsDescartados(prev => {
+              const next = new Set(prev)
+              notasParaCard.forEach(n => next.delete(n.chave))
+              return next
+            })
+          }
+        }
       }
     } catch (e) {
       onError(e instanceof Error ? e.message : 'Erro interno')
@@ -129,7 +155,6 @@ export function NfEntradaTab({ companyId, onError }: Props) {
     setImportResult(null)
     let importados = 0
     let erros = 0
-    const novasNotasParaVincular: NfEntrada[] = []
 
     for (const file of files) {
       try {
@@ -139,26 +164,8 @@ export function NfEntradaTab({ companyId, onError }: Props) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ companyId, xmlContent }),
         })
-        if (!res.ok) {
-          erros++
-        } else {
-          const result = await res.json() as {
-            nota: NfEntrada
-            requer_revisao: boolean
-            nao_encontrados: ItemNota[]
-          }
-          importados++
-          if (result.nao_encontrados?.length > 0) {
-            novasNotasParaVincular.push({
-              ...result.nota,
-              itens_nota: result.nao_encontrados.map(i => ({
-                ...i,
-                produto_id:   null,
-                produto_nome: null,
-              })),
-            })
-          }
-        }
+        if (!res.ok) { erros++; continue }
+        importados++
       } catch {
         erros++
       }
@@ -170,15 +177,8 @@ export function NfEntradaTab({ companyId, onError }: Props) {
       onError(`Nenhuma nota importada. ${erros} arquivo(s) com erro.`)
     }
 
+    // loadNotas já detecta notas com itens pendentes e monta os cards
     await loadNotas()
-
-    if (novasNotasParaVincular.length > 0) {
-      setNotasParaVincular(prev => {
-        const existentes = new Set(prev.map(n => n.chave))
-        return [...prev, ...novasNotasParaVincular.filter(n => !existentes.has(n.chave))]
-      })
-    }
-
     setImporting(false)
   }
 
@@ -340,10 +340,10 @@ export function NfEntradaTab({ companyId, onError }: Props) {
       {/* Resumo */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {([
-          { label: 'Total encontradas', value: notas.length,                                              color: 'text-gray-700' },
-          { label: 'Pendentes',         value: notas.filter(n => n.status === 'pendente').length,         color: 'text-yellow-600' },
-          { label: 'Confirmadas',       value: notas.filter(n => n.status === 'confirmada').length,       color: 'text-green-600' },
-          { label: 'Valor filtrado',    value: `R$ ${fmtMoney(totalValor)}`,                              color: 'text-blue-600' },
+          { label: 'Total encontradas', value: notas.length,                                        color: 'text-gray-700'  },
+          { label: 'Pendentes',         value: notas.filter(n => n.status === 'pendente').length,   color: 'text-yellow-600' },
+          { label: 'Confirmadas',       value: notas.filter(n => n.status === 'confirmada').length, color: 'text-green-600'  },
+          { label: 'Valor filtrado',    value: `R$ ${fmtMoney(totalValor)}`,                        color: 'text-blue-600'   },
         ] as const).map(card => (
           <div key={card.label} className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
             <p className="text-xs text-gray-400">{card.label}</p>
@@ -417,8 +417,7 @@ export function NfEntradaTab({ companyId, onError }: Props) {
                       <td className="px-4 py-3 text-center" onClick={e => e.stopPropagation()}>
                         <button
                           onClick={() => setNotaDetalhe(nota)}
-                          className="text-xs px-3 py-1 rounded-lg bg-gray-100 text-gray-600
-                            hover:bg-gray-200 transition-colors"
+                          className="text-xs px-3 py-1 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
                         >
                           Ver detalhes →
                         </button>

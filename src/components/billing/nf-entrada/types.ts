@@ -9,27 +9,30 @@ export interface NfEntrada {
   data_emissao: string
   status: 'pendente' | 'confirmada' | 'cancelada' | 'recusada'
   xml_url?: string | null
-  itens_nota?: ItemNota[]
   created_at?: string
-  // campos adicionais do banco
   requer_revisao?: boolean
   finalidade?: string | null
   itens_convertidos?: unknown | null
-  xml_raw?: string | null
 }
 
-export interface ItemNota {
-  ean: string
-  codigo: string
-  descricao: string
-  unidade: string
-  quantidade: number
-  valor_unitario: number
-  valor_total: number
-  produto_id: number | null
-  produto_nome: string | null
-  cfop: string   
-  cst: string | number
+// ItemNota removida — use ItemEntrada de NfEntradaDetalhe.tsx
+// Mova para cá se mais de um componente precisar importar:
+export interface ItemEntrada {
+  id:              string
+  nf_entrada_id:   string
+  codigo:          string
+  descricao:       string
+  ean:             string | null
+  ncm:             string
+  cfop:            string
+  cst:             string
+  unidade:         string
+  quantidade:      number
+  valor_unitario:  number
+  valor_total:     number
+  produto_id:      number | null
+  produto_nome:    string | null
+  fator_conversao: number
 }
 
 export interface ProdutoBusca {
@@ -73,7 +76,6 @@ export const CONFIRM_MESSAGES: Partial<Record<Evento, string>> = {
   cancelamento: 'Tem certeza que deseja cancelar esta nota?',
 }
 
-// Unidades que indicam embalagem (não são unidades-base)
 const UNIDADES_EMBALAGEM = new Set(['CX', 'FD', 'PCT', 'KIT', 'CJ', 'FARDO', 'CAIXA'])
 
 export function precisaConversao(
