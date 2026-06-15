@@ -28,7 +28,7 @@ export default function AdminLoginPage() {
 
       const { data: company, error: companyError } = await supabase
         .from('companies')
-        .select('id, slug, user_id')
+        .select('id, slug')
         .eq('slug', params.slug)
         .maybeSingle()
 
@@ -50,7 +50,7 @@ export default function AdminLoginPage() {
 
       setDebugMsg(`Empresa encontrada: ${company.slug}`)
 
-      if (company.user_id !== userId) {
+      if (company.id !== userId) {
         await supabase.auth.signOut()
         setAuthenticated(false)
         setError('Acesso negado para esta empresa.')

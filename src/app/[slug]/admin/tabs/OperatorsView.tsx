@@ -27,7 +27,7 @@ async function getCompanyId(): Promise<string> {
   const { data: co } = await supabase
     .from('companies')
     .select('id')
-    .eq('owner_id', uid)
+    .eq('id', uid)
     .single()
   if (!co) throw new Error('Empresa não encontrada')
   return co.id

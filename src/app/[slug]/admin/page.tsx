@@ -58,7 +58,7 @@ useEffect(() => {
     const { data: company } = await supabase
       .from('companies')
       .select('id')
-      .eq('user_id', data.session.user.id)
+      .eq('id', data.session.user.id)
       .single()
 
     if (!company) {
