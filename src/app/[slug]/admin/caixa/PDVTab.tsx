@@ -16,6 +16,7 @@ type CartItem = {
   image: string
   qty: number
   discount: number
+  variant_label?: string 
 }
 
 type Consumer = {
@@ -356,6 +357,7 @@ const handleEmitirNfce = async (tipo: 'normal' | 'contingencia') => {
       order:        idx + 1,
       product_id:   item.id,
       product_name: item.name,
+      variant_label:  item.variant_label ?? undefined,
       ean:          null,
       quantity:     item.qty,
       unit_price:   item.price,
