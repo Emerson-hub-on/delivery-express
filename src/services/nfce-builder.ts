@@ -1,22 +1,23 @@
 import { FiscalConfig } from '@/types/fiscal'
 
 export type NfceItem = {
-  order:        number
-  product_id:   number
-  product_name: string
-  ean:          string | null
-  quantity:     number
-  unit_price:   number
-  discount:     number   // percentual
-  ncm:          string   // obrigatório SEFAZ — ex: '22021000'
-  cfop:         string   // ex: '5102' (venda dentro do estado)
-  cst:          string   // ex: '400' (simples nacional isento)
-  unit:         string   // ex: 'UN'
+  order:          number
+  product_id:     number
+  product_name:   string
+  variant_label?: string   // ← novo: "AMARELO / M", "VINHO", "GG" …
+  ean:            string | null
+  quantity:       number
+  unit_price:     number
+  discount:       number
+  ncm:            string
+  cfop:           string
+  cst:            string
+  unit:           string
 }
 
 export type NfceConsumer = {
   name: string
-  cpf:  string   // 11 dígitos
+  cpf:  string
 }
 
 export type NfceBuildPayload = {
@@ -31,21 +32,18 @@ export type NfceBuildPayload = {
   contingencia:  boolean
 }
 
-// Formata data para padrão SEFAZ: AAAA-MM-DDTHH:MM:SS-03:00
 function fmtDate(d = new Date()) {
   const pad = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}` +
          `T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}-03:00`
 }
 
-// Forma de pagamento → código SEFAZ
 const tPagMap: Record<string, string> = {
   dinheiro: '01',
-  cartao:   '03',   // cartão de crédito (ajuste para '04' se débito)
+  cartao:   '03',
   pix:      '17',
 }
 
-// Mapeamento UF → código IBGE (cUF)
 const cUFMap: Record<string, string> = {
   AC: '12', AL: '27', AM: '13', AP: '16', BA: '29',
   CE: '23', DF: '53', ES: '32', GO: '52', MA: '21',
@@ -55,36 +53,37 @@ const cUFMap: Record<string, string> = {
   SP: '35', TO: '17',
 }
 
-// Calcula impostos simples (Simples Nacional / CSOSN 400 = sem destaque)
 function calcItem(item: NfceItem) {
-  const unitLiq  = item.unit_price * (1 - item.discount / 100)
-  const vProd    = parseFloat((unitLiq * item.quantity).toFixed(2))
-  const vDesc    = parseFloat((item.unit_price * item.quantity - vProd).toFixed(2))
+  const unitLiq = item.unit_price * (1 - item.discount / 100)
+  const vProd   = parseFloat((unitLiq * item.quantity).toFixed(2))
+  const vDesc   = parseFloat((item.unit_price * item.quantity - vProd).toFixed(2))
   return { unitLiq, vProd, vDesc }
 }
 
-export function buildNfceXml(p: NfceBuildPayload): string {
-  const now        = new Date()
-  const dhEmi      = fmtDate(now)
+// Escapa caracteres especiais XML
+function escXml(s: string) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
 
-  // ── cNF: código numérico aleatório de 8 dígitos (≠ nNF) ──────────────────
-  // A SEFAZ exige que cNF seja gerado aleatoriamente para evitar duplicidade.
-  // Nunca deve ser igual ao nNF.
+export function buildNfceXml(p: NfceBuildPayload): string {
+  const now   = new Date()
+  const dhEmi = fmtDate(now)
+
   const randomBuffer = new Uint32Array(1)
   crypto.getRandomValues(randomBuffer)
   const cNF = String(randomBuffer[0] % 99999999 + 1).padStart(8, '0')
 
-  const nNF        = String(p.nfceNumero).padStart(9, '0')
-  const mod        = '65'   // NFC-e
-  const tpNF       = '1'    // saída
-  const indFinal   = '1'    // consumidor final
-  const indPres    = '1'    // presencial
-  const tpAmb      = p.config.ambiente === 1 ? '1' : '2'
-  const tpEmis     = p.contingencia ? '9' : '1'
+  const nNF      = String(p.nfceNumero).padStart(9, '0')
+  const mod      = '65'
+  const tpNF     = '1'
+  const indFinal = '1'
+  const indPres  = '1'
+  const tpAmb    = p.config.ambiente === 1 ? '1' : '2'
+  const tpEmis   = p.contingencia ? '9' : '1'
 
-  // Totais
   let vProdTotal = 0
   let vDescTotal = 0
+
   const itemsXml = p.items.map((item, idx) => {
     const { vProd, vDesc } = calcItem(item)
     vProdTotal += vProd
@@ -93,12 +92,21 @@ export function buildNfceXml(p: NfceBuildPayload): string {
     const nItem = String(idx + 1).padStart(3, '0')
     const cEAN  = item.ean ?? 'SEM GTIN'
 
+    // ── xProd: nome do produto + variante (cor/tamanho) ──────────────────
+    // Compõe antes de truncar para garantir que o label da variante
+    // não seja cortado separado do nome base.
+    // Ex: "Camisa Básica Mengotti AMARELO / M"
+    const xProdRaw = [item.product_name, item.variant_label]
+      .filter(Boolean)
+      .join(' ')
+    const xProd = escXml(xProdRaw.substring(0, 120))
+
     return `
     <det nItem="${nItem}">
       <prod>
         <cProd>${String(item.product_id).padStart(6, '0')}</cProd>
         <cEAN>${cEAN}</cEAN>
-        <xProd>${item.product_name.substring(0, 120).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</xProd>
+        <xProd>${xProd}</xProd>
         <NCM>${item.ncm}</NCM>
         <CFOP>${item.cfop}</CFOP>
         <uCom>${item.unit}</uCom>
@@ -137,30 +145,22 @@ export function buildNfceXml(p: NfceBuildPayload): string {
   vDescTotal = parseFloat(vDescTotal.toFixed(2))
   const vNF  = parseFloat((vProdTotal - vDescTotal).toFixed(2))
 
-  // ── Chave de acesso base (43 dígitos) ─────────────────────────────────────
-  const isMei     = p.config.crt === 4
-  // MEI pode usar CPF como identificador — padeia para 14 dígitos (zeros à esquerda)
-  const docEmit   = isMei && p.config.cpf
+  const isMei   = p.config.crt === 4
+  const docEmit = isMei && p.config.cpf
     ? p.config.cpf.replace(/\D/g, '').padStart(14, '0')
     : p.config.cnpj
-  // Estrutura: cUF(2) + YYMM(4) + CNPJ(14) + mod(2) + serie(3) + nNF(9) + tpEmis(1) + cNF(8)
-  // Total: 2+4+14+2+3+9+1+8 = 43 dígitos
-  // O dígito verificador (1 dígito) é calculado pela Edge Function
   const cUF  = cUFMap[p.config.uf] ?? '35'
-  // YYMM: 2 últimos dígitos do ano + mês com 2 dígitos
   const yymm = `${String(now.getFullYear()).slice(-2)}${String(now.getMonth()+1).padStart(2,'0')}`
-
   const chaveBase43 = `${cUF}${yymm}${docEmit}${mod}${p.serie.padStart(3,'0')}${nNF}${tpEmis}${cNF}`
-
 
   const consumerXml = p.consumer?.cpf
     ? `<dest>
-        ${p.consumer.name ? `<xNome>${p.consumer.name.substring(0,60).replace(/&/g,'&amp;')}</xNome>` : ''}
+        ${p.consumer.name ? `<xNome>${escXml(p.consumer.name.substring(0,60))}</xNome>` : ''}
         <CPF>${p.consumer.cpf.replace(/\D/g,'').substring(0,11)}</CPF>
       </dest>`
     : ''
 
-  const tPag   = tPagMap[p.paymentMethod] ?? '01'
+  const tPag     = tPagMap[p.paymentMethod] ?? '01'
   const trocoXml = p.troco > 0 ? `<vTroco>${p.troco.toFixed(2)}</vTroco>` : ''
 
   return `<?xml version="1.0" encoding="UTF-8"?>
@@ -189,20 +189,20 @@ export function buildNfceXml(p: NfceBuildPayload): string {
     <verProc>1.0.0</verProc>
     ${p.contingencia ? `<dhCont>${dhEmi}</dhCont><xJust>Contingencia por falha de comunicacao com a SEFAZ</xJust>` : ''}
   </ide>
-<emit>
+  <emit>
     ${isMei && p.config.cpf
       ? `<CPF>${p.config.cpf.replace(/\D/g, '')}</CPF>`
       : `<CNPJ>${p.config.cnpj}</CNPJ>`
     }
-    <xNome>${p.config.razao_social.substring(0,60).replace(/&/g,'&amp;')}</xNome>
-    ${p.config.nome_fantasia ? `<xFant>${p.config.nome_fantasia.substring(0,60).replace(/&/g,'&amp;')}</xFant>` : ''}
+    <xNome>${escXml(p.config.razao_social.substring(0,60))}</xNome>
+    ${p.config.nome_fantasia ? `<xFant>${escXml(p.config.nome_fantasia.substring(0,60))}</xFant>` : ''}
     <enderEmit>
-      <xLgr>${p.config.logradouro.replace(/&/g,'&amp;')}</xLgr>
+      <xLgr>${escXml(p.config.logradouro)}</xLgr>
       <nro>${p.config.numero}</nro>
       ${p.config.complemento ? `<xCpl>${p.config.complemento}</xCpl>` : ''}
-      <xBairro>${p.config.bairro.replace(/&/g,'&amp;')}</xBairro>
+      <xBairro>${escXml(p.config.bairro)}</xBairro>
       <cMun>${p.config.codigo_ibge}</cMun>
-      <xMun>${p.config.municipio.replace(/&/g,'&amp;')}</xMun>
+      <xMun>${escXml(p.config.municipio)}</xMun>
       <UF>${p.config.uf}</UF>
       <CEP>${p.config.cep}</CEP>
       <cPais>1058</cPais>
