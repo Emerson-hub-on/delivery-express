@@ -151,7 +151,7 @@ function RegraModal({ initial, editId, onClose, onSaved, onError }: ModalProps) 
               <FieldInput
                 label="CST de origem"
                 value={form.cst_origem}
-                onChange={v => set('cst_origem', v.slice(0, 3))}
+                onChange={v => set('cst_origem', v.slice(0, 4))}
                 placeholder="ex: 061"
                 hint="Vazio = qualquer CST"
                 mono
@@ -166,8 +166,8 @@ function RegraModal({ initial, editId, onClose, onSaved, onError }: ModalProps) 
               <FieldInput
                 label="CST de entrada"
                 value={form.cst_entrada}
-                onChange={v => set('cst_entrada', v.slice(0, 3))}
-                placeholder="ex: 000"
+                onChange={v => set('cst_entrada', v.slice(0, 4))}
+                placeholder="ex: 0500"
                 mono
               />
             </div>
@@ -288,10 +288,10 @@ function RegraModal({ initial, editId, onClose, onSaved, onError }: ModalProps) 
 // ─── Field helpers ────────────────────────────────────────────────────────────
 
 function FieldInput({
-  label, value, onChange, placeholder, hint, mono = false,
+  label, value, onChange, placeholder, hint, mono = false, maxLength,
 }: {
   label: string; value: string; onChange: (v: string) => void
-  placeholder?: string; hint?: string; mono?: boolean
+  placeholder?: string; hint?: string; mono?: boolean; maxLength?: number
 }) {
   return (
     <div>
@@ -303,6 +303,7 @@ function FieldInput({
         value={value}
         onChange={e => onChange(e.target.value)}
         placeholder={placeholder}
+        maxLength={maxLength}  // ← adiciona
         className={`w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800
           focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400
           ${mono ? 'font-mono tracking-wider' : ''}`}

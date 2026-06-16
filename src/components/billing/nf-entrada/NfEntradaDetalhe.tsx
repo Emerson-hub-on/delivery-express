@@ -67,6 +67,24 @@ function fmtCnpj(v: string) { return v.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d
 function fmtDate(iso: string) { return new Date(iso + 'T00:00:00').toLocaleDateString('pt-BR') }
 function fmtMoney(v: number)  { return v.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) }
 
+// ── Placeholder de imagem para produtos cadastrados automaticamente ────────────
+// `products.image` é NOT NULL — usamos um SVG inline em base64 para evitar
+// <img src=""> (que em alguns navegadores recarrega a própria página).
+// Troque por uma URL de asset estático seu (ex: '/images/sem-imagem.png') se preferir.
+
+const PLACEHOLDER_IMAGE_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 300 300">' +
+  '<rect width="300" height="300" fill="#f3f4f6"/>' +
+  '<text x="150" y="150" font-family="sans-serif" font-size="20" fill="#9ca3af" text-anchor="middle" dominant-baseline="middle">Sem imagem</text>' +
+  '</svg>'
+
+function toBase64(str: string): string {
+  if (typeof window !== 'undefined' && typeof window.btoa === 'function') return window.btoa(str)
+  return Buffer.from(str, 'utf-8').toString('base64')
+}
+
+const PLACEHOLDER_IMAGE = `data:image/svg+xml;base64,${toBase64(PLACEHOLDER_IMAGE_SVG)}`
+
 const STATUS_BADGE: Record<NfEntrada['status'], { bg: string; text: string; dot: string }> = {
   pendente:   { bg: 'bg-yellow-50 border border-yellow-200', text: 'text-yellow-700', dot: 'bg-yellow-400' },
   confirmada: { bg: 'bg-green-50 border border-green-200',   text: 'text-green-700',  dot: 'bg-green-500'  },
@@ -195,6 +213,11 @@ export function NfEntradaDetalhe({ nota, companyId, onBack, onUpdated, onDeleted
   const [showConversaoModal, setShowConversaoModal] = useState(false)
   const [modalVinculo,       setModalVinculo]       = useState<ItemEntrada | null>(null)
   const [vinculando,         setVinculando]         = useState<string | null>(null)
+
+  // ── Cadastro automático de produtos não vinculados ────────────────────────
+  const [autoCadastrar,   setAutoCadastrar]   = useState(false)
+  const [categoriaPadrao, setCategoriaPadrao] = useState('Importados NF-e')
+  const [markupPercent,   setMarkupPercent]   = useState(50)
 
   // ── Carrega itens da tabela relacional ────────────────────────────────────
   const [itens,         setItens]         = useState<ItemEntrada[]>([])
@@ -330,9 +353,89 @@ useEffect(() => {
     } finally { setVinculando(null) }
   }
 
+  // ── Cadastra como novo produto cada item sem vínculo e o vincula ──────────
+  // Reaproveita a rota /vincular-item (mesma do vínculo manual) para que a
+  // atualização de estoque/custo na confirmação siga a mesma lógica já existente.
+  const cadastrarProdutosPendentes = async () => {
+    const pendentes = itens.filter(i => i.produto_id === null)
+
+    for (const item of pendentes) {
+      const fator    = fatores[item.id] ?? 1
+      const custo    = item.valor_unitario > 0 ? item.valor_unitario : 0.01
+      const preco    = Math.max(0.01, Math.round(custo * (1 + markupPercent / 100) * 100) / 100)
+      const eanLimpo = item.ean && !/^sem ?gtin$/i.test(item.ean.trim()) ? item.ean.trim() : null
+      const ncmLimpo = item.ncm && /^\d{8}$/.test(item.ncm) ? item.ncm : null
+
+      const { data: novoProduto, error: insertError } = await supabase
+        .from('products')
+        .insert({
+          company_id:      companyId,
+          category:        categoriaPadrao.trim(),
+          name:            item.descricao,
+          image:           PLACEHOLDER_IMAGE,
+          price:           preco,
+          cost_price:      custo,
+          ean:             eanLimpo,
+          ncm:             ncmLimpo,
+          stock:           0, // a confirmação da nota incrementa o estoque pela quantidade do item
+          unit_com:        item.unidade || 'UN',
+          unidade_estoque: item.unidade || 'UN',
+          fator_conversao: fator,
+          active:          true,
+        })
+        .select('id, name')
+        .single()
+
+      if (insertError || !novoProduto) {
+        throw new Error(`Erro ao cadastrar "${item.descricao}": ${insertError?.message ?? 'falha desconhecida'}`)
+      }
+
+      const res = await fetch('/api/fiscal/nf-entrada/vincular-item', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          companyId,
+          chave:      nota.chave,
+          itemId:     item.id,
+          itemCodigo: item.codigo,
+          produtoId:  novoProduto.id,
+        }),
+      })
+      if (!res.ok) {
+        throw new Error(`"${item.descricao}" foi cadastrado, mas falhou ao vincular ao item da nota`)
+      }
+
+      setItens(prev => prev.map(i =>
+        i.id === item.id ? { ...i, produto_id: novoProduto.id, produto_nome: novoProduto.name } : i
+      ))
+    }
+  }
+
   const handleManifestar = async (evento: Evento) => {
+    const cadastroAutomatico = evento === 'confirmacao' && autoCadastrar && itensPendentes > 0
+
+    if (cadastroAutomatico && !categoriaPadrao.trim()) {
+      onError('Informe a categoria padrão para cadastrar os produtos automaticamente')
+      return
+    }
+
     const confirmMsg = CONFIRM_MESSAGES[evento]
-    if (confirmMsg && !window.confirm(`${confirmMsg} Esta ação pode ser desfeita reabrindo a nota.`)) return
+    const aviso = cadastroAutomatico
+      ? ` ${itensPendentes} produto(s) sem vínculo serão cadastrados automaticamente antes da confirmação.`
+      : ''
+    if (confirmMsg && !window.confirm(`${confirmMsg}${aviso} Esta ação pode ser desfeita reabrindo a nota.`)) return
+
+    if (cadastroAutomatico) {
+      setLoading('cadastro-automatico')
+      try {
+        await cadastrarProdutosPendentes()
+      } catch (e) {
+        onError(e instanceof Error ? e.message : 'Erro ao cadastrar produtos automaticamente')
+        setLoading(null)
+        return
+      }
+    }
+
     setLoading(evento)
     try {
       const fatorMap = Object.fromEntries(itens.map(i => [i.id, fatores[i.id] ?? 1]))
@@ -353,9 +456,12 @@ useEffect(() => {
       }
       const novoStatus = statusMap[evento]
       if (novoStatus) onUpdated({ ...nota, status: novoStatus })
+      if (evento === 'confirmacao') setAutoCadastrar(false)
     } catch (e) {
       onError(e instanceof Error ? e.message : 'Erro ao manifestar')
-    } finally { setLoading(null) }
+    } finally {
+      setLoading(null)
+    }
   }
 
   const handleExcluir = async () => {
@@ -484,7 +590,52 @@ useEffect(() => {
         {/* Itens */}
         <Section icon="📦" title="Itens da nota"
           badge={itensPendentes > 0 ? `${itensPendentes} sem vínculo` : undefined}
-          badgeColor="orange">
+          badgeColor="orange"
+          headerExtra={isPending && itensPendentes > 0 && (
+            <label
+              title="Produtos sem vínculo serão cadastrados automaticamente ao confirmar o recebimento"
+              className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer select-none whitespace-nowrap"
+            >
+              <input
+                type="checkbox"
+                checked={autoCadastrar}
+                disabled={!!loading}
+                onChange={e => setAutoCadastrar(e.target.checked)}
+                className="rounded border-gray-300 text-blue-600 focus:ring-blue-200 disabled:opacity-50"
+              />
+              Cadastrar produtos automaticamente
+            </label>
+          )}>
+
+          {autoCadastrar && itensPendentes > 0 && (
+            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg flex flex-col sm:flex-row gap-3 sm:items-end">
+              <div className="flex-1">
+                <label className="text-[10px] text-blue-700 uppercase tracking-wide font-semibold">Categoria padrão</label>
+                <input
+                  type="text"
+                  value={categoriaPadrao}
+                  disabled={!!loading}
+                  onChange={e => setCategoriaPadrao(e.target.value)}
+                  placeholder="Ex: Diversos, Importados"
+                  className="mt-1 w-full border border-blue-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-200 disabled:opacity-50"
+                />
+              </div>
+              <div className="w-full sm:w-32">
+                <label className="text-[10px] text-blue-700 uppercase tracking-wide font-semibold">Margem (%)</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={markupPercent}
+                  disabled={!!loading}
+                  onChange={e => setMarkupPercent(Math.max(0, parseInt(e.target.value) || 0))}
+                  className="mt-1 w-full border border-blue-200 rounded-lg px-3 py-1.5 text-sm text-center bg-white focus:outline-none focus:ring-2 focus:ring-blue-200 disabled:opacity-50"
+                />
+              </div>
+              <p className="text-[11px] text-blue-600 sm:max-w-[14rem]">
+                {itensPendentes} item(s) sem vínculo serão cadastrados como novos produtos (preço = custo + margem) ao confirmar o recebimento.
+              </p>
+            </div>
+          )}
 
           {loadingItens ? (
             <div className="flex justify-center py-10">
@@ -637,12 +788,18 @@ useEffect(() => {
           <div>
             <p className="text-sm font-medium text-gray-800">Manifestação do destinatário</p>
             <p className="text-xs text-gray-400 mt-0.5">Registre sua posição sobre esta nota fiscal junto à SEFAZ</p>
+            {loading === 'cadastro-automatico' && (
+              <p className="text-xs text-blue-600 mt-1.5 flex items-center gap-1.5">
+                <span className="inline-block w-3 h-3 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                Cadastrando produtos não vinculados…
+              </p>
+            )}
           </div>
           <div className="flex flex-wrap gap-2">
             {isPending && (
               <>
                 <ActionBtn label="Ciência"               color="blue"   loading={loading === 'ciencia'}      onClick={() => handleManifestar('ciencia')} />
-                <ActionBtn label="Confirmar recebimento" color="green"  loading={loading === 'confirmacao'}  onClick={() => handleManifestar('confirmacao')} />
+                <ActionBtn label="Confirmar recebimento" color="green"  loading={loading === 'confirmacao' || loading === 'cadastro-automatico'}  onClick={() => handleManifestar('confirmacao')} />
                 <ActionBtn label="Recusar"               color="red"    loading={loading === 'recusa'}       onClick={() => handleManifestar('recusa')} />
                 <ActionBtn label="Cancelar"              color="orange" loading={loading === 'cancelamento'} onClick={() => handleManifestar('cancelamento')} />
               </>
@@ -669,16 +826,19 @@ useEffect(() => {
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-function Section({ icon, title, badge, badgeColor = 'gray', children }: {
-  icon: string; title: string; badge?: string; badgeColor?: 'gray' | 'orange' | 'green' | 'red'; children: React.ReactNode
+function Section({ icon, title, badge, badgeColor = 'gray', headerExtra, children }: {
+  icon: string; title: string; badge?: string; badgeColor?: 'gray' | 'orange' | 'green' | 'red'; headerExtra?: React.ReactNode; children: React.ReactNode
 }) {
   const colors = { gray: 'bg-gray-100 text-gray-600', orange: 'bg-orange-50 text-orange-700 border border-orange-200', green: 'bg-green-50 text-green-700 border border-green-200', red: 'bg-red-50 text-red-700 border border-red-200' }
   return (
     <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 bg-gray-50">
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 bg-gray-50 flex-wrap">
         <span className="text-sm">{icon}</span>
         <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">{title}</span>
-        {badge && <span className={`ml-auto text-[10px] font-medium px-2 py-0.5 rounded-full ${colors[badgeColor]}`}>{badge}</span>}
+        <div className="ml-auto flex items-center gap-3 flex-wrap">
+          {badge && <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${colors[badgeColor]}`}>{badge}</span>}
+          {headerExtra}
+        </div>
       </div>
       <div className="p-4">{children}</div>
     </div>

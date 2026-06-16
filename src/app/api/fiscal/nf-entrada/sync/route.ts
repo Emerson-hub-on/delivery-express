@@ -82,13 +82,15 @@ function extrairItens(infNFe: any): ItemNota[] {
   const lista = Array.isArray(dets) ? dets : [dets]
 
   return lista.map((det: any): ItemNota => {
-    // CST pode estar em ICMS00, ICMS40, ICMSSN102 etc. — pega o primeiro filho
-    const icmsGrupo  = det.imposto?.ICMS ?? {}
+    const icmsGrupo   = det.imposto?.ICMS ?? {}
     const icmsValores = Object.values(icmsGrupo) as any[]
-    const cst =
+    
+    // ✅ Adiciona padStart(3, '0') — CST/CSOSN sempre com 3 dígitos
+    const cst = (
       icmsValores[0]?.CST?.toString() ??
       icmsValores[0]?.CSOSN?.toString() ??
       ''
+    ).padStart(3, '0')
 
     const ean = det.prod?.cEAN?.toString()
     return {
@@ -97,7 +99,7 @@ function extrairItens(infNFe: any): ItemNota[] {
       ean:            ean && ean !== 'SEM GTIN' ? ean : null,
       ncm:            det.prod?.NCM?.toString()    ?? '',
       cfop:           det.prod?.CFOP?.toString()   ?? '',
-      cst,
+      cst,  // ← já com padding
       unidade:        det.prod?.uCom?.toString()   ?? '',
       quantidade:     parseFloat(det.prod?.qCom    ?? '0'),
       valor_unitario: parseFloat(det.prod?.vUnCom  ?? '0'),
