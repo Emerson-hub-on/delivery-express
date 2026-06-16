@@ -17,6 +17,7 @@ const STATUS_MAP: Record<Evento, 'pendente' | 'confirmada' | 'recusada' | 'cance
 }
 
 type ItemNota = {
+  id:         string
   produto_id: number | null
   quantidade: number
 }
@@ -26,7 +27,7 @@ export async function POST(req: NextRequest) {
     companyId: string
     chave: string
     evento: Evento
-    fatores?: Record<number, number> // idx → fator
+    fatores?: Record<string, number> // item.id (uuid da nf_entrada_itens) → fator
   }
 
   if (!companyId || !chave || !evento) {
@@ -40,33 +41,39 @@ export async function POST(req: NextRequest) {
   try {
     const novoStatus = STATUS_MAP[evento]
 
-    const { error } = await supabaseAdmin
+    // Atualiza o status e já recupera o id da nota (necessário para
+    // consultar a tabela relacional nf_entrada_itens em seguida)
+    const { data: notaRow, error } = await supabaseAdmin
       .from('nf_entrada')
       .update({ status: novoStatus })
       .eq('company_id', companyId)
       .eq('chave', chave)
+      .select('id')
+      .single<{ id: string }>()
 
-    if (error) throw error
+    if (error || !notaRow) throw error ?? new Error('Nota não encontrada')
 
     // Atualiza estoque apenas na confirmação
     if (evento === 'confirmacao' && fatores) {
-      // Busca os itens da nota
-      const { data: nota, error: notaError } = await supabaseAdmin
-        .from('nf_entrada')
-        .select('itens_nota')
-        .eq('company_id', companyId)
-        .eq('chave', chave)
-        .single<{ itens_nota: ItemNota[] }>()
+      // ── Busca os itens na tabela relacional (nf_entrada_itens) ──────────
+      // Antes lia de nf_entrada.itens_nota (snapshot legado, anterior à
+      // migração para a tabela relacional) — por isso o select falhava e
+      // o endpoint retornava 500 mesmo após confirmar a nota.
+      const { data: itensData, error: itensError } = await supabaseAdmin
+        .from('nf_entrada_itens')
+        .select('id, produto_id, quantidade')
+        .eq('nf_entrada_id', notaRow.id)
 
-      if (notaError || !nota) throw new Error('Nota não encontrada')
+      if (itensError) throw itensError
 
-      const itens = nota.itens_nota ?? []
+      const itens = (itensData ?? []) as ItemNota[]
 
       await Promise.all(
-        itens.map(async (item, idx) => {
+        itens.map(async (item) => {
           if (!item.produto_id) return
 
-          const fator = fatores[idx] ?? 1
+          // fatores é indexado pelo id (uuid) do item, não pela posição no array
+          const fator = fatores[item.id] ?? 1
           const qtdFinal = item.quantidade * fator
 
           // Busca estoque atual
@@ -81,7 +88,7 @@ export async function POST(req: NextRequest) {
 
           await supabaseAdmin
             .from('products')
-            .update({ stock: (produto.stock ?? 0) + qtdFinal })
+            .update({ stock: Math.round((produto.stock ?? 0) + qtdFinal) })
             .eq('id', item.produto_id)
             .eq('company_id', companyId)
         })

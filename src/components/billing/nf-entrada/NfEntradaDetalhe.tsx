@@ -377,7 +377,7 @@ useEffect(() => {
           cost_price:      custo,
           ean:             eanLimpo,
           ncm:             ncmLimpo,
-          stock:           0, // a confirmação da nota incrementa o estoque pela quantidade do item
+          stock:           Math.round(item.quantidade * fator), // estoque inicial já considera a quantidade desta NF
           unit_com:        item.unidade || 'UN',
           unidade_estoque: item.unidade || 'UN',
           fator_conversao: fator,
