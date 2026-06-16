@@ -8,5 +8,7 @@ export type Cart = {
   addons: CartAddon[]
   observation: string
   selectedSize?: string
+  selectedColor?: string   // ← novo
+  variantLabel?: string    // ← "AMARELO / M" — usado no carrinho e no pedido
   totalWithAddons: number
 }

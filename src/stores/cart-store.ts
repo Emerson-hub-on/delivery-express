@@ -1,17 +1,22 @@
-// stores/cart-store.ts
 import { create } from 'zustand'
 import { Product } from '@/types/product'
 import { CartAddon } from '@/types/addon'
 import { Cart } from '@/types/cart'
-
 
 type States = {
   cart: Cart[]
 }
 
 type Actions = {
-  addToCart: (product: Product, quantity: number, addons: CartAddon[], observation: string, selectedSize?: string) => void
-  upsertCartItem: (product: Product, quantity: number) => void  // mantido para compatibilidade
+  addToCart: (
+    product: Product,
+    quantity: number,
+    addons: CartAddon[],
+    observation: string,
+    selectedSize?: string,
+    selectedColor?: string,
+  ) => void
+  upsertCartItem: (product: Product, quantity: number) => void
   removeFromCart: (cartId: string) => void
   updateQty: (cartId: string, quantity: number) => void
   clearCart: () => void
@@ -29,9 +34,11 @@ function genId(): string {
 export const useCartStore = create<States & Actions>()((set) => ({
   cart: [],
 
-  addToCart: (product, quantity, addons, observation, selectedSize) =>
+  addToCart: (product, quantity, addons, observation, selectedSize, selectedColor) =>
     set(state => {
       const totalWithAddons = calcTotal(product, quantity, addons)
+      const variantLabel = [selectedColor, selectedSize].filter(Boolean).join(' / ')
+
       const newItem: Cart = {
         id: genId(),
         product,
@@ -39,12 +46,13 @@ export const useCartStore = create<States & Actions>()((set) => ({
         addons,
         observation,
         selectedSize,
+        selectedColor,
+        variantLabel: variantLabel || undefined,
         totalWithAddons,
       }
       return { cart: [...state.cart, newItem] }
     }),
 
-  // Compatibilidade com código antigo — adiciona sem adicionais
   upsertCartItem: (product, quantity) =>
     set(state => {
       let newCart = [...state.cart]

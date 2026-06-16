@@ -1,8 +1,10 @@
 'use client'
 import { useEffect, useMemo, useState } from 'react'
 import { Product } from '@/types/product'
+import { ProductColor, ProductVariant } from '@/types/product'
 import { AddonGroup, AddonItem, CartAddon } from '@/types/addon'
 import { getAddonGroupsByProduct, calcAddonItemPrice } from '@/services/addons'
+import { getVariantsByProduct } from '@/services/productVariants'
 import { useCartStore } from '@/stores/cart-store'
 import { toast } from 'sonner'
 
@@ -17,19 +19,48 @@ interface Props {
 
 export function ProductModal({ product, onClose }: Props) {
   const { addToCart } = useCartStore()
-  const [groups, setGroups] = useState<AddonGroup[]>([])
-  const [loading, setLoading] = useState(true)
-  const [addonQtys, setAddonQtys] = useState<Record<string, number>>({})
-  const [observation, setObservation] = useState('')
-  const [qty, setQty] = useState(1)
+
+  const [groups, setGroups]         = useState<AddonGroup[]>([])
+  const [variants, setVariants]     = useState<ProductVariant[]>([])
+  const [loadingAddons, setLoadingAddons] = useState(true)
+  const [loadingVariants, setLoadingVariants] = useState(true)
+
+  const [addonQtys, setAddonQtys]       = useState<Record<string, number>>({})
+  const [observation, setObservation]   = useState('')
+  const [qty, setQty]                   = useState(1)
   const [selectedSize, setSelectedSize] = useState<string | null>(null)
+  const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(null)
 
   useEffect(() => {
     getAddonGroupsByProduct(product.id)
       .then(setGroups)
       .catch(() => {})
-      .finally(() => setLoading(false))
+      .finally(() => setLoadingAddons(false))
+
+    getVariantsByProduct(product.id)
+      .then(data => {
+        // Apenas variantes ativas
+        setVariants(data.filter(v => v.active !== false))
+      })
+      .catch(() => {})
+      .finally(() => setLoadingVariants(false))
   }, [product.id])
+
+  // Quando muda a variante selecionada, reseta o tamanho
+  const handleSelectVariant = (variant: ProductVariant) => {
+    setSelectedVariant(variant)
+    setSelectedSize(null)
+  }
+
+  // Tamanhos vêm da variante selecionada (se houver variantes)
+  // ou diretamente do produto (comportamento original)
+  const hasVariants = variants.length > 0
+
+  const sizesSource = hasVariants
+    ? (selectedVariant?.sizes ?? [])
+    : (Array.isArray(product.sizes) ? product.sizes : [])
+
+  const hasSizes = sizesSource.length > 0
 
   // Valida grupos obrigatórios
   const groupErrors = useMemo(() => {
@@ -37,18 +68,17 @@ export function ProductModal({ product, onClose }: Props) {
     groups.forEach(g => {
       if (g.min_select <= 0) return
       const selected = g.items.reduce((s, i) => s + (addonQtys[i.id] ?? 0), 0)
-      if (selected < g.min_select) {
+      if (selected < g.min_select)
         errors[g.id] = `Escolha pelo menos ${g.min_select} ${g.min_select === 1 ? 'opção' : 'opções'}`
-      }
     })
     return errors
   }, [groups, addonQtys])
 
-  const hasSizes = Array.isArray(product.sizes) && product.sizes.length > 0
+  const canAdd =
+    Object.keys(groupErrors).length === 0 &&
+    (!hasSizes || !!selectedSize) &&
+    (!hasVariants || !!selectedVariant)
 
-  const canAdd = Object.keys(groupErrors).length === 0 && (!hasSizes || !!selectedSize)
-
-  // Constrói CartAddon[] a partir das qtys selecionadas
   const selectedAddons = useMemo((): CartAddon[] => {
     const result: CartAddon[] = []
     groups.forEach(g => {
@@ -71,28 +101,43 @@ export function ProductModal({ product, onClose }: Props) {
   }, [groups, addonQtys])
 
   const addonsTotal = selectedAddons.reduce((s, a) => s + a.subtotal, 0)
-  const unitTotal = product.price + addonsTotal
-  const grandTotal = unitTotal * qty
+  const unitTotal   = product.price + addonsTotal
+  const grandTotal  = unitTotal * qty
 
   const handleChangeQty = (groupId: string, item: AddonItem, delta: number) => {
     const group = groups.find(g => g.id === groupId)!
     const current = addonQtys[item.id] ?? 0
     const next = Math.max(0, Math.min(item.max_qty, current + delta))
-
-    // Verifica max_select do grupo
     if (delta > 0 && group.max_select !== null) {
       const groupTotal = group.items.reduce((s, i) => s + (addonQtys[i.id] ?? 0), 0)
       if (groupTotal >= group.max_select) return
     }
-
     setAddonQtys(prev => ({ ...prev, [item.id]: next }))
   }
 
   const handleAdd = () => {
     if (!canAdd) return
-    addToCart(product, qty, selectedAddons, observation, selectedSize ?? undefined)
+
+    // Usa a imagem da variante se disponível
+    const productForCart: Product = selectedVariant?.image
+      ? { ...product, image: selectedVariant.image }
+      : product
+
+    // Passa cor como 5º arg (selectedSize) e tamanho como 6º — veja nota abaixo
+    addToCart(
+      productForCart,
+      qty,
+      selectedAddons,
+      observation,
+      selectedSize ?? undefined,
+      selectedVariant?.color?.name ?? undefined,   // ← cor
+    )
+
+    const colorLabel = selectedVariant?.color?.name
+    const sizeLabel  = selectedSize
+
     toast.success('Adicionado ao carrinho!', {
-      description: `${product.name}${selectedSize ? ` — ${selectedSize}` : ''}`,
+      description: [product.name, colorLabel, sizeLabel].filter(Boolean).join(' — '),
       action: {
         label: 'Ver carrinho',
         onClick: () => window.dispatchEvent(new Event('open-cart')),
@@ -100,6 +145,8 @@ export function ProductModal({ product, onClose }: Props) {
     })
     onClose()
   }
+
+  const loading = loadingAddons || loadingVariants
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
@@ -112,9 +159,9 @@ export function ProductModal({ product, onClose }: Props) {
         {/* Imagem + botão fechar */}
         <div className="relative shrink-0">
           <img
-            src={product.image}
+            src={selectedVariant?.image ?? product.image}
             alt={product.name}
-            className="w-full h-48 object-cover"
+            className="w-full h-48 object-cover transition-all duration-200"
           />
           <button
             onClick={onClose}
@@ -128,6 +175,7 @@ export function ProductModal({ product, onClose }: Props) {
 
         {/* Conteúdo scrollável */}
         <div className="overflow-y-auto flex-1">
+
           {/* Nome e preço base */}
           <div className="px-5 pt-5 pb-4 border-b border-gray-100">
             <h2 className="text-lg font-semibold text-gray-900">{product.name}</h2>
@@ -141,6 +189,57 @@ export function ProductModal({ product, onClose }: Props) {
             <div className="px-5 py-8 text-center text-sm text-gray-400">Carregando opções...</div>
           )}
 
+          {/* ── Seletor de cor (variantes) ──────────────────── */}
+          {!loading && hasVariants && (
+            <div className="px-5 py-4 border-b border-gray-100">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-sm font-semibold text-gray-800">Cor</p>
+                <span className="text-xs text-red-500 font-medium">Obrigatório</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {variants.map(v => {
+                  const color = v.color!
+                  const isSelected = selectedVariant?.id === v.id
+
+                  // Considera sem estoque quando todas as sizes têm stock = 0
+                  // ou quando stock simples = 0
+                  const outOfStock = v.sizes?.length
+                    ? v.sizes.every(s => s.stock !== null && s.stock <= 0)
+                    : v.stock !== null && v.stock !== undefined && v.stock <= 0
+
+                  return (
+                    <button
+                      key={v.id}
+                      disabled={outOfStock}
+                      onClick={() => handleSelectVariant(v)}
+                      className={`
+                        flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium border-2 transition-all
+                        ${outOfStock
+                          ? 'border-gray-100 bg-gray-50 text-gray-300 cursor-not-allowed line-through'
+                          : isSelected
+                            ? 'border-gray-900 bg-gray-900 text-white'
+                            : 'border-gray-200 bg-white text-gray-700 hover:border-gray-400'
+                        }
+                      `}
+                    >
+                      {color.hex_code && (
+                        <span
+                          className={`w-3.5 h-3.5 rounded-full border shrink-0
+                            ${isSelected ? 'border-white/40' : 'border-gray-300'}`}
+                          style={{ background: color.hex_code }}
+                        />
+                      )}
+                      {color.name}
+                    </button>
+                  )
+                })}
+              </div>
+              {!selectedVariant && (
+                <p className="text-xs text-red-400 mt-2">Selecione uma cor para continuar</p>
+              )}
+            </div>
+          )}
+
           {/* Grupos de adicionais */}
           {!loading && groups.map(group => {
             const groupSelected = group.items.reduce((s, i) => s + (addonQtys[i.id] ?? 0), 0)
@@ -148,7 +247,6 @@ export function ProductModal({ product, onClose }: Props) {
 
             return (
               <div key={group.id} className="border-b border-gray-100">
-                {/* Cabeçalho do grupo */}
                 <div className="px-5 py-3 bg-gray-50 flex items-center justify-between">
                   <div>
                     <p className="text-sm font-semibold text-gray-800">{group.name}</p>
@@ -162,9 +260,7 @@ export function ProductModal({ product, onClose }: Props) {
                               : `Mínimo ${group.min_select}`}
                         </span>
                       ) : (
-                        <span>
-                          Opcional{group.max_select ? ` · até ${group.max_select}` : ''}
-                        </span>
+                        <span>Opcional{group.max_select ? ` · até ${group.max_select}` : ''}</span>
                       )}
                     </p>
                   </div>
@@ -178,21 +274,17 @@ export function ProductModal({ product, onClose }: Props) {
                   )}
                 </div>
 
-                {/* Itens do grupo */}
                 {group.items.map(item => {
                   const currentQty = addonQtys[item.id] ?? 0
                   const atMax = currentQty >= item.max_qty
                   const groupAtMax = group.max_select !== null && groupSelected >= group.max_select
 
-                  // Label de preço
                   const priceLabel = (() => {
                     if (item.price === 0 && !item.price_after) return 'Grátis'
-                    if (item.price === 0 && item.price_after) {
+                    if (item.price === 0 && item.price_after)
                       return `Grátis · a partir do ${item.price_from_qty}º: ${fmtBRL(item.price_after)}`
-                    }
-                    if (item.price_after && item.price_after !== item.price) {
+                    if (item.price_after && item.price_after !== item.price)
                       return `${fmtBRL(item.price)} · a partir do ${item.price_from_qty}º: ${fmtBRL(item.price_after)}`
-                    }
                     return fmtBRL(item.price)
                   })()
 
@@ -202,8 +294,6 @@ export function ProductModal({ product, onClose }: Props) {
                         <p className="text-sm text-gray-800">{item.name}</p>
                         <p className="text-xs text-gray-400 mt-0.5">{priceLabel}</p>
                       </div>
-
-                      {/* Controle de quantidade */}
                       <div className="flex items-center gap-3 shrink-0">
                         {currentQty > 0 ? (
                           <>
@@ -242,7 +332,6 @@ export function ProductModal({ product, onClose }: Props) {
                   )
                 })}
 
-                {/* Erro de validação */}
                 {hasError && (
                   <p className="px-5 pb-3 text-xs text-red-500">{groupErrors[group.id]}</p>
                 )}
@@ -250,15 +339,18 @@ export function ProductModal({ product, onClose }: Props) {
             )
           })}
 
-          {/* Tamanhos disponíveis */}
-          {hasSizes && (
+          {/* ── Tamanhos ─────────────────────────────────────── */}
+          {/* Mostra tamanhos se:
+              - produto sem variantes e tem sizes (comportamento original)
+              - variante selecionada e ela tem sizes */}
+          {!loading && hasSizes && (!hasVariants || !!selectedVariant) && (
             <div className="px-5 py-4 border-b border-gray-100">
               <div className="flex items-center justify-between mb-3">
                 <p className="text-sm font-semibold text-gray-800">Tamanho</p>
                 <span className="text-xs text-red-500 font-medium">Obrigatório</span>
               </div>
               <div className="flex flex-wrap gap-2">
-                {(product.sizes as { value: string; stock: number | null }[]).map(s => {
+                {(sizesSource as { value: string; stock: number | null }[]).map(s => {
                   const outOfStock = s.stock !== null && s.stock <= 0
                   const isSelected = selectedSize === s.value
                   return (
@@ -278,10 +370,7 @@ export function ProductModal({ product, onClose }: Props) {
                     >
                       {s.value}
                       {s.stock !== null && s.stock > 0 && (
-                        <span className={`
-                          ml-1.5 text-[10px] font-normal
-                          ${isSelected ? 'text-gray-300' : 'text-gray-400'}
-                        `}>
+                        <span className={`ml-1.5 text-[10px] font-normal ${isSelected ? 'text-gray-300' : 'text-gray-400'}`}>
                           ({s.stock})
                         </span>
                       )}
@@ -289,7 +378,7 @@ export function ProductModal({ product, onClose }: Props) {
                   )
                 })}
               </div>
-              {hasSizes && !selectedSize && (
+              {!selectedSize && (
                 <p className="text-xs text-red-400 mt-2">Selecione um tamanho para continuar</p>
               )}
             </div>
@@ -300,7 +389,7 @@ export function ProductModal({ product, onClose }: Props) {
             <p className="text-sm font-semibold text-gray-800 mb-2">Alguma observação?</p>
             <textarea
               rows={2}
-              placeholder="Digite aqui sua abservação..."
+              placeholder="Digite aqui sua observação..."
               value={observation}
               onChange={e => setObservation(e.target.value)}
               className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-black resize-none"
@@ -308,9 +397,8 @@ export function ProductModal({ product, onClose }: Props) {
           </div>
         </div>
 
-        {/* Footer fixo — quantidade + botão */}
+        {/* Footer fixo */}
         <div className="shrink-0 px-5 py-4 bg-white border-t border-gray-100 flex items-center gap-4">
-          {/* Seletor de quantidade do produto */}
           <div className="flex items-center gap-3">
             <button
               onClick={() => setQty(q => Math.max(1, q - 1))}
@@ -331,7 +419,6 @@ export function ProductModal({ product, onClose }: Props) {
             </button>
           </div>
 
-          {/* Botão adicionar */}
           <button
             onClick={handleAdd}
             disabled={!canAdd}
