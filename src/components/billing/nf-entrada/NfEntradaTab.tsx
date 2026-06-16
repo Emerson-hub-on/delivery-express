@@ -35,8 +35,16 @@ export function NfEntradaTab({ companyId, onError }: Props) {
   const [statusFilter, setStatus] = useState<NfEntrada['status'] | 'todas'>('todas')
   const [cfg, setCfg]             = useState<{ cpf?: string | null } | null>(null)
   const [notaDetalhe, setNotaDetalhe] = useState<NfEntrada | null>(null)
+  const [edicaoInicial, setEdicaoInicial] = useState(false)
 
   const xmlInputRef = useRef<HTMLInputElement>(null)
+
+  // Abre o detalhe da nota. emEdicao=true só deve ser usado quando o
+  // usuário clica explicitamente em "Editar" numa nota já confirmada.
+  const abrirDetalhe = (nota: NfEntrada, emEdicao = false) => {
+    setNotaDetalhe(nota)
+    setEdicaoInicial(emEdicao)
+  }
 
   // ── Config ─────────────────────────────────────────────────
   useEffect(() => {
@@ -173,7 +181,8 @@ const loadNotas = useCallback(async () => {
       <NfEntradaDetalhe
         nota={notaDetalhe}
         companyId={companyId}
-        onBack={() => setNotaDetalhe(null)}
+        iniciarEmEdicao={edicaoInicial}
+        onBack={() => { setNotaDetalhe(null); setEdicaoInicial(false) }}
         onUpdated={handleNotaUpdated}
         onDeleted={handleNotaDeleted}
         onError={onError}
@@ -324,7 +333,7 @@ const loadNotas = useCallback(async () => {
                     <tr
                       key={nota.chave}
                       className="hover:bg-gray-50 transition-colors cursor-pointer"
-                      onClick={() => setNotaDetalhe(nota)}
+                      onClick={() => abrirDetalhe(nota)}
                     >
                       <td className="px-4 py-3">
                         <p className="font-medium text-gray-800">Nº {nota.numero} / {nota.serie}</p>
@@ -351,12 +360,21 @@ const loadNotas = useCallback(async () => {
                         )}
                       </td>
                       <td className="px-4 py-3 text-center" onClick={e => e.stopPropagation()}>
-                        <button
-                          onClick={() => setNotaDetalhe(nota)}
-                          className="text-xs px-3 py-1 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
-                        >
-                          Ver detalhes →
-                        </button>
+                        {nota.status === 'confirmada' ? (
+                          <button
+                            onClick={() => abrirDetalhe(nota, true)}
+                            className="text-xs px-3 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors"
+                          >
+                            ✏️ Editar
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => abrirDetalhe(nota)}
+                            className="text-xs px-3 py-1 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
+                          >
+                            Ver detalhes →
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -371,29 +389,41 @@ const loadNotas = useCallback(async () => {
           {/* Cards mobile */}
           <div className="md:hidden space-y-3">
             {filtered.map(nota => (
-              <button
+              <div
                 key={nota.chave}
-                onClick={() => setNotaDetalhe(nota)}
-                className="w-full text-left bg-white rounded-xl border border-gray-100 shadow-sm p-4 space-y-3 hover:border-gray-300 transition-colors"
+                className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden hover:border-gray-300 transition-colors"
               >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="font-semibold text-gray-800 text-sm">Nº {nota.numero} / {nota.serie}</p>
-                    <p className="text-[10px] text-gray-400 font-mono mt-0.5 truncate">{nota.chave}</p>
+                <button
+                  onClick={() => abrirDetalhe(nota)}
+                  className="w-full text-left p-4 space-y-3"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-semibold text-gray-800 text-sm">Nº {nota.numero} / {nota.serie}</p>
+                      <p className="text-[10px] text-gray-400 font-mono mt-0.5 truncate">{nota.chave}</p>
+                    </div>
+                    <span className={`shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLOR[nota.status]}`}>
+                      {STATUS_LABEL[nota.status]}
+                    </span>
                   </div>
-                  <span className={`shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLOR[nota.status]}`}>
-                    {STATUS_LABEL[nota.status]}
-                  </span>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-700 font-medium truncate">{nota.emitente_razao}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">{fmtCnpj(nota.emitente_cnpj)}</p>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-500 text-xs">{fmtDate(nota.data_emissao)}</span>
-                  <span className="font-semibold text-gray-800 text-sm">R$ {fmtMoney(nota.valor_total)}</span>
-                </div>
-              </button>
+                  <div>
+                    <p className="text-sm text-gray-700 font-medium truncate">{nota.emitente_razao}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">{fmtCnpj(nota.emitente_cnpj)}</p>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-500 text-xs">{fmtDate(nota.data_emissao)}</span>
+                    <span className="font-semibold text-gray-800 text-sm">R$ {fmtMoney(nota.valor_total)}</span>
+                  </div>
+                </button>
+                {nota.status === 'confirmada' && (
+                  <button
+                    onClick={() => abrirDetalhe(nota, true)}
+                    className="w-full text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 transition-colors py-2 border-t border-gray-100"
+                  >
+                    ✏️ Editar
+                  </button>
+                )}
+              </div>
             ))}
             <p className="text-xs text-gray-400 text-center pb-2">
               {filtered.length} nota{filtered.length !== 1 ? 's' : ''} exibida{filtered.length !== 1 ? 's' : ''}

@@ -192,17 +192,18 @@ function ModalVincularProduto({
 // ── Props ──────────────────────────────────────────────────────────────────────
 
 interface Props {
-  nota:      NfEntrada
-  companyId: string
-  onBack:    () => void
-  onUpdated: (nota: NfEntrada) => void
-  onDeleted: (chave: string) => void
-  onError:   (msg: string) => void
+  nota:             NfEntrada
+  companyId:        string
+  iniciarEmEdicao?: boolean   // true quando o usuário clicou em "Editar" (nota já confirmada)
+  onBack:           () => void
+  onUpdated:        (nota: NfEntrada) => void
+  onDeleted:        (chave: string) => void
+  onError:          (msg: string) => void
 }
 
 // ── Main ───────────────────────────────────────────────────────────────────────
 
-export function NfEntradaDetalhe({ nota, companyId, onBack, onUpdated, onDeleted, onError }: Props) {
+export function NfEntradaDetalhe({ nota, companyId, iniciarEmEdicao, onBack, onUpdated, onDeleted, onError }: Props) {
   const [loading,            setLoading]            = useState<string | null>(null)
   const [copied,             setCopied]             = useState(false)
   const [finalidade,         setFinalidade]         = useState<Finalidade>((nota.finalidade as Finalidade) ?? 'revenda')
@@ -213,6 +214,7 @@ export function NfEntradaDetalhe({ nota, companyId, onBack, onUpdated, onDeleted
   const [showConversaoModal, setShowConversaoModal] = useState(false)
   const [modalVinculo,       setModalVinculo]       = useState<ItemEntrada | null>(null)
   const [vinculando,         setVinculando]         = useState<string | null>(null)
+  const [modoEdicao,         setModoEdicao]         = useState(!!iniciarEmEdicao)
 
   // ── Cadastro automático de produtos não vinculados ────────────────────────
   const [autoCadastrar,   setAutoCadastrar]   = useState(false)
@@ -264,6 +266,10 @@ useEffect(() => {
   const isConfirmed    = nota.status === 'confirmada'
   const isClosed       = nota.status === 'cancelada' || nota.status === 'recusada'
   const itensPendentes = itens.filter(i => i.produto_id === null).length
+
+  // Nota pendente é sempre editável; nota confirmada só fica editável
+  // depois que o usuário clica explicitamente em "Editar".
+  const editavel = isPending || modoEdicao
 
   const conversaoMap = useMemo(() => {
     const m: Record<string, ItemConvertido> = {}
@@ -353,6 +359,29 @@ useEffect(() => {
     } finally { setVinculando(null) }
   }
 
+  const handleDesvincularProduto = async (item: ItemEntrada) => {
+    const aviso = isConfirmed
+      ? ` Esta nota já foi confirmada — o estoque adicionado para "${item.produto_nome ?? 'este produto'}" não será revertido automaticamente.`
+      : ''
+    if (!window.confirm(`Remover o vínculo deste item com "${item.produto_nome ?? 'produto'}"?${aviso}`)) return
+
+    setVinculando(item.id)
+    try {
+      const { error } = await supabase
+        .from('nf_entrada_itens')
+        .update({ produto_id: null, produto_nome: null })
+        .eq('id', item.id)
+
+      if (error) throw error
+
+      setItens(prev => prev.map(i =>
+        i.id === item.id ? { ...i, produto_id: null, produto_nome: null } : i
+      ))
+    } catch (e) {
+      onError(e instanceof Error ? e.message : 'Erro ao remover vínculo')
+    } finally { setVinculando(null) }
+  }
+
   // ── Cadastra como novo produto cada item sem vínculo e o vincula ──────────
   // Reaproveita a rota /vincular-item (mesma do vínculo manual) para que a
   // atualização de estoque/custo na confirmação siga a mesma lógica já existente.
@@ -413,15 +442,16 @@ useEffect(() => {
 
   const handleManifestar = async (evento: Evento) => {
     const cadastroAutomatico = evento === 'confirmacao' && autoCadastrar && itensPendentes > 0
+    const salvandoEdicao     = evento === 'confirmacao' && isConfirmed
 
     if (cadastroAutomatico && !categoriaPadrao.trim()) {
       onError('Informe a categoria padrão para cadastrar os produtos automaticamente')
       return
     }
 
-    const confirmMsg = CONFIRM_MESSAGES[evento]
+    const confirmMsg = salvandoEdicao ? 'Salvar as alterações feitas nesta nota?' : CONFIRM_MESSAGES[evento]
     const aviso = cadastroAutomatico
-      ? ` ${itensPendentes} produto(s) sem vínculo serão cadastrados automaticamente antes da confirmação.`
+      ? ` ${itensPendentes} produto(s) sem vínculo serão cadastrados automaticamente antes de salvar.`
       : ''
     if (confirmMsg && !window.confirm(`${confirmMsg}${aviso} Esta ação pode ser desfeita reabrindo a nota.`)) return
 
@@ -456,7 +486,10 @@ useEffect(() => {
       }
       const novoStatus = statusMap[evento]
       if (novoStatus) onUpdated({ ...nota, status: novoStatus })
-      if (evento === 'confirmacao') setAutoCadastrar(false)
+      if (evento === 'confirmacao') {
+        setAutoCadastrar(false)
+        setModoEdicao(false) // ao salvar, volta para o modo somente-visualização
+      }
     } catch (e) {
       onError(e instanceof Error ? e.message : 'Erro ao manifestar')
     } finally {
@@ -524,6 +557,12 @@ useEffect(() => {
           </div>
         </div>
 
+        {isConfirmed && !modoEdicao && (
+          <div className="flex items-center gap-2 text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5">
+            🔒 Nota confirmada — somente leitura. Clique em "Editar" para alterar vínculos, conversões ou quantidades.
+          </div>
+        )}
+
         {/* Emitente */}
         <Section icon="🏭" title="Emitente">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-4">
@@ -561,7 +600,7 @@ useEffect(() => {
               <div className="flex items-center gap-2 flex-wrap">
                 <div className="relative inline-block">
                   <select value={finalidade} onChange={e => handleFinalidadeChange(e.target.value as Finalidade)}
-                    disabled={recalculando}
+                    disabled={recalculando || !editavel}
                     className="appearance-none border border-gray-300 rounded-lg px-4 py-2.5 pr-8 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400 disabled:opacity-50">
                     {FINALIDADES.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
                   </select>
@@ -591,7 +630,7 @@ useEffect(() => {
         <Section icon="📦" title="Itens da nota"
           badge={itensPendentes > 0 ? `${itensPendentes} sem vínculo` : undefined}
           badgeColor="orange"
-          headerExtra={isPending && itensPendentes > 0 && (
+          headerExtra={editavel && itensPendentes > 0 && (
             <label
               title="Produtos sem vínculo serão cadastrados automaticamente ao confirmar o recebimento"
               className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer select-none whitespace-nowrap"
@@ -693,9 +732,9 @@ useEffect(() => {
                           </td>
                           <td className="px-3 py-2.5 w-28">
                             <div className="relative">
-                              <input type="text" maxLength={4} value={override.cfop_entrada}
+                              <input type="text" maxLength={4} value={override.cfop_entrada} disabled={!editavel}
                                 onChange={e => handleOverride(item.id, 'cfop_entrada', e.target.value)}
-                                className={`w-full font-mono text-xs px-2 py-1.5 rounded border text-center focus:outline-none focus:ring-2 transition-colors
+                                className={`w-full font-mono text-xs px-2 py-1.5 rounded border text-center focus:outline-none focus:ring-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed
                                   ${semConv && !hasOverride ? 'border-orange-300 bg-orange-50 text-orange-800 focus:ring-orange-200'
                                     : hasOverride ? 'border-blue-300 bg-blue-50 text-blue-800 focus:ring-blue-200'
                                     : 'border-gray-200 bg-white text-gray-700 focus:ring-gray-200'}`} />
@@ -705,9 +744,9 @@ useEffect(() => {
                             </div>
                           </td>
                           <td className="px-3 py-2.5 w-28">
-                            <input type="text" maxLength={4} value={override.cst_entrada}
+                            <input type="text" maxLength={4} value={override.cst_entrada} disabled={!editavel}
                               onChange={e => handleOverride(item.id, 'cst_entrada', e.target.value)}
-                              className={`w-full font-mono text-xs px-2 py-1.5 rounded border text-center focus:outline-none focus:ring-2 transition-colors
+                              className={`w-full font-mono text-xs px-2 py-1.5 rounded border text-center focus:outline-none focus:ring-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed
                                 ${semConv && !hasOverride ? 'border-orange-300 bg-orange-50 text-orange-800 focus:ring-orange-200'
                                   : hasOverride ? 'border-blue-300 bg-blue-50 text-blue-800 focus:ring-blue-200'
                                   : 'border-gray-200 bg-white text-gray-700 focus:ring-gray-200'}`} />
@@ -716,9 +755,9 @@ useEffect(() => {
                             {item.quantidade} {item.unidade}
                           </td>
                           <td className="px-3 py-2.5 text-center w-24">
-                            <input type="number" min={1} value={fator}
+                            <input type="number" min={1} value={fator} disabled={!editavel}
                               onChange={e => handleFatorChange(item, e.target.value)}
-                              className={`w-16 border rounded px-2 py-1 text-xs text-center font-mono focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-colors
+                              className={`w-16 border rounded px-2 py-1 text-xs text-center font-mono focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed
                                 ${fator > 1 ? 'border-blue-300 bg-blue-50 text-blue-800' : 'border-gray-200 bg-white text-gray-700'}`} />
                           </td>
                           <td className="px-3 py-2.5 text-center whitespace-nowrap">
@@ -739,13 +778,20 @@ useEffect(() => {
                                 <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200 font-medium whitespace-nowrap">
                                   ✓ {item.produto_nome ?? 'Vinculado'}
                                 </span>
-                                <button onClick={() => setModalVinculo(item)} disabled={isVinculando}
-                                  className="text-[10px] text-gray-400 hover:text-blue-600 underline transition-colors disabled:opacity-40">
-                                  Alterar
-                                </button>
+                                <div className="flex items-center gap-1.5 text-[10px]">
+                                  <button onClick={() => setModalVinculo(item)} disabled={isVinculando || !editavel}
+                                    className="text-gray-400 hover:text-blue-600 underline transition-colors disabled:opacity-40 disabled:no-underline">
+                                    Alterar
+                                  </button>
+                                  <span className="text-gray-300">·</span>
+                                  <button onClick={() => handleDesvincularProduto(item)} disabled={isVinculando || !editavel}
+                                    className="text-gray-400 hover:text-red-600 underline transition-colors disabled:opacity-40 disabled:no-underline">
+                                    Remover
+                                  </button>
+                                </div>
                               </div>
                             ) : (
-                              <button onClick={() => setModalVinculo(item)} disabled={isVinculando}
+                              <button onClick={() => setModalVinculo(item)} disabled={isVinculando || !editavel}
                                 className="inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-lg bg-orange-50 text-orange-700 border border-orange-200 hover:bg-orange-100 font-medium transition-colors whitespace-nowrap disabled:opacity-40">
                                 {isVinculando
                                   ? <span className="inline-block w-3 h-3 border border-orange-500 border-t-transparent rounded-full animate-spin" />
@@ -804,7 +850,18 @@ useEffect(() => {
                 <ActionBtn label="Cancelar"              color="orange" loading={loading === 'cancelamento'} onClick={() => handleManifestar('cancelamento')} />
               </>
             )}
-            {isConfirmed && <ActionBtn label="Cancelar nota"  color="orange" loading={loading === 'cancelamento'} onClick={() => handleManifestar('cancelamento')} />}
+            {isConfirmed && !modoEdicao && (
+              <>
+                <ActionBtn label="✏️ Editar"       color="blue"   loading={false}                      onClick={() => setModoEdicao(true)} />
+                <ActionBtn label="Cancelar nota"   color="orange" loading={loading === 'cancelamento'} onClick={() => handleManifestar('cancelamento')} />
+              </>
+            )}
+            {isConfirmed && modoEdicao && (
+              <>
+                <ActionBtn label="Salvar alterações" color="green"  loading={loading === 'confirmacao' || loading === 'cadastro-automatico'} onClick={() => handleManifestar('confirmacao')} />
+                <ActionBtn label="Cancelar nota"      color="orange" loading={loading === 'cancelamento'}                                      onClick={() => handleManifestar('cancelamento')} />
+              </>
+            )}
             {isClosed    && <ActionBtn label="Reabrir nota"   color="yellow" loading={loading === 'reabrir'}      onClick={() => handleManifestar('reabrir')} />}
           </div>
         </div>
