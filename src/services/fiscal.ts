@@ -26,6 +26,36 @@ export const getFiscalConfig = async (): Promise<FiscalConfig | null> => {
   return data
 }
 
+// Dados públicos do emitente, usados em impressões (cupom/pedido).
+// Só os campos não sensíveis — evita trafegar certificado/senha pro
+// client à toa quando o que se quer é só imprimir um cupom.
+export type FiscalCompanyInfo = {
+  razao_social: string
+  nome_fantasia: string | null
+  cnpj: string
+  telefone: string | null
+  logradouro: string
+  numero: string
+  complemento: string | null
+  bairro: string
+  municipio: string
+  uf: string
+  cep: string
+}
+
+export const getFiscalCompanyInfo = async (): Promise<FiscalCompanyInfo | null> => {
+  const company_id = await getCompanyId()
+
+  const { data, error } = await supabase
+    .from('fiscal_configs')
+    .select('razao_social, nome_fantasia, cnpj, telefone, logradouro, numero, complemento, bairro, municipio, uf, cep')
+    .eq('company_id', company_id)
+    .maybeSingle()
+
+  if (error) throw new Error(error.message)
+  return data as FiscalCompanyInfo | null
+}
+
 export const saveFiscalConfig = async (
   payload: FiscalConfigPayload
 ): Promise<FiscalConfig> => {
@@ -144,7 +174,6 @@ export const updateOrderNfce = async (
 
 // ── Próximo número da NFC-e ───────────────────────────────────
 
-// services/fiscal.ts
 export const nextNfceNumero = async (
   companyId: string,
   serie: string

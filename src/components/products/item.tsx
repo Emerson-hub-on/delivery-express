@@ -15,13 +15,13 @@ export const ProductItem = ({ item }: Props) => {
     <>
       <div>
         <div
-          className="rounded-md overflow-hidden cursor-pointer"
+          className="rounded-md overflow-hidden cursor-pointer bg-zinc-50"
           onClick={() => setOpen(true)}
         >
           <img
             src={item.image}
             alt={item.name}
-            className="w-full h-32 object-cover hover:scale-105 transition-transform duration-200"
+            className="w-full aspect-[3/4] object-contain hover:scale-105 transition-transform duration-200"
           />
         </div>
         <div className="mt-3 flex flex-col gap-2">

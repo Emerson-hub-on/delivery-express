@@ -1,5 +1,6 @@
 import { Order } from '@/types/product'
 import { getPaymentLabel } from '@/lib/payment-labels'
+import { getFiscalCompanyInfo, FiscalCompanyInfo } from '@/services/fiscal'
 
 // ── helpers ───────────────────────────────────────────────────
 
@@ -26,6 +27,18 @@ function getStatusLabel(order: Order): string {
   return map[order.status] ?? order.status
 }
 
+function formatCnpj(cnpj: string): string {
+  const d = cnpj.replace(/\D/g, '')
+  if (d.length !== 14) return cnpj
+  return d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5')
+}
+
+function formatCep(cep: string): string {
+  const d = cep.replace(/\D/g, '')
+  if (d.length !== 8) return cep
+  return d.replace(/^(\d{5})(\d{3})$/, '$1-$2')
+}
+
 // ── main export function ──────────────────────────────────────
 
 export async function exportOrderPdf(order: Order): Promise<void> {
@@ -34,6 +47,15 @@ export async function exportOrderPdf(order: Order): Promise<void> {
 
   const isPickup = order.delivery_type === 'pickup'
   const isVenda  = order.order_type === 'pdv' // venda feita no caixa -> modelo de cupom fiscal
+
+  // Dados do emitente — usados no topo do cupom/pedido.
+  // Se a empresa ainda não tiver fiscal_configs preenchida, segue com fallback genérico.
+  let company: FiscalCompanyInfo | null = null
+  try {
+    company = await getFiscalCompanyInfo()
+  } catch {
+    company = null
+  }
 
   // Largura de cupom: 80mm = ~227pt
   const PAGE_W  = 227
@@ -103,7 +125,27 @@ export async function exportOrderPdf(order: Order): Promise<void> {
   // ── Cabeçalho ────────────────────────────────────────────────
   y = 18
 
-  text('WebState Sistema', { size: 13, bold: true, align: 'center' })
+  if (company) {
+    text(company.nome_fantasia || company.razao_social, { size: 12, bold: true, align: 'center' })
+
+    if (company.nome_fantasia && company.nome_fantasia !== company.razao_social) {
+      text(company.razao_social, { size: 7, color: [120, 120, 120], align: 'center' })
+    }
+
+    text(`CNPJ: ${formatCnpj(company.cnpj)}`, { size: 7.5, color: [100, 100, 100], align: 'center' })
+
+    const enderecoLinha1 = `${company.logradouro}, ${company.numero}${company.complemento ? ` - ${company.complemento}` : ''} - ${company.bairro}`
+    const enderecoLinha2 = `${company.municipio}/${company.uf} - CEP ${formatCep(company.cep)}`
+    text(enderecoLinha1, { size: 7.5, color: [100, 100, 100], align: 'center' })
+    text(enderecoLinha2, { size: 7.5, color: [100, 100, 100], align: 'center' })
+
+    if (company.telefone) {
+      text(`Tel: ${company.telefone}`, { size: 7.5, color: [100, 100, 100], align: 'center' })
+    }
+  } else {
+    text('WebState Sistema', { size: 13, bold: true, align: 'center' })
+  }
+
   y += 2
   text(isVenda ? 'Cupom Fiscal' : 'Cupom de Pedido', { size: 8, color: [100, 100, 100], align: 'center' })
   y += 5
