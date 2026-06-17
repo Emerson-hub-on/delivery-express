@@ -33,16 +33,13 @@ export async function exportOrderPdf(order: Order): Promise<void> {
   const jsPDF = jsPDFModule.default
 
   const isPickup = order.delivery_type === 'pickup'
+  const isVenda  = order.order_type === 'pdv' // venda feita no caixa -> modelo de cupom fiscal
 
   // Largura de cupom: 80mm = ~227pt
   const PAGE_W  = 227
   const MARGIN  = 14
   const INNER_W = PAGE_W - MARGIN * 2
-
-  // Largura máxima do nome do produto na tabela de itens.
-  // Precisa parar ANTES da coluna "Qtd" (centralizada em MARGIN + 80),
-  // senão nomes longos cobrem a quantidade.
-  const ITEM_NAME_W = 60
+  const ITEM_NAME_W = 60 // pra não cobrir a coluna Qtd
 
   const doc = new jsPDF({
     orientation: 'portrait',
@@ -62,19 +59,19 @@ export async function exportOrderPdf(order: Order): Promise<void> {
     y += 6
   }
 
-const dottedLine = () => {
-  y += 4
-  doc.setDrawColor(180, 180, 180)
-  doc.setLineWidth(0.4)
-  const dash = 2
-  const gap  = 2
-  let x = MARGIN
-  while (x < PAGE_W - MARGIN) {
-    doc.line(x, y, Math.min(x + dash, PAGE_W - MARGIN), y)
-    x += dash + gap
+  const dottedLine = () => {
+    y += 4
+    doc.setDrawColor(180, 180, 180)
+    doc.setLineWidth(0.4)
+    const dash = 2
+    const gap  = 2
+    let x = MARGIN
+    while (x < PAGE_W - MARGIN) {
+      doc.line(x, y, Math.min(x + dash, PAGE_W - MARGIN), y)
+      x += dash + gap
+    }
+    y += 6
   }
-  y += 6
-}
 
   const text = (
     str: string,
@@ -88,7 +85,6 @@ const dottedLine = () => {
     const maxWidth = PAGE_W - MARGIN * 2
     const xPos = align === 'center' ? PAGE_W / 2 : align === 'right' ? PAGE_W - MARGIN : x
 
-    // Quebra automaticamente se necessário
     const lines = doc.splitTextToSize(str, maxWidth)
     doc.text(lines, xPos, y, { align })
     y += (size + 5) * lines.length
@@ -109,48 +105,52 @@ const dottedLine = () => {
 
   text('WebState Sistema', { size: 13, bold: true, align: 'center' })
   y += 2
-  text('Cupom de Pedido', { size: 8, color: [100, 100, 100], align: 'center' })
+  text(isVenda ? 'Cupom Fiscal' : 'Cupom de Pedido', { size: 8, color: [100, 100, 100], align: 'center' })
   y += 5
   line()
   y += 9
 
   // Número + data
-  text(`Pedido #${order.code ?? order.id}`, { size: 11, bold: true, align: 'center' })
+  text(`${isVenda ? 'Venda' : 'Pedido'} #${order.code ?? order.id}`, { size: 11, bold: true, align: 'center' })
   y += 3
   text(formatDateTime(order.created_at), { size: 7.5, color: [120, 120, 120], align: 'center' })
   y += 4
 
-  // Tipo de entrega
-  const typeLabel = isPickup ? 'Retirada no local' : 'Entrega'
-  text(typeLabel, { size: 8, bold: true, align: 'center', color: isPickup ? [100, 40, 160] : [30, 80, 200] })
-  y += 2
+  // Tipo de entrega — não existe pra venda no PDV
+  if (!isVenda) {
+    const typeLabel = isPickup ? 'Retirada no local' : 'Entrega'
+    text(typeLabel, { size: 8, bold: true, align: 'center', color: isPickup ? [100, 40, 160] : [30, 80, 200] })
+    y += 2
+  }
 
   line()
   y += 5
-  // ── Status timeline ──────────────────────────────────────────
-  text('LINHA DO TEMPO', { size: 7, bold: true, color: [120, 120, 120] })
-  y += 4
 
-  row('Pedido recebido:', formatDateTime(order.created_at))
+  // ── Status timeline — só pedido tem etapas de entrega ─────────
+  if (!isVenda) {
+    text('LINHA DO TEMPO', { size: 7, bold: true, color: [120, 120, 120] })
+    y += 4
 
-  if (order.dispatched_at) {
-    const dispatchLabel = isPickup ? '  Pronto p/ retirada:' : 'Despachado:'
-    row(dispatchLabel, formatDateTime(order.dispatched_at))
+    row('Pedido recebido:', formatDateTime(order.created_at))
+
+    if (order.dispatched_at) {
+      const dispatchLabel = isPickup ? '  Pronto p/ retirada:' : 'Despachado:'
+      row(dispatchLabel, formatDateTime(order.dispatched_at))
+    }
+
+    if (order.completed_at) {
+      const completedLabel = order.status === 'cancelled' ? '  Cancelado:' : 'Concluído:'
+      row(completedLabel, formatDateTime(order.completed_at))
+    }
+
+    y += 2
+    const statusLabel = getStatusLabel(order)
+    text(`Status atual: ${statusLabel}`, { size: 8, bold: true })
+    y += 1
+
+    line()
+    y += 5
   }
-
-  if (order.completed_at) {
-    const completedLabel = order.status === 'cancelled' ? '  Cancelado:' : 'Concluído:'
-    row(completedLabel, formatDateTime(order.completed_at))
-  }
-
-  // Status atual
-  y += 2
-  const statusLabel = getStatusLabel(order)
-  text(`Status atual: ${statusLabel}`, { size: 8, bold: true })
-  y += 1
-
-  line()
-  y += 5
 
   // ── Cliente ──────────────────────────────────────────────────
   text('CLIENTE', { size: 7, bold: true, color: [120, 120, 120] })
@@ -163,28 +163,28 @@ const dottedLine = () => {
   }
   y += 2
 
-  // ── Endereço / Retirada ──────────────────────────────────────
-  if (isPickup) {
-    y += 2
-  } else if (order.address) {
-    const addr = order.address
-    y += 2
-    text('ENDEREÇO DE ENTREGA', { size: 7, bold: true, color: [120, 120, 120] })
-    y += 4
-    text(`${addr.street}, ${addr.number}${addr.complement ? ` — ${addr.complement}` : ''}`, { size: 8 })
-    text(`${addr.district}, ${addr.city} / ${(addr.state ?? '').toUpperCase()}`, { size: 8 })
-    y += 2
+  // ── Endereço / Retirada — não existe em venda de balcão ───────
+  if (!isVenda) {
+    if (isPickup) {
+      y += 2
+    } else if (order.address) {
+      const addr = order.address
+      y += 2
+      text('ENDEREÇO DE ENTREGA', { size: 7, bold: true, color: [120, 120, 120] })
+      y += 4
+      text(`${addr.street}, ${addr.number}${addr.complement ? ` — ${addr.complement}` : ''}`, { size: 8 })
+      text(`${addr.district}, ${addr.city} / ${(addr.state ?? '').toUpperCase()}`, { size: 8 })
+      y += 2
+    }
   }
 
   line()
-
   y += 5
 
   // ── Itens ────────────────────────────────────────────────────
-  text('ITENS DO PEDIDO', { size: 7, bold: true, color: [120, 120, 120] })
+  text(isVenda ? 'ITENS DA VENDA' : 'ITENS DO PEDIDO', { size: 7, bold: true, color: [120, 120, 120] })
   y += 5
 
-  // Cabeçalho da tabela
   doc.text('Produto',  MARGIN,       y)
   doc.text('Qtd',      MARGIN + 80,  y, { align: 'center' })
   doc.text('Unit.',    MARGIN + 130, y, { align: 'right' })
@@ -194,23 +194,20 @@ const dottedLine = () => {
   y += 5
 
   for (const item of order.items ?? []) {
-    // Nome do produto (quebra antes de chegar na coluna Qtd)
     doc.setFontSize(8)
     doc.setFont('helvetica', 'bold')
     doc.setTextColor(30, 30, 30)
     const nameLines = doc.splitTextToSize(item.product_name, ITEM_NAME_W)
     doc.text(nameLines, MARGIN, y)
 
-    // Qtd, preço e subtotal na primeira linha
     doc.setFont('helvetica', 'normal')
     doc.text(String(item.quantity) + 'x', MARGIN + 80,  y, { align: 'center' })
     doc.text(`R$ ${fmt(item.unit_price)}`, MARGIN + 130, y, { align: 'right' })
     doc.setFont('helvetica', 'bold')
     doc.text(`R$ ${fmt(item.quantity * item.unit_price)}`, PAGE_W - MARGIN, y, { align: 'right' })
 
-    y += (9) * nameLines.length
+    y += 9 * nameLines.length
 
-    // Addons
     for (const addon of item.addons ?? []) {
       doc.setFontSize(7.5)
       doc.setFont('helvetica', 'normal')
@@ -222,7 +219,6 @@ const dottedLine = () => {
       y += 10
     }
 
-    // Observação
     if (item.observation) {
       doc.setFontSize(7.5)
       doc.setFont('helvetica', 'italic')
@@ -238,7 +234,6 @@ const dottedLine = () => {
   dottedLine()
   y += 7
 
-  // Total
   row('TOTAL', `R$ ${fmt(order.total)}`, { bold: true, size: 10 })
 
   line()
@@ -251,20 +246,18 @@ const dottedLine = () => {
   text(getPaymentLabel(order.payment_method), { size: 9, bold: true })
   y += 2
 
-  // Status do pagamento
   if (order.status === 'confirmed' && order.payment_method === 'pix') {
     text('Pago online (Pix)', { size: 8, color: [20, 160, 80] })
   } else if (!['completed', 'cancelled'].includes(order.status)) {
     text('Cobrar do cliente', { size: 8, color: [120, 120, 120] })
   } else {
-    text('Pago na entrega / retirada', { size: 8 })
+    text(isVenda ? 'Pago no caixa' : 'Pago na entrega / retirada', { size: 8 })
   }
 
-  // Troco
   if (order.payment_method === 'dinheiro') {
     y += 2
     if (order.change === null || order.change === undefined) {
-      text('Pagamento em dinheiro na entrega', { size: 8 })
+      text(isVenda ? 'Pagamento em dinheiro' : 'Pagamento em dinheiro na entrega', { size: 8 })
     } else if (order.change === 0) {
       text('Sem troco (valor exato)', { size: 8 })
     } else {
@@ -284,5 +277,5 @@ const dottedLine = () => {
   text('webState © 2026', { size: 7, color: [160, 160, 160], align: 'center' })
   y += 12
 
-doc.save(`pedido-${order.code ?? order.id}.pdf`)
+  doc.save(`${isVenda ? 'venda' : 'pedido'}-${order.code ?? order.id}.pdf`)
 }
