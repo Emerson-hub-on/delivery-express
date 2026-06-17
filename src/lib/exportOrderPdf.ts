@@ -39,6 +39,11 @@ export async function exportOrderPdf(order: Order): Promise<void> {
   const MARGIN  = 14
   const INNER_W = PAGE_W - MARGIN * 2
 
+  // Largura máxima do nome do produto na tabela de itens.
+  // Precisa parar ANTES da coluna "Qtd" (centralizada em MARGIN + 80),
+  // senão nomes longos cobrem a quantidade.
+  const ITEM_NAME_W = 60
+
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'pt',
@@ -189,11 +194,11 @@ const dottedLine = () => {
   y += 5
 
   for (const item of order.items ?? []) {
-    // Nome do produto (pode quebrar linha)
+    // Nome do produto (quebra antes de chegar na coluna Qtd)
     doc.setFontSize(8)
     doc.setFont('helvetica', 'bold')
     doc.setTextColor(30, 30, 30)
-    const nameLines = doc.splitTextToSize(item.product_name, 88)
+    const nameLines = doc.splitTextToSize(item.product_name, ITEM_NAME_W)
     doc.text(nameLines, MARGIN, y)
 
     // Qtd, preço e subtotal na primeira linha
