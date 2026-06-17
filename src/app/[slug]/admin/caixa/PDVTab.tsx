@@ -161,10 +161,15 @@ export function PDVTab({ companyId, cashRegisterId, serie, onError, onCloseCash,
   const [saleResult, setSaleResult] = useState<{ orderId: number; nfceNumero: number; serie: string } | null>(null)
   const [nfceLoading, setNfceLoading] = useState<'normal' | 'contingencia' | null>(null)
   const [logsModal, setLogsModal] = useState(false)
+  const [variantModal, setVariantModal] = useState<{
+    product: any
+    qty: number
+    variants: any[]
+  } | null>(null)
+  const [variantLoading, setVariantLoading] = useState(false)
+  const [selectedVariant, setSelectedVariant] = useState<any | null>(null)
+  const [selectedSize, setSelectedSize]       = useState<string | null>(null)
   const searchCustomers = useCallback(async (term: string) => {
-
-
-
 
 
     setCustomerSearch(term)
@@ -241,14 +246,51 @@ export function PDVTab({ companyId, cashRegisterId, serie, onError, onCloseCash,
     toastRef.current = setTimeout(() => setToast(null), 2800)
   }
 
-  const addToCart = (product: any, q: number) => {
-    setCart(prev => {
-      const existing = prev.find(i => i.id === product.id)
-      if (existing) return prev.map(i => i.id === product.id ? { ...i, qty: i.qty + q } : i)
-      return [...prev, { id: product.id, code: product.code, name: product.name, price: product.price, image: product.image, qty: q, discount: 0 }]
+const addToCart = (product: any, q: number, variantLabel?: string) => {
+  setCart(prev => {
+    // Chave única: produto + variante (cor/tamanho)
+    const key = variantLabel ? `${product.id}__${variantLabel}` : String(product.id)
+    const existing = prev.find(i => (i.variant_label
+      ? `${i.id}__${i.variant_label}`
+      : String(i.id)) === key)
+
+    if (existing) return prev.map(i => {
+      const iKey = i.variant_label ? `${i.id}__${i.variant_label}` : String(i.id)
+      return iKey === key ? { ...i, qty: i.qty + q } : i
     })
-    showToast(`${product.name} adicionado`)
+    return [...prev, {
+      id: product.id, code: product.code, name: product.name,
+      price: product.price, image: product.image,
+      qty: q, discount: 0,
+      variant_label: variantLabel,
+    }]
+  })
+  const label = variantLabel ? ` (${variantLabel})` : ''
+  showToast(`${product.name}${label} adicionado`)
+}
+
+const checkAndAddToCart = async (product: any, q: number) => {
+  setVariantLoading(true)
+  try {
+    const { data: variants } = await supabase
+      .from('product_variants')
+      .select('id, color_id, sizes, stock, active, color:product_colors(id, name, hex_code)')
+      .eq('product_id', product.id)
+      .eq('active', true)
+
+    if (!variants || variants.length === 0) {
+      // Sem variantes — adiciona direto
+      addToCart(product, q)
+    } else {
+      // Tem variantes — abre modal
+      setSelectedVariant(null)
+      setSelectedSize(null)
+      setVariantModal({ product, qty: q, variants })
+    }
+  } finally {
+    setVariantLoading(false)
   }
+}
 
   const removeFromCart = (id: number) => {
     setCart(prev => prev.filter(i => i.id !== id))
@@ -439,12 +481,24 @@ const handlePularNfce = () => {
   setConsumer(null)
   showToast(`Venda finalizada — ${fmt(cartTotal)}`)
 }
-  const handleAddByCode = async () => {
-    if (!codeInput.trim()) return
-    const p = await getByCode(codeInput.trim())
-    if (!p) { showToast('Produto não encontrado', 'err'); return }
-    addToCart(p, qty); setCodeInput('')
-  }
+const handleAddByCode = async () => {
+  if (!codeInput.trim()) return
+  const p = await getByCode(codeInput.trim())
+  if (!p) { showToast('Produto não encontrado', 'err'); return }
+  await checkAndAddToCart(p, qty)
+  setCodeInput('')
+}
+const handleConfirmVariant = () => {
+  if (!variantModal) return
+  const { product, qty } = variantModal
+
+  const colorName = selectedVariant?.color?.name ?? null
+  const sizeName  = selectedSize ?? null
+  const label     = [colorName, sizeName].filter(Boolean).join(' / ')
+
+  addToCart(product, qty, label || undefined)
+  setVariantModal(null)
+}
 
   const cupomNum = '000142'
   const now      = new Date()
@@ -913,16 +967,35 @@ useEffect(() => {
                 <button onClick={() => setQty(q => q + 1)} style={{ padding: '6px 14px', color: css.txtSecondary, background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>+</button>
               </div>
               <button
-                onClick={() => selectedProd ? addToCart(selectedProd, qty) : showToast('Selecione um produto', 'err')}
+                disabled={variantLoading}
+                onClick={() => selectedProd
+                  ? checkAndAddToCart(selectedProd, qty)
+                  : showToast('Selecione um produto', 'err')
+                }
                 style={{
-                  background: css.accent, color: '#fff', fontSize: 12, fontWeight: 700,
-                  padding: '8px 14px', borderRadius: 8, border: 'none', cursor: 'pointer',
-                  whiteSpace: 'nowrap', boxShadow: '0 2px 6px rgba(249,115,22,0.3)', transition: 'all 0.15s',
+                  background: css.accent,
+                  color: '#fff',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  padding: '8px 14px',
+                  borderRadius: 8,
+                  border: 'none',
+                  cursor: variantLoading ? 'not-allowed' : 'pointer',
+                  whiteSpace: 'nowrap',
+                  boxShadow: '0 2px 6px rgba(249,115,22,0.3)',
+                  transition: 'all 0.15s',
+                  opacity: variantLoading ? 0.7 : 1,
                 }}
-                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#ea6c10' }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = css.accent }}
+                onMouseEnter={e => {
+                  if (!variantLoading)
+                    (e.currentTarget as HTMLElement).style.background = '#ea6c10'
+                }}
+                onMouseLeave={e => {
+                  if (!variantLoading)
+                    (e.currentTarget as HTMLElement).style.background = css.accent
+                }}
               >
-                + Adicionar
+                {variantLoading ? 'Carregando...' : '+ Adicionar'}
               </button>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1396,6 +1469,187 @@ useEffect(() => {
       }
     }}
   />
+)}
+
+{/* ── Modal de variantes ──────────────────────────────────── */}
+{variantModal && (
+  <div style={{
+    position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    zIndex: 60, padding: 16,
+  }}>
+    <div style={{
+      background: css.surface, borderRadius: 18, width: '100%', maxWidth: 420,
+      maxHeight: '85vh', display: 'flex', flexDirection: 'column',
+      boxShadow: '0 12px 40px rgba(0,0,0,0.18)', overflow: 'hidden',
+      border: `1px solid ${css.border}`,
+    }}>
+
+      {/* Imagem */}
+      <div style={{ position: 'relative', flexShrink: 0 }}>
+        <img
+          src={selectedVariant?.image ?? variantModal.product.image}
+          alt={variantModal.product.name}
+          style={{ width: '100%', height: 180, objectFit: 'cover', display: 'block' }}
+          onError={(e: any) => { e.target.style.display = 'none' }}
+        />
+        <button
+          onClick={() => setVariantModal(null)}
+          style={{
+            position: 'absolute', top: 10, right: 10,
+            width: 30, height: 30, borderRadius: '50%',
+            background: 'rgba(0,0,0,0.5)', border: 'none', cursor: 'pointer',
+            color: '#fff', fontSize: 16, display: 'flex',
+            alignItems: 'center', justifyContent: 'center',
+          }}
+        >✕</button>
+      </div>
+
+      {/* Conteúdo scrollável */}
+      <div style={{ overflowY: 'auto', flex: 1 }}>
+
+        {/* Nome + preço */}
+        <div style={{ padding: '16px 20px', borderBottom: `1px solid ${css.border}` }}>
+          <p style={{ fontSize: 15, fontWeight: 700, color: css.txtPrimary, margin: 0 }}>
+            {variantModal.product.name}
+          </p>
+          <p style={{ fontSize: 13, color: css.accent, fontWeight: 700, marginTop: 4 }}>
+            {fmt(variantModal.product.price)}
+          </p>
+        </div>
+
+        {/* Seletor de cor */}
+        <div style={{ padding: '14px 20px', borderBottom: `1px solid ${css.border}` }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: css.txtPrimary }}>Cor</span>
+            <span style={{ fontSize: 11, color: css.red, fontWeight: 600 }}>Obrigatório</span>
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {variantModal.variants.map((v: any) => {
+              const color = v.color
+              const isSelected = selectedVariant?.id === v.id
+              const outOfStock = v.sizes?.length
+                ? v.sizes.every((s: any) => s.stock !== null && s.stock <= 0)
+                : v.stock !== null && v.stock !== undefined && v.stock <= 0
+
+              return (
+                <button
+                  key={v.id}
+                  disabled={outOfStock}
+                  onClick={() => { setSelectedVariant(v); setSelectedSize(null) }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    padding: '7px 12px', borderRadius: 10, cursor: outOfStock ? 'not-allowed' : 'pointer',
+                    border: `2px solid ${isSelected ? css.txtPrimary : outOfStock ? '#f0f0f0' : css.border}`,
+                    background: isSelected ? css.txtPrimary : outOfStock ? '#fafafa' : css.surface,
+                    color: isSelected ? '#fff' : outOfStock ? css.txtMuted : css.txtPrimary,
+                    fontSize: 12, fontWeight: 600, transition: 'all 0.15s',
+                    textDecoration: outOfStock ? 'line-through' : 'none',
+                    opacity: outOfStock ? 0.5 : 1,
+                  }}
+                >
+                  {color?.hex_code && (
+                    <span style={{
+                      width: 12, height: 12, borderRadius: '50%',
+                      background: color.hex_code, flexShrink: 0,
+                      border: `1px solid ${isSelected ? 'rgba(255,255,255,0.4)' : css.border}`,
+                    }} />
+                  )}
+                  {color?.name}
+                </button>
+              )
+            })}
+          </div>
+          {!selectedVariant && (
+            <p style={{ fontSize: 11, color: css.red, marginTop: 8 }}>
+              Selecione uma cor para continuar
+            </p>
+          )}
+        </div>
+
+        {/* Seletor de tamanho */}
+        {selectedVariant && (selectedVariant.sizes?.length > 0) && (
+          <div style={{ padding: '14px 20px', borderBottom: `1px solid ${css.border}` }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: css.txtPrimary }}>Tamanho</span>
+              <span style={{ fontSize: 11, color: css.red, fontWeight: 600 }}>Obrigatório</span>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {selectedVariant.sizes.map((s: any) => {
+                const outOfStock = s.stock !== null && s.stock <= 0
+                const isSelected = selectedSize === s.value
+                return (
+                  <button
+                    key={s.value}
+                    disabled={outOfStock}
+                    onClick={() => setSelectedSize(s.value)}
+                    style={{
+                      padding: '7px 14px', borderRadius: 10,
+                      border: `2px solid ${isSelected ? css.txtPrimary : outOfStock ? '#f0f0f0' : css.border}`,
+                      background: isSelected ? css.txtPrimary : outOfStock ? '#fafafa' : css.surface,
+                      color: isSelected ? '#fff' : outOfStock ? css.txtMuted : css.txtPrimary,
+                      fontSize: 12, fontWeight: 600, cursor: outOfStock ? 'not-allowed' : 'pointer',
+                      textDecoration: outOfStock ? 'line-through' : 'none',
+                      opacity: outOfStock ? 0.5 : 1,
+                      transition: 'all 0.15s',
+                    }}
+                  >
+                    {s.value}
+                    {s.stock !== null && s.stock > 0 && (
+                      <span style={{ marginLeft: 4, fontSize: 10, opacity: 0.6 }}>
+                        ({s.stock})
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+            {!selectedSize && (
+              <p style={{ fontSize: 11, color: css.red, marginTop: 8 }}>
+                Selecione um tamanho para continuar
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div style={{
+        flexShrink: 0, padding: '14px 20px',
+        borderTop: `1px solid ${css.border}`, background: css.surface,
+        display: 'flex', gap: 10,
+      }}>
+        <button
+          onClick={() => setVariantModal(null)}
+          style={{
+            flex: 1, padding: '11px 0', borderRadius: 10,
+            border: `1px solid ${css.border}`, background: css.surface,
+            color: css.txtSecondary, fontSize: 13, cursor: 'pointer',
+          }}
+        >
+          Cancelar
+        </button>
+        <button
+          onClick={handleConfirmVariant}
+          disabled={
+            !selectedVariant ||
+            (selectedVariant.sizes?.length > 0 && !selectedSize)
+          }
+          style={{
+            flex: 2, padding: '11px 0', borderRadius: 10, border: 'none',
+            background: (!selectedVariant || (selectedVariant.sizes?.length > 0 && !selectedSize))
+              ? css.border : css.green,
+            color: (!selectedVariant || (selectedVariant.sizes?.length > 0 && !selectedSize))
+              ? css.txtMuted : '#fff',
+            fontSize: 13, fontWeight: 700, cursor: 'pointer',
+            transition: 'all 0.15s',
+          }}
+        >
+          + Adicionar ao cupom · {fmt(variantModal.product.price)}
+        </button>
+      </div>
+    </div>
+  </div>
 )}
 
       <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
