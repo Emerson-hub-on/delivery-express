@@ -17,9 +17,10 @@ const STATUS_MAP: Record<Evento, 'pendente' | 'confirmada' | 'recusada' | 'cance
 }
 
 type ItemNota = {
-  id:         string
-  produto_id: number | null
-  quantidade: number
+  id:                     string
+  produto_id:             number | null
+  quantidade:             number
+  estoque_qtd_processada: number | null
 }
 
 export async function POST(req: NextRequest) {
@@ -53,15 +54,13 @@ export async function POST(req: NextRequest) {
 
     if (error || !notaRow) throw error ?? new Error('Nota não encontrada')
 
-    // Atualiza estoque apenas na confirmação
+    // Atualiza estoque apenas na confirmação (inclui re-confirmações
+    // feitas depois de editar uma nota já confirmada)
     if (evento === 'confirmacao' && fatores) {
       // ── Busca os itens na tabela relacional (nf_entrada_itens) ──────────
-      // Antes lia de nf_entrada.itens_nota (snapshot legado, anterior à
-      // migração para a tabela relacional) — por isso o select falhava e
-      // o endpoint retornava 500 mesmo após confirmar a nota.
       const { data: itensData, error: itensError } = await supabaseAdmin
         .from('nf_entrada_itens')
-        .select('id, produto_id, quantidade')
+        .select('id, produto_id, quantidade, estoque_qtd_processada')
         .eq('nf_entrada_id', notaRow.id)
 
       if (itensError) throw itensError
@@ -73,8 +72,14 @@ export async function POST(req: NextRequest) {
           if (!item.produto_id) return
 
           // fatores é indexado pelo id (uuid) do item, não pela posição no array
-          const fator = fatores[item.id] ?? 1
-          const qtdFinal = item.quantidade * fator
+          const fator       = fatores[item.id] ?? 1
+          const qtdFinal     = item.quantidade * fator
+          const jaProcessado = item.estoque_qtd_processada ?? 0
+          const delta        = qtdFinal - jaProcessado
+
+          // Nada mudou para este item desde a última confirmação — não toca no estoque.
+          // É isso que evita somar o valor cheio de novo numa re-confirmação.
+          if (delta === 0) return
 
           // Busca estoque atual
           const { data: produto } = await supabaseAdmin
@@ -88,9 +93,16 @@ export async function POST(req: NextRequest) {
 
           await supabaseAdmin
             .from('products')
-            .update({ stock: Math.round((produto.stock ?? 0) + qtdFinal) })
+            .update({ stock: Math.round((produto.stock ?? 0) + delta) })
             .eq('id', item.produto_id)
             .eq('company_id', companyId)
+
+          // Registra quanto deste item já está refletido no estoque, para
+          // que a próxima confirmação some apenas a diferença novamente.
+          await supabaseAdmin
+            .from('nf_entrada_itens')
+            .update({ estoque_qtd_processada: qtdFinal })
+            .eq('id', item.id)
         })
       )
     }

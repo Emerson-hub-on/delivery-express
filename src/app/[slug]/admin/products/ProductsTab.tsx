@@ -84,6 +84,12 @@ export function ProductsTab({
     fetchCompanyId()
   }, [])
 
+  useEffect(() => {
+  if (!editingId && !form.category && categories.length > 0) {
+    setForm(f => ({ ...f, category: categories[0].name }))
+  }
+}, [categories])
+
   const handleFieldChange = (
     field: keyof Omit<Product, 'id' | 'code'>,
     value: string | number | boolean | null | ProductSize[]
@@ -117,7 +123,6 @@ export function ProductsTab({
 
   const handleSubmit = async () => {
     if (!form.name.trim())   return onError('Informe o nome do produto.')
-    if (!form.category)      return onError('Selecione uma categoria.')
     if (form.price <= 0)     return onError('Informe um preço válido.')
     if (uploading)           return onError('Aguarde o upload da imagem terminar antes de salvar.')
     if (!form.image)         return onError('Adicione uma imagem ao produto antes de salvar.')

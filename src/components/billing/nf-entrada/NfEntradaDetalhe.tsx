@@ -12,21 +12,22 @@ import { ConversaoRegrasManager } from './ConversaoRegrasManager'
 // ── Types locais ───────────────────────────────────────────────────────────────
 
 export interface ItemEntrada {
-  id:              string
-  nf_entrada_id:   string
-  codigo:          string
-  descricao:       string
-  ean:             string | null
-  ncm:             string
-  cfop:            string
-  cst:             string
-  unidade:         string
-  quantidade:      number
-  valor_unitario:  number
-  valor_total:     number
-  produto_id:      number | null
-  produto_nome:    string | null
-  fator_conversao: number
+  id:                      string
+  nf_entrada_id:           string
+  codigo:                  string
+  descricao:               string
+  ean:                     string | null
+  ncm:                     string
+  cfop:                    string
+  cst:                     string
+  unidade:                 string
+  quantidade:              number
+  valor_unitario:          number
+  valor_total:             number
+  produto_id:              number | null
+  produto_nome:            string | null
+  fator_conversao:         number
+  estoque_qtd_processada:  number | null  // quanto deste item já está refletido no estoque do produto vinculado
 }
 
 type ItemConvertido = {
@@ -337,6 +338,9 @@ useEffect(() => {
     const item = modalVinculo
     setVinculando(item.id)
     try {
+      const processadoAnterior = item.estoque_qtd_processada ?? 0
+      const trocandoProduto    = item.produto_id !== null && item.produto_id !== produto.id
+
       const res = await fetch('/api/fiscal/nf-entrada/vincular-item', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -349,9 +353,35 @@ useEffect(() => {
         }),
       })
       if (!res.ok) throw new Error('Erro ao vincular produto')
+
+      // Se estava trocando o produto vinculado e este item já tinha somado
+      // estoque para o produto anterior, reverte naquele produto e zera o
+      // controle — a próxima confirmação volta a somar do zero, agora pro novo produto.
+      if (trocandoProduto && processadoAnterior > 0 && item.produto_id) {
+        const { data: produtoAnterior } = await supabase
+          .from('products')
+          .select('stock')
+          .eq('id', item.produto_id)
+          .single()
+
+        if (produtoAnterior) {
+          await supabase
+            .from('products')
+            .update({ stock: Math.max(0, Math.round((produtoAnterior.stock ?? 0) - processadoAnterior)) })
+            .eq('id', item.produto_id)
+        }
+
+        await supabase
+          .from('nf_entrada_itens')
+          .update({ estoque_qtd_processada: 0 })
+          .eq('id', item.id)
+      }
+
       // Atualiza localmente
       setItens(prev => prev.map(i =>
-        i.id === item.id ? { ...i, produto_id: produto.id, produto_nome: produto.name } : i
+        i.id === item.id
+          ? { ...i, produto_id: produto.id, produto_nome: produto.name, estoque_qtd_processada: trocandoProduto ? 0 : i.estoque_qtd_processada }
+          : i
       ))
       setModalVinculo(null)
     } catch (e) {
@@ -360,22 +390,39 @@ useEffect(() => {
   }
 
   const handleDesvincularProduto = async (item: ItemEntrada) => {
-    const aviso = isConfirmed
-      ? ` Esta nota já foi confirmada — o estoque adicionado para "${item.produto_nome ?? 'este produto'}" não será revertido automaticamente.`
+    const processado = item.estoque_qtd_processada ?? 0
+    const aviso = processado > 0
+      ? ` ${processado} unidade(s) já somadas ao estoque de "${item.produto_nome ?? 'este produto'}" serão revertidas.`
       : ''
     if (!window.confirm(`Remover o vínculo deste item com "${item.produto_nome ?? 'produto'}"?${aviso}`)) return
 
     setVinculando(item.id)
     try {
+      // Reverte no produto o que já tinha sido somado por causa deste item
+      if (item.produto_id && processado > 0) {
+        const { data: produtoAtual } = await supabase
+          .from('products')
+          .select('stock')
+          .eq('id', item.produto_id)
+          .single()
+
+        if (produtoAtual) {
+          await supabase
+            .from('products')
+            .update({ stock: Math.max(0, Math.round((produtoAtual.stock ?? 0) - processado)) })
+            .eq('id', item.produto_id)
+        }
+      }
+
       const { error } = await supabase
         .from('nf_entrada_itens')
-        .update({ produto_id: null, produto_nome: null })
+        .update({ produto_id: null, produto_nome: null, estoque_qtd_processada: 0 })
         .eq('id', item.id)
 
       if (error) throw error
 
       setItens(prev => prev.map(i =>
-        i.id === item.id ? { ...i, produto_id: null, produto_nome: null } : i
+        i.id === item.id ? { ...i, produto_id: null, produto_nome: null, estoque_qtd_processada: 0 } : i
       ))
     } catch (e) {
       onError(e instanceof Error ? e.message : 'Erro ao remover vínculo')
@@ -406,7 +453,7 @@ useEffect(() => {
           cost_price:      custo,
           ean:             eanLimpo,
           ncm:             ncmLimpo,
-          stock:           Math.round(item.quantidade * fator), // estoque inicial já considera a quantidade desta NF
+          stock:           0, // a confirmação agora soma corretamente via delta (estoque_qtd_processada)
           unit_com:        item.unidade || 'UN',
           unidade_estoque: item.unidade || 'UN',
           fator_conversao: fator,

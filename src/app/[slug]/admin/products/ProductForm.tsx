@@ -157,7 +157,7 @@ export function ProductForm({
 
         {/* Categoria */}
         <div>
-          <FieldLabel required>Categoria</FieldLabel>
+          <FieldLabel>Categoria</FieldLabel>
           {loadingCats ? (
             <div className="text-xs text-gray-400 py-2">Carregando categorias...</div>
           ) : (
