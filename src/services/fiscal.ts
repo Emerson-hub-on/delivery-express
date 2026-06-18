@@ -193,9 +193,19 @@ export const marcarPendente = async (orderId: number): Promise<Order> =>
 
 // ── Cancelar NFC-e emitida ────────────────────────────────────
 
-export const cancelarNfce = async (orderId: number, motivo: string): Promise<Order> =>
-  updateOrderNfce(orderId, {
+export const cancelarNfce = async (orderId: number, motivo: string): Promise<Order> => {
+  const updated = await updateOrderNfce(orderId, {
     nfce_status: 'cancelado',
     nfce_motivo: motivo,
     nfce_cancelado_at: new Date().toISOString(),
   })
+
+  // Para vendas PDV, estorna estoque e marca pedido como cancelado
+  const { data: ord } = await supabase.from('orders').select('order_type').eq('id', orderId).maybeSingle()
+  if (ord?.order_type === 'pdv') {
+    await supabase.rpc('estornar_estoque_venda', { p_order_id: orderId })
+    await supabase.from('orders').update({ status: 'cancelled', cupom_cancelado: true }).eq('id', orderId)
+  }
+
+  return updated
+}
