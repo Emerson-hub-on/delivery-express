@@ -16,7 +16,9 @@ type CartItem = {
   image: string
   qty: number
   discount: number
-  variant_label?: string 
+  variant_label?: string
+  variant_id?: number | null
+  size_value?: string | null
 }
 
 type Consumer = {
@@ -246,7 +248,13 @@ export function PDVTab({ companyId, cashRegisterId, serie, onError, onCloseCash,
     toastRef.current = setTimeout(() => setToast(null), 2800)
   }
 
-const addToCart = (product: any, q: number, variantLabel?: string) => {
+const addToCart = (
+  product: any,
+  q: number,
+  variantLabel?: string,
+  variantId?: number,
+  sizeValue?: string | null
+) => {
   setCart(prev => {
     // Chave única: produto + variante (cor/tamanho)
     const key = variantLabel ? `${product.id}__${variantLabel}` : String(product.id)
@@ -263,6 +271,8 @@ const addToCart = (product: any, q: number, variantLabel?: string) => {
       price: product.price, image: product.image,
       qty: q, discount: 0,
       variant_label: variantLabel,
+      variant_id: variantId ?? null,
+      size_value: sizeValue ?? null,
     }]
   })
   const label = variantLabel ? ` (${variantLabel})` : ''
@@ -369,6 +379,8 @@ const confirmVenda = async () => {
         quantity:     i.qty,
         unit_price:   i.price,
         discount:     i.discount,
+        variant_id:   i.variant_id ?? null,
+        size_value:   i.size_value ?? null,
       })),
       paymentMethod:  payMethod,
       amountReceived: payMethod === 'dinheiro' && change
@@ -496,7 +508,7 @@ const handleConfirmVariant = () => {
   const sizeName  = selectedSize ?? null
   const label     = [colorName, sizeName].filter(Boolean).join(' / ')
 
-  addToCart(product, qty, label || undefined)
+  addToCart(product, qty, label || undefined, selectedVariant?.id, sizeName)
   setVariantModal(null)
 }
 

@@ -13,6 +13,8 @@ export type PdvSalePayload = {
     quantity:     number
     unit_price:   number
     discount:     number
+    variant_id?:  number | null
+    size_value?:  string | null
   }[]
   paymentMethod:   'dinheiro' | 'pix' | 'cartao'
   amountReceived?: number
@@ -93,6 +95,17 @@ export async function createPdvSale(payload: PdvSalePayload): Promise<PdvSaleRes
     })))
 
   if (itemsError) throw new Error(`Itens: ${itemsError.message}`)
+
+  // 4. Baixa de estoque — produtos simples e variantes (cor/tamanho)
+  const { error: stockError } = await supabase.rpc('baixar_estoque_pdv', {
+    p_items: payload.items.map(i => ({
+      product_id: i.product_id,
+      variant_id: i.variant_id ?? null,
+      size_value: i.size_value ?? null,
+      quantity:   i.quantity,
+    })),
+  })
+  if (stockError) throw new Error(`Baixa de estoque: ${stockError.message}`)
 
   return { orderId: order.id, orderCode: order.code, nfceNumero, serie: payload.serie }
 }
