@@ -8,7 +8,7 @@ import { VariantSection } from '../products/VariantSection'
 interface ProductFormProps {
   form: Omit<Product, 'id' | 'code'>
   editingId: number | null
-  companyId: string | null          // ← novo
+  companyId: string | null
   categories: CategoryItem[]
   loadingCats: boolean
   saving: boolean
@@ -81,6 +81,8 @@ function FieldLabel({ children, required }: { children: React.ReactNode; require
 
 const inputCls = 'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black'
 
+type Tab = 'geral' | 'fiscal'
+
 export function ProductForm({
   form,
   editingId,
@@ -97,7 +99,7 @@ export function ProductForm({
   onGoToCategories,
 }: ProductFormProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const [fiscalOpen, setFiscalOpen] = useState(false)
+  const [activeTab, setActiveTab] = useState<Tab>('geral')
 
   const currentCategory = categories.find(c => c.name === form.category)
   const availableSizes  = currentCategory?.sizes ?? []
@@ -108,473 +110,463 @@ export function ProductForm({
   }
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-6 mb-8">
-      <h2 className="text-base font-medium text-gray-900 mb-4">
-        {editingId !== null ? 'Editar produto' : 'Novo produto'}
-      </h2>
+    <div className="flex flex-col">
 
-      {/* ── Campos principais ────────────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-
-        {/* Imagem */}
-        <div className="sm:col-span-2">
-          <FieldLabel>Imagem</FieldLabel>
-          <div className="flex items-center gap-4">
-            <div
-              onClick={() => fileInputRef.current?.click()}
-              className="w-20 h-20 rounded-xl border-2 border-dashed border-gray-200 flex items-center justify-center overflow-hidden cursor-pointer hover:border-gray-400 transition-colors shrink-0"
-            >
-              {imagePreview
-                ? <img src={imagePreview} alt="preview" className="w-full h-full object-cover" />
-                : <span style={{ fontSize: 28, color: '#d1d5db' }}>+</span>}
-            </div>
-            <div>
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploading}
-                className="text-sm border border-gray-200 px-4 py-2 rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors"
-              >
-                {uploading ? 'Enviando...' : imagePreview ? 'Trocar imagem' : 'Escolher imagem'}
-              </button>
-              <p className="text-xs text-gray-400 mt-1">PNG, JPG ou WEBP — máx. 2MB</p>
-            </div>
-            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={onImageChange} />
-          </div>
-        </div>
-
-        {/* Nome */}
-        <div>
-          <FieldLabel required>Nome</FieldLabel>
-          <input
-            type="text"
-            placeholder="Ex: Camisa Básica Mengotti"
-            value={form.name}
-            onChange={e => onFieldChange('name', e.target.value)}
-            className={inputCls}
-          />
-        </div>
-
-        {/* Categoria */}
-        <div>
-          <FieldLabel>Categoria</FieldLabel>
-          {loadingCats ? (
-            <div className="text-xs text-gray-400 py-2">Carregando categorias...</div>
-          ) : (
-            <select
-              value={form.category}
-              onChange={e => {
-                onFieldChange('category', e.target.value)
-                const cat = categories.find(c => c.name === e.target.value)
-                if (cat?.sizes?.length) {
-                  onFieldChange('stock', null)
-                  onFieldChange('sizes', [])
-                } else {
-                  onFieldChange('sizes', null)
-                }
-              }}
-              className={inputCls}
-            >
-              {categories.map(c => (
-                <option key={c.id} value={c.name}>{c.label}</option>
-              ))}
-            </select>
+      {/* ── Abas ── */}
+      <div className="flex border-b border-gray-200 mb-6">
+        <button
+          type="button"
+          onClick={() => setActiveTab('geral')}
+          className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px
+            ${activeTab === 'geral'
+              ? 'border-black text-gray-900'
+              : 'border-transparent text-gray-400 hover:text-gray-600'}`}
+        >
+          Dados Gerais
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('fiscal')}
+          className={`flex items-center gap-1.5 px-5 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px
+            ${activeTab === 'fiscal'
+              ? 'border-black text-gray-900'
+              : 'border-transparent text-gray-400 hover:text-gray-600'}`}
+        >
+          Dados Fiscais
+          {!hasFiscalData && (
+            <span className="text-[10px] bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded-full font-semibold leading-none">
+              Pendente
+            </span>
           )}
-          <p className="text-xs text-gray-400 mt-1">
-            Gerencie categorias na aba{' '}
-            <button onClick={onGoToCategories} className="underline hover:text-gray-600">Categorias</button>
-          </p>
-        </div>
-
-        {/* EAN */}
-        <div>
-          <FieldLabel>EAN / Código de barras</FieldLabel>
-          <input
-            type="text"
-            placeholder="Ex: 7891234567890"
-            maxLength={14}
-            value={form.ean ?? ''}
-            onChange={e => onFieldChange('ean', e.target.value.replace(/\D/g, '').slice(0, 14) || null)}
-            className={inputCls}
-          />
-          <p className="text-xs text-gray-400 mt-1">Opcional — EAN-8, EAN-13 ou EAN-14</p>
-        </div>
-
-        {/* Preço de custo */}
-        <div>
-          <FieldLabel>Preço de custo (R$)</FieldLabel>
-          <input
-            type="number"
-            min={0}
-            step="0.01"
-            placeholder="Ex: 12.50"
-            value={form.cost_price ?? ''}
-            onChange={e => onFieldChange('cost_price', e.target.value === '' ? null : Number(e.target.value))}
-            className={inputCls}
-          />
-          <p className="text-xs text-gray-400 mt-1">Opcional — usado para calcular margem</p>
-        </div>
-
-        {/* Preço de venda */}
-        <div>
-          <FieldLabel required>Preço (R$)</FieldLabel>
-          <input
-            type="number"
-            min={0}
-            step="0.01"
-            placeholder="Ex: 49.90"
-            value={form.price || ''}
-            onChange={e => onFieldChange('price', Number(e.target.value))}
-            className={inputCls}
-          />
-        </div>
-
-        {/* Descrição */}
-        <div>
-          <FieldLabel>Descrição</FieldLabel>
-          <input
-            type="text"
-            placeholder="Ex: Camisa tradicional manga curta"
-            value={form.description || ''}
-            onChange={e => onFieldChange('description', e.target.value)}
-            className={inputCls}
-          />
-        </div>
+          {hasFiscalData && (
+            <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-semibold leading-none">
+              ✓
+            </span>
+          )}
+        </button>
       </div>
 
-      {/* ── Estoque / Tamanhos / Variantes ───────────────────── */}
-      {/*
-        Lógica de exibição:
-        - Produto salvo (editingId) + categoria com tamanhos → VariantSection (cor × tamanho)
-        - Produto salvo (editingId) + categoria sem tamanhos → VariantSection (cor × estoque simples)
-        - Produto novo                                       → estoque/tamanhos simples (FK ainda não existe)
-      */}
-      {editingId !== null && companyId ? (
-        <VariantSection
-          productId={editingId}
-          companyId={companyId}
-          availableSizes={availableSizes}
-        />
-      ) : availableSizes.length > 0 ? (
-        <div className="mt-4">
-          <ProductSizeStock
-            availableSizes={availableSizes}
-            value={form.sizes ?? []}
-            onChange={sizes => onFieldChange('sizes', sizes)}
-          />
-          <p className="text-xs text-amber-600 mt-2">
-            💡 Variantes de cor ficam disponíveis após salvar o produto.
-          </p>
-        </div>
-      ) : (
-        <div className="mt-4">
-          <FieldLabel>Estoque</FieldLabel>
-          <input
-            type="number"
-            min={0}
-            step="1"
-            placeholder="Deixe vazio para não controlar"
-            value={form.stock ?? ''}
-            onChange={e => onFieldChange('stock', e.target.value === '' ? null : Number(e.target.value))}
-            className={inputCls}
-          />
-          <p className="text-xs text-gray-400 mt-1">Deixe vazio para não controlar estoque</p>
-          <p className="text-xs text-amber-600 mt-1">
-            💡 Variantes de cor ficam disponíveis após salvar o produto.
-          </p>
+      {/* ── Aba: Dados Gerais ── */}
+      {activeTab === 'geral' && (
+        <div className="flex flex-col gap-6">
+
+          {/* campos principais */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+            {/* Imagem */}
+            <div className="sm:col-span-2">
+              <FieldLabel>Imagem</FieldLabel>
+              <div className="flex items-center gap-4">
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-20 h-20 rounded-xl border-2 border-dashed border-gray-200 flex items-center justify-center overflow-hidden cursor-pointer hover:border-gray-400 transition-colors shrink-0"
+                >
+                  {imagePreview
+                    ? <img src={imagePreview} alt="preview" className="w-full h-full object-cover" />
+                    : <span className="text-3xl text-gray-300">+</span>}
+                </div>
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploading}
+                    className="text-sm border border-gray-200 px-4 py-2 rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                  >
+                    {uploading ? 'Enviando...' : imagePreview ? 'Trocar imagem' : 'Escolher imagem'}
+                  </button>
+                  <p className="text-xs text-gray-400 mt-1">PNG, JPG ou WEBP — máx. 2MB</p>
+                </div>
+                <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={onImageChange} />
+              </div>
+            </div>
+
+            {/* Nome */}
+            <div>
+              <FieldLabel required>Nome</FieldLabel>
+              <input
+                type="text"
+                placeholder="Ex: Camisa Básica"
+                value={form.name}
+                onChange={e => onFieldChange('name', e.target.value)}
+                className={inputCls}
+              />
+            </div>
+
+            {/* Categoria */}
+            <div>
+              <FieldLabel>Categoria</FieldLabel>
+              {loadingCats ? (
+                <div className="text-xs text-gray-400 py-2">Carregando categorias...</div>
+              ) : (
+                <select
+                  value={form.category}
+                  onChange={e => {
+                    onFieldChange('category', e.target.value)
+                    const cat = categories.find(c => c.name === e.target.value)
+                    if (cat?.sizes?.length) {
+                      onFieldChange('stock', null)
+                      onFieldChange('sizes', [])
+                    } else {
+                      onFieldChange('sizes', null)
+                    }
+                  }}
+                  className={inputCls}
+                >
+                  {categories.map(c => (
+                    <option key={c.id} value={c.name}>{c.label}</option>
+                  ))}
+                </select>
+              )}
+              <p className="text-xs text-gray-400 mt-1">
+                Gerencie categorias na aba{' '}
+                <button onClick={onGoToCategories} className="underline hover:text-gray-600">Categorias</button>
+              </p>
+            </div>
+
+            {/* EAN */}
+            <div>
+              <FieldLabel>EAN / Código de barras</FieldLabel>
+              <input
+                type="text"
+                placeholder="Ex: 7891234567890"
+                maxLength={14}
+                value={form.ean ?? ''}
+                onChange={e => onFieldChange('ean', e.target.value.replace(/\D/g, '').slice(0, 14) || null)}
+                className={inputCls}
+              />
+              <p className="text-xs text-gray-400 mt-1">Opcional — EAN-8, EAN-13 ou EAN-14</p>
+            </div>
+
+            {/* Preço de custo */}
+            <div>
+              <FieldLabel>Preço de custo (R$)</FieldLabel>
+              <input
+                type="number"
+                min={0}
+                step="0.01"
+                placeholder="Ex: 12.50"
+                value={form.cost_price ?? ''}
+                onChange={e => onFieldChange('cost_price', e.target.value === '' ? null : Number(e.target.value))}
+                className={inputCls}
+              />
+              <p className="text-xs text-gray-400 mt-1">Opcional — usado para calcular margem</p>
+            </div>
+
+            {/* Preço de venda */}
+            <div>
+              <FieldLabel required>Preço (R$)</FieldLabel>
+              <input
+                type="number"
+                min={0}
+                step="0.01"
+                placeholder="Ex: 49.90"
+                value={form.price || ''}
+                onChange={e => onFieldChange('price', Number(e.target.value))}
+                className={inputCls}
+              />
+            </div>
+
+            {/* Descrição */}
+            <div>
+              <FieldLabel>Descrição</FieldLabel>
+              <input
+                type="text"
+                placeholder="Ex: Camisa tradicional manga curta"
+                value={form.description || ''}
+                onChange={e => onFieldChange('description', e.target.value)}
+                className={inputCls}
+              />
+            </div>
+          </div>
+
+          {/* Estoque / Tamanhos / Variantes */}
+          {editingId !== null && companyId ? (
+            <VariantSection
+              productId={editingId}
+              companyId={companyId}
+              availableSizes={availableSizes}
+            />
+          ) : availableSizes.length > 0 ? (
+            <div>
+              <ProductSizeStock
+                availableSizes={availableSizes}
+                value={form.sizes ?? []}
+                onChange={sizes => onFieldChange('sizes', sizes)}
+              />
+              <p className="text-xs text-amber-600 mt-2">
+                💡 Variantes de cor ficam disponíveis após salvar o produto.
+              </p>
+            </div>
+          ) : (
+            <div>
+              <FieldLabel>Estoque</FieldLabel>
+              <input
+                type="number"
+                min={0}
+                step="1"
+                placeholder="Deixe vazio para não controlar"
+                value={form.stock ?? ''}
+                onChange={e => onFieldChange('stock', e.target.value === '' ? null : Number(e.target.value))}
+                className={inputCls}
+              />
+              <p className="text-xs text-gray-400 mt-1">Deixe vazio para não controlar estoque</p>
+              <p className="text-xs text-amber-600 mt-1">
+                💡 Variantes de cor ficam disponíveis após salvar o produto.
+              </p>
+            </div>
+          )}
+
+          {/* Addons */}
+          {editingId !== null && <AddonSection productId={editingId} />}
         </div>
       )}
 
-      {/* ── Complementos (addons) ─────────────────────────────── */}
-      {editingId !== null && <AddonSection productId={editingId} />}
+      {/* ── Aba: Dados Fiscais ── */}
+      {activeTab === 'fiscal' && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
 
-      {/* ── Seção Fiscal (colapsável) ────────────────────────── */}
-      <div className="mt-6 border border-gray-100 rounded-xl overflow-hidden">
-        <button
-          type="button"
-          onClick={() => setFiscalOpen(o => !o)}
-          className="w-full flex items-center justify-between px-5 py-3 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
-        >
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-gray-700">Dados Fiscais</span>
-            {hasFiscalData && !fiscalOpen && (
-              <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">
-                Preenchido
-              </span>
-            )}
-            {!hasFiscalData && !fiscalOpen && (
-              <span className="text-xs bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full font-medium">
-                Necessário para emitir NFC-e
-              </span>
-            )}
+          {/* NCM */}
+          <div>
+            <FieldLabel required>NCM</FieldLabel>
+            <input
+              type="text"
+              placeholder="Ex: 61051000"
+              maxLength={8}
+              value={form.ncm || ''}
+              onChange={e => handleNcm(e.target.value)}
+              className={inputCls}
+            />
+            <p className="text-xs text-gray-400 mt-1">8 dígitos — Nomenclatura Comum do Mercosul</p>
           </div>
-          <svg
-            className={`w-4 h-4 text-gray-400 transition-transform ${fiscalOpen ? 'rotate-180' : ''}`}
-            fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
 
-        {fiscalOpen && (
-          <div className="px-5 py-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 bg-white">
+          {/* CEST */}
+          <div>
+            <FieldLabel>CEST</FieldLabel>
+            <input
+              type="text"
+              placeholder="Ex: 1700100"
+              maxLength={7}
+              value={form.cest || ''}
+              onChange={e => onFieldChange('cest', e.target.value.replace(/\D/g, '').slice(0, 7))}
+              className={inputCls}
+            />
+            <p className="text-xs text-gray-400 mt-1">7 dígitos — somente se houver ST</p>
+          </div>
 
-            {/* NCM */}
+          {/* CFOP */}
+          <div>
+            <FieldLabel required>CFOP</FieldLabel>
+            <select
+              value={form.cfop || '5102'}
+              onChange={e => onFieldChange('cfop', e.target.value)}
+              className={inputCls}
+            >
+              {CFOP_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+
+          {/* Unidade comercial */}
+          <div>
+            <FieldLabel required>Unidade comercial</FieldLabel>
+            <select
+              value={form.unit_com || 'UN'}
+              onChange={e => onFieldChange('unit_com', e.target.value)}
+              className={inputCls}
+            >
+              {UNIT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+
+          {/* Unidade tributável */}
+          <div>
+            <FieldLabel>Unidade tributável</FieldLabel>
+            <select
+              value={form.unit_trib || ''}
+              onChange={e => onFieldChange('unit_trib', e.target.value)}
+              className={inputCls}
+            >
+              <option value="">Igual à unidade comercial</option>
+              {UNIT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+            <p className="text-xs text-gray-400 mt-1">Somente quando diferente</p>
+          </div>
+
+          {/* Fator de conversão */}
+          {form.unit_trib && (
             <div>
-              <FieldLabel required>NCM</FieldLabel>
+              <FieldLabel>Fator de conversão</FieldLabel>
               <input
-                type="text"
-                placeholder="Ex: 61051000"
-                maxLength={8}
-                value={form.ncm || ''}
-                onChange={e => handleNcm(e.target.value)}
+                type="number"
+                min={1}
+                step={1}
+                value={form.fator_conversao ?? 1}
+                onChange={e => onFieldChange('fator_conversao', Number(e.target.value))}
                 className={inputCls}
               />
-              <p className="text-xs text-gray-400 mt-1">8 dígitos — Nomenclatura Comum do Mercosul</p>
+              <p className="text-xs text-gray-400 mt-1">Ex: 1 CX = 12 UN → fator 12</p>
             </div>
+          )}
 
-            {/* CEST */}
+          {/* Origem */}
+          <div>
+            <FieldLabel required>Origem</FieldLabel>
+            <select
+              value={form.origem ?? 0}
+              onChange={e => onFieldChange('origem', Number(e.target.value))}
+              className={inputCls}
+            >
+              {ORIGEM_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+
+          {/* Escala relevante */}
+          <div>
+            <FieldLabel required>Escala Relevante</FieldLabel>
+            <select
+              value={form.ind_escala ?? 'S'}
+              onChange={e => onFieldChange('ind_escala', e.target.value)}
+              className={inputCls}
+            >
+              <option value="S">S — Produção em escala relevante</option>
+              <option value="N">N — Não produzido em escala (sob encomenda)</option>
+            </select>
+            <p className="text-xs text-gray-400 mt-1">Padrão <strong>S</strong> para a maioria dos produtos</p>
+          </div>
+
+          {/* CNPJ Fabricante */}
+          {form.ind_escala === 'N' && (
             <div>
-              <FieldLabel>CEST</FieldLabel>
+              <FieldLabel required>CNPJ do Fabricante</FieldLabel>
               <input
                 type="text"
-                placeholder="Ex: 1700100"
-                maxLength={7}
-                value={form.cest || ''}
-                onChange={e => onFieldChange('cest', e.target.value.replace(/\D/g, '').slice(0, 7))}
+                placeholder="Ex: 12345678000195"
+                maxLength={14}
+                value={form.cnpj_fabricante ?? ''}
+                onChange={e => onFieldChange('cnpj_fabricante', e.target.value.replace(/\D/g, '').slice(0, 14) || null)}
                 className={inputCls}
               />
-              <p className="text-xs text-gray-400 mt-1">7 dígitos — somente se houver ST</p>
             </div>
+          )}
 
-            {/* CFOP */}
+          {/* Divisor ICMS */}
+          <div className="sm:col-span-2 lg:col-span-3">
+            <div className="flex items-center gap-3">
+              <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 whitespace-nowrap">ICMS – Simples Nacional</p>
+              <div className="flex-1 border-t border-gray-100" />
+            </div>
+          </div>
+
+          {/* CSOSN */}
+          <div className="sm:col-span-2">
+            <FieldLabel required>CSOSN</FieldLabel>
+            <select
+              value={form.icms_csosn || '400'}
+              onChange={e => onFieldChange('icms_csosn', e.target.value)}
+              className={inputCls}
+            >
+              {CSOSN_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+            <p className="text-xs text-gray-400 mt-1">
+              Para a maioria dos estabelecimentos no Simples: <strong>400</strong>
+            </p>
+          </div>
+
+          {/* Alíquota ICMS */}
+          {form.icms_csosn === '900' && (
             <div>
-              <FieldLabel required>CFOP</FieldLabel>
-              <select
-                value={form.cfop || '5102'}
-                onChange={e => onFieldChange('cfop', e.target.value)}
-                className={inputCls}
-              >
-                {CFOP_OPTIONS.map(o => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Unidade comercial */}
-            <div>
-              <FieldLabel required>Unidade comercial</FieldLabel>
-              <select
-                value={form.unit_com || 'UN'}
-                onChange={e => onFieldChange('unit_com', e.target.value)}
-                className={inputCls}
-              >
-                {UNIT_OPTIONS.map(o => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Unidade tributável */}
-            <div>
-              <FieldLabel>Unidade tributável</FieldLabel>
-              <select
-                value={form.unit_trib || ''}
-                onChange={e => onFieldChange('unit_trib', e.target.value)}
-                className={inputCls}
-              >
-                <option value="">Igual à unidade comercial</option>
-                {UNIT_OPTIONS.map(o => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
-                ))}
-              </select>
-              <p className="text-xs text-gray-400 mt-1">Somente quando diferente</p>
-            </div>
-
-            {form.unit_trib && (
-              <div>
-                <FieldLabel>Fator de conversão</FieldLabel>
-                <input
-                  type="number"
-                  min={1}
-                  step={1}
-                  value={form.fator_conversao ?? 1}
-                  onChange={e => onFieldChange('fator_conversao', Number(e.target.value))}
-                  className={inputCls}
-                />
-                <p className="text-xs text-gray-400 mt-1">Ex: 1 CX = 12 UN → fator 12</p>
-              </div>
-            )}
-
-            {/* Origem */}
-            <div>
-              <FieldLabel required>Origem</FieldLabel>
-              <select
-                value={form.origem ?? 0}
-                onChange={e => onFieldChange('origem', Number(e.target.value))}
-                className={inputCls}
-              >
-                {ORIGEM_OPTIONS.map(o => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Indicador de Escala */}
-            <div>
-              <FieldLabel required>Escala Relevante</FieldLabel>
-              <select
-                value={form.ind_escala ?? 'S'}
-                onChange={e => onFieldChange('ind_escala', e.target.value)}
-                className={inputCls}
-              >
-                <option value="S">S — Produção em escala relevante</option>
-                <option value="N">N — Não produzido em escala (sob encomenda)</option>
-              </select>
-              <p className="text-xs text-gray-400 mt-1">
-                Padrão <strong>S</strong> para a maioria dos produtos
-              </p>
-            </div>
-
-            {/* CNPJ Fabricante — só quando ind_escala = 'N' */}
-            {form.ind_escala === 'N' && (
-              <div>
-                <FieldLabel required>CNPJ do Fabricante</FieldLabel>
-                <input
-                  type="text"
-                  placeholder="Ex: 12345678000195"
-                  maxLength={14}
-                  value={form.cnpj_fabricante ?? ''}
-                  onChange={e =>
-                    onFieldChange('cnpj_fabricante', e.target.value.replace(/\D/g, '').slice(0, 14) || null)
-                  }
-                  className={inputCls}
-                />
-              </div>
-            )}
-
-            {/* Divisor ICMS */}
-            <div className="sm:col-span-2 lg:col-span-3">
-              <p className="text-xs font-semibold uppercase tracking-widest text-gray-400">ICMS – Simples Nacional</p>
-              <div className="border-t border-gray-100 mt-2" />
-            </div>
-
-            {/* CSOSN */}
-            <div className="sm:col-span-2">
-              <FieldLabel required>CSOSN</FieldLabel>
-              <select
-                value={form.icms_csosn || '400'}
-                onChange={e => onFieldChange('icms_csosn', e.target.value)}
-                className={inputCls}
-              >
-                {CSOSN_OPTIONS.map(o => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
-                ))}
-              </select>
-              <p className="text-xs text-gray-400 mt-1">
-                Para a maioria dos estabelecimentos no Simples: <strong>400</strong>
-              </p>
-            </div>
-
-            {/* Alíquota ICMS — somente CSOSN 900 */}
-            {form.icms_csosn === '900' && (
-              <div>
-                <FieldLabel>Alíquota ICMS (%)</FieldLabel>
-                <input
-                  type="number"
-                  min={0}
-                  max={100}
-                  step="0.01"
-                  placeholder="Ex: 12.00"
-                  value={form.icms_aliq ?? ''}
-                  onChange={e => onFieldChange('icms_aliq', Number(e.target.value))}
-                  className={inputCls}
-                />
-              </div>
-            )}
-
-            {/* Divisor PIS/COFINS */}
-            <div className="sm:col-span-2 lg:col-span-3">
-              <p className="text-xs font-semibold uppercase tracking-widest text-gray-400">PIS / COFINS</p>
-              <div className="border-t border-gray-100 mt-2" />
-            </div>
-
-            {/* PIS CST */}
-            <div>
-              <FieldLabel required>CST do PIS</FieldLabel>
-              <select
-                value={form.pis_cst || '07'}
-                onChange={e => onFieldChange('pis_cst', e.target.value)}
-                className={inputCls}
-              >
-                {PIS_COFINS_CST_OPTIONS.map(o => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* PIS alíquota */}
-            <div>
-              <FieldLabel>Alíquota PIS (%)</FieldLabel>
+              <FieldLabel>Alíquota ICMS (%)</FieldLabel>
               <input
                 type="number"
                 min={0}
                 max={100}
                 step="0.01"
-                placeholder="0.00"
-                value={form.pis_aliq ?? 0}
-                onChange={e => onFieldChange('pis_aliq', Number(e.target.value))}
+                placeholder="Ex: 12.00"
+                value={form.icms_aliq ?? ''}
+                onChange={e => onFieldChange('icms_aliq', Number(e.target.value))}
                 className={inputCls}
               />
-              <p className="text-xs text-gray-400 mt-1">0% para Simples Nacional</p>
             </div>
+          )}
 
-            <div className="hidden lg:block" />
-
-            {/* COFINS CST */}
-            <div>
-              <FieldLabel required>CST do COFINS</FieldLabel>
-              <select
-                value={form.cofins_cst || '07'}
-                onChange={e => onFieldChange('cofins_cst', e.target.value)}
-                className={inputCls}
-              >
-                {PIS_COFINS_CST_OPTIONS.map(o => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* COFINS alíquota */}
-            <div>
-              <FieldLabel>Alíquota COFINS (%)</FieldLabel>
-              <input
-                type="number"
-                min={0}
-                max={100}
-                step="0.01"
-                placeholder="0.00"
-                value={form.cofins_aliq ?? 0}
-                onChange={e => onFieldChange('cofins_aliq', Number(e.target.value))}
-                className={inputCls}
-              />
-              <p className="text-xs text-gray-400 mt-1">0% para Simples Nacional</p>
-            </div>
-
-            {/* Dica fiscal */}
-            <div className="sm:col-span-2 lg:col-span-3">
-              <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-3 text-xs text-blue-700 leading-relaxed">
-                <strong>Simples Nacional:</strong> na maioria dos casos, use CSOSN <strong>400</strong>,
-                CST PIS/COFINS <strong>07</strong> e alíquotas <strong>0%</strong>.
-                Consulte seu contador para confirmar o NCM e o CFOP corretos para cada produto.
-              </div>
+          {/* Divisor PIS/COFINS */}
+          <div className="sm:col-span-2 lg:col-span-3">
+            <div className="flex items-center gap-3">
+              <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 whitespace-nowrap">PIS / COFINS</p>
+              <div className="flex-1 border-t border-gray-100" />
             </div>
           </div>
-        )}
-      </div>
 
-      {/* ── Ações ────────────────────────────────────────────── */}
-      <div className="flex gap-3 mt-5">
+          {/* PIS CST */}
+          <div>
+            <FieldLabel required>CST do PIS</FieldLabel>
+            <select
+              value={form.pis_cst || '07'}
+              onChange={e => onFieldChange('pis_cst', e.target.value)}
+              className={inputCls}
+            >
+              {PIS_COFINS_CST_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+
+          {/* PIS alíquota */}
+          <div>
+            <FieldLabel>Alíquota PIS (%)</FieldLabel>
+            <input
+              type="number"
+              min={0}
+              max={100}
+              step="0.01"
+              placeholder="0.00"
+              value={form.pis_aliq ?? 0}
+              onChange={e => onFieldChange('pis_aliq', Number(e.target.value))}
+              className={inputCls}
+            />
+            <p className="text-xs text-gray-400 mt-1">0% para Simples Nacional</p>
+          </div>
+
+          <div className="hidden lg:block" />
+
+          {/* COFINS CST */}
+          <div>
+            <FieldLabel required>CST do COFINS</FieldLabel>
+            <select
+              value={form.cofins_cst || '07'}
+              onChange={e => onFieldChange('cofins_cst', e.target.value)}
+              className={inputCls}
+            >
+              {PIS_COFINS_CST_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+
+          {/* COFINS alíquota */}
+          <div>
+            <FieldLabel>Alíquota COFINS (%)</FieldLabel>
+            <input
+              type="number"
+              min={0}
+              max={100}
+              step="0.01"
+              placeholder="0.00"
+              value={form.cofins_aliq ?? 0}
+              onChange={e => onFieldChange('cofins_aliq', Number(e.target.value))}
+              className={inputCls}
+            />
+            <p className="text-xs text-gray-400 mt-1">0% para Simples Nacional</p>
+          </div>
+
+          {/* Dica */}
+          <div className="sm:col-span-2 lg:col-span-3">
+            <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-3 text-xs text-blue-700 leading-relaxed">
+              <strong>Simples Nacional:</strong> na maioria dos casos, use CSOSN <strong>400</strong>,
+              CST PIS/COFINS <strong>07</strong> e alíquotas <strong>0%</strong>.
+              Consulte seu contador para confirmar o NCM e o CFOP corretos para cada produto.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Ações ── */}
+      <div className="flex gap-3 mt-8 pt-5 border-t border-gray-100">
         <button
           onClick={onSubmit}
           disabled={saving || uploading}

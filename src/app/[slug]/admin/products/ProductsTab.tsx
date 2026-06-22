@@ -54,11 +54,11 @@ export function ProductsTab({
     ...EMPTY_PRODUCT,
     category: categories[0]?.name ?? '',
   })
-  const [editingId, setEditingId]     = useState<number | null>(null)
-  const [saving, setSaving]           = useState(false)
-  const [uploading, setUploading]     = useState(false)
+  const [editingId, setEditingId]       = useState<number | null>(null)
+  const [saving, setSaving]             = useState(false)
+  const [uploading, setUploading]       = useState(false)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
-  const [companyId, setCompanyId]     = useState<string | null>(null)  // ← novo
+  const [companyId, setCompanyId]       = useState<string | null>(null)
 
   const [deleteModal, setDeleteModal] = useState<{
     productId: number
@@ -67,35 +67,28 @@ export function ProductsTab({
   } | null>(null)
   const [deleteChecking, setDeleteChecking] = useState(false)
 
-  // ── Busca companyId uma única vez ─────────────────────────
+  // ── companyId ─────────────────────────────────────────────
   useEffect(() => {
     async function fetchCompanyId() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
-
       const { data: company } = await supabase
-        .from('companies')
-        .select('id')
-        .eq('user_id', user.id)
-        .single()
-
+        .from('companies').select('id').eq('user_id', user.id).single()
       if (company) setCompanyId(company.id)
     }
     fetchCompanyId()
   }, [])
 
   useEffect(() => {
-  if (!editingId && !form.category && categories.length > 0) {
-    setForm(f => ({ ...f, category: categories[0].name }))
-  }
-}, [categories])
+    if (!editingId && !form.category && categories.length > 0)
+      setForm(f => ({ ...f, category: categories[0].name }))
+  }, [categories])
 
+  // ── handlers ──────────────────────────────────────────────
   const handleFieldChange = (
     field: keyof Omit<Product, 'id' | 'code'>,
     value: string | number | boolean | null | ProductSize[]
-  ) => {
-    setForm(f => ({ ...f, [field]: value }))
-  }
+  ) => setForm(f => ({ ...f, [field]: value }))
 
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -122,20 +115,17 @@ export function ProductsTab({
   }
 
   const handleSubmit = async () => {
-    if (!form.name.trim())   return onError('Informe o nome do produto.')
-    if (form.price <= 0)     return onError('Informe um preço válido.')
-    if (uploading)           return onError('Aguarde o upload da imagem terminar antes de salvar.')
-    if (!form.image)         return onError('Adicione uma imagem ao produto antes de salvar.')
-
-    if (form.ncm && !/^\d{8}$/.test(form.ncm))
-      return onError('NCM deve ter exatamente 8 dígitos numéricos.')
-    if (form.cest && !/^\d{7}$/.test(form.cest))
-      return onError('CEST deve ter exatamente 7 dígitos numéricos.')
+    if (!form.name.trim())  return onError('Informe o nome do produto.')
+    if (form.price <= 0)    return onError('Informe um preço válido.')
+    if (uploading)          return onError('Aguarde o upload da imagem terminar antes de salvar.')
+    if (!form.image)        return onError('Adicione uma imagem ao produto antes de salvar.')
+    if (form.ncm && !/^\d{8}$/.test(form.ncm))  return onError('NCM deve ter exatamente 8 dígitos numéricos.')
+    if (form.cest && !/^\d{7}$/.test(form.cest)) return onError('CEST deve ter exatamente 7 dígitos numéricos.')
 
     const payload: Omit<Product, 'id' | 'code'> = {
       ...form,
-      ncm:      form.ncm      || undefined,
-      cest:     form.cest     || undefined,
+      ncm:       form.ncm       || undefined,
+      cest:      form.cest      || undefined,
       unit_trib: form.unit_trib || undefined,
       icms_aliq: form.icms_csosn === '900' ? (form.icms_aliq ?? undefined) : undefined,
     }
@@ -223,10 +213,7 @@ export function ProductsTab({
     }
   }
 
-  const handleCancel = () => {
-    resetForm()
-    onError(null)
-  }
+  const handleCancel = () => { resetForm(); onError(null) }
 
   const resetForm = () => {
     setForm({ ...EMPTY_PRODUCT, category: categories[0]?.name ?? '' })
@@ -241,24 +228,6 @@ export function ProductsTab({
 
   return (
     <>
-      {showForm && (
-        <ProductForm
-          form={form}
-          editingId={editingId}
-          companyId={companyId}          // ← passado aqui
-          categories={categories}
-          loadingCats={loadingCats}
-          saving={saving}
-          uploading={uploading}
-          imagePreview={imagePreview}
-          onFieldChange={handleFieldChange}
-          onImageChange={handleImageChange}
-          onSubmit={handleSubmit}
-          onCancel={handleCancel}
-          onGoToCategories={onGoToCategories}
-        />
-      )}
-
       <ProductList
         products={products}
         categories={categories}
@@ -268,7 +237,54 @@ export function ProductsTab({
         onToggleActive={handleToggleActive}
       />
 
-      {/* Modal de confirmação de exclusão */}
+      {/* ── Modal do formulário ── */}
+      {showForm && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-y-auto">
+          {/* backdrop */}
+          <div
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={handleCancel}
+          />
+
+          {/* card */}
+          <div className="relative w-full max-w-3xl my-8 bg-white rounded-2xl shadow-2xl flex flex-col">
+
+            {/* header do modal */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 shrink-0">
+              <h2 className="text-base font-semibold text-gray-900">
+                {editingId !== null ? 'Editar produto' : 'Novo produto'}
+              </h2>
+              <button
+                onClick={handleCancel}
+                className="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors text-lg"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* conteúdo scrollável */}
+            <div className="overflow-y-auto p-6">
+              <ProductForm
+                form={form}
+                editingId={editingId}
+                companyId={companyId}
+                categories={categories}
+                loadingCats={loadingCats}
+                saving={saving}
+                uploading={uploading}
+                imagePreview={imagePreview}
+                onFieldChange={handleFieldChange}
+                onImageChange={handleImageChange}
+                onSubmit={handleSubmit}
+                onCancel={handleCancel}
+                onGoToCategories={onGoToCategories}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal exclusão ── */}
       {deleteModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div
