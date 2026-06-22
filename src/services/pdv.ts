@@ -50,7 +50,8 @@ export async function createPdvSale(payload: PdvSalePayload): Promise<PdvSaleRes
       order_type:          'pdv',
       status:              'completed',
       total,
-      items:               payload.items.map(i => ({ product_id: i.product_id, product_name: i.product_name, quantity: i.quantity, unit_price: i.unit_price, discount: i.discount })),
+      // Removido, pois agora está em order_item
+      //  items:               payload.items.map(i => ({ product_id: i.product_id, product_name: i.product_name, quantity: i.quantity, unit_price: i.unit_price, discount: i.discount })),
       payment_method:      payload.paymentMethod,
       payment_methods:     [{ method: payload.paymentMethod, amount: total }],
       customer:            payload.consumerName   ?? null,

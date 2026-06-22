@@ -16,7 +16,7 @@ type Venda = {
   nfce_status: string | null
   nfce_numero: number | null
   operator_name: string | null
-  items: { product_name: string; quantity: number; unit_price: number }[]
+  order_items: { product_name: string; quantity: number; unit_price: number }[]
 }
 
 type Props = {
@@ -50,33 +50,32 @@ export function CancelarVendaModal({ companyId, cashRegisterId, onClose, onCance
     setLoading(true)
     setError(null)
     try {
-      let query = supabase
+        let query = supabase
         .from('orders')
-        .select('id, code, created_at, total, status, cupom_cancelado, consumer_name, payment_method, nfce_status, nfce_numero, operator_name, items')
+        .select(`
+            id, code, created_at, total, status, cupom_cancelado,
+            consumer_name, payment_method, nfce_status, nfce_numero, operator_name,
+            order_items ( product_name, quantity, unit_price )
+        `)
         .eq('company_id', companyId)
         .eq('order_type', 'pdv')
         .eq('cash_register_id', cashRegisterId)
         .order('created_at', { ascending: false })
         .limit(50)
 
-      if (dateFrom) query = query.gte('created_at', `${dateFrom}T00:00:00`)
-      if (dateTo)   query = query.lte('created_at', `${dateTo}T23:59:59`)
+        if (dateFrom) query = query.gte('created_at', `${dateFrom}T00:00:00`)
+        if (dateTo)   query = query.lte('created_at', `${dateTo}T23:59:59`)
+        if (search.trim()) query = query.ilike('code', `%${search.trim()}%`)
 
-      if (search.trim()) {
-        // busca por code (número da venda)
-        const term = search.trim()
-        query = query.ilike('code', `%${term}%`)
-      }
-
-      const { data, error: err } = await query
-      if (err) throw new Error(err.message)
-      setVendas((data ?? []) as Venda[])
+        const { data, error: err } = await query
+        if (err) throw new Error(err.message)
+        setVendas((data ?? []) as Venda[])
     } catch (e: any) {
-      setError(e.message)
+        setError(e.message)
     } finally {
-      setLoading(false)
+        setLoading(false)
     }
-  }, [companyId, cashRegisterId, dateFrom, dateTo, search])
+}, [companyId, cashRegisterId, dateFrom, dateTo, search])
 
   useEffect(() => { buscar() }, [buscar])
 
@@ -185,15 +184,15 @@ export function CancelarVendaModal({ companyId, cashRegisterId, onClose, onCance
                       <p className="text-[11px] text-slate-500">👤 {v.consumer_name}</p>
                     )}
                     {/* itens resumidos */}
-                    {Array.isArray(v.items) && v.items.length > 0 && (
-                      <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5">
-                        {v.items.slice(0, 3).map((it, i) => (
-                          <span key={i} className="text-[10px] text-slate-400">
+                    {Array.isArray(v.order_items) && v.order_items.length > 0 && (
+                    <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5">
+                        {v.order_items.slice(0, 3).map((it, i) => (
+                        <span key={i} className="text-[10px] text-slate-400">
                             {it.quantity}× {it.product_name}
-                          </span>
+                        </span>
                         ))}
-                        {v.items.length > 3 && <span className="text-[10px] text-slate-400">+{v.items.length - 3} itens</span>}
-                      </div>
+                        {v.order_items.length > 3 && <span className="text-[10px] text-slate-400">+{v.order_items.length - 3} itens</span>}
+                    </div>
                     )}
                   </div>
                   <div className="text-right shrink-0">
@@ -256,18 +255,18 @@ export function CancelarVendaModal({ companyId, cashRegisterId, onClose, onCance
             </div>
 
             {/* itens da venda */}
-            {Array.isArray(selected.items) && selected.items.length > 0 && (
-              <div className="bg-slate-50 rounded-xl border border-slate-200 overflow-hidden">
+            {Array.isArray(selected.order_items) && selected.order_items.length > 0 && (
+            <div className="bg-slate-50 rounded-xl border border-slate-200 overflow-hidden">
                 <div className="px-4 py-2 border-b border-slate-200 bg-slate-100">
-                  <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Itens que terão estoque estornado</span>
+                <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Itens que terão estoque estornado</span>
                 </div>
-                {selected.items.map((it, i) => (
-                  <div key={i} className={`flex justify-between px-4 py-2 text-[12px] ${i > 0 ? 'border-t border-slate-200' : ''}`}>
+                {selected.order_items.map((it, i) => (
+                <div key={i} className={`flex justify-between px-4 py-2 text-[12px] ${i > 0 ? 'border-t border-slate-200' : ''}`}>
                     <span className="text-slate-700">{it.quantity}× {it.product_name}</span>
                     <span className="text-slate-500">{fmt((it.unit_price ?? 0) * it.quantity)}</span>
-                  </div>
+                </div>
                 ))}
-              </div>
+            </div>
             )}
 
             {selected.nfce_status === 'emitido' && (
