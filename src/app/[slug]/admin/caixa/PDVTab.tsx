@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { createPdvSale } from '@/services/pdv'
 import { emitirNfce } from '@/services/nfce-transmissao'
 import { NfceLogsModal } from '@/components/pdv/NfceLogsModal'
+import { CancelarVendaModal } from '@/components/pdv/CancelarVendaModal'
 
 // ─── tipos ───────────────────────────────────────────────────────────────────
 
@@ -144,6 +145,7 @@ export function PDVTab({ companyId, cashRegisterId, serie, onError, onCloseCash,
   // size-only modal (tamanho sem cor)
   const [sizeModal, setSizeModal]           = useState<{ product: any; qty: number; sizes: any[] } | null>(null)
   const [selectedSizeOnly, setSelectedSizeOnly] = useState<string | null>(null)
+  const [cancelVendaModal, setCancelVendaModal] = useState(false)
 
   // ── computed ──────────────────────────────────────────────────────────────
   const filtered = search
@@ -346,6 +348,7 @@ export function PDVTab({ companyId, cashRegisterId, serie, onError, onCloseCash,
     { key: 'F5', label: 'Desfazer desc.', fn: handleDesfazer,            danger: false, highlight: false },
     { key: 'F6', label: 'Consumidor',     fn: () => openConsumerModal(), danger: false, highlight: true  },
     { key: 'F7', label: 'Logs NFC-e',     fn: () => setLogsModal(true),  danger: false, highlight: false },
+    { key: 'F8', label: 'Cancelar venda', fn: () => setCancelVendaModal(true), danger: true,  highlight: false },
   ]
 
   useEffect(() => {
@@ -353,6 +356,7 @@ export function PDVTab({ companyId, cashRegisterId, serie, onError, onCloseCash,
       F1: handleDescItem, F2: handleDescTotal, F3: handleCancelarItem,
       F4: handleCancelarCupom, F5: handleDesfazer,
       F6: () => openConsumerModal(), F7: () => setLogsModal(true),
+      F8: () => setCancelVendaModal(true),
     }
     const handler = (e: KeyboardEvent) => { if (map[e.key]) { e.preventDefault(); map[e.key]() } }
     window.addEventListener('keydown', handler)
@@ -970,6 +974,18 @@ export function PDVTab({ companyId, cashRegisterId, serie, onError, onCloseCash,
           </div>
         </div>
       )}
+
+      {cancelVendaModal && (
+      <CancelarVendaModal
+        companyId={companyId}
+        cashRegisterId={cashRegisterId}
+        onClose={() => setCancelVendaModal(false)}
+        onCancelado={(msg) => {
+          setCancelVendaModal(false)
+          showToast(msg, 'ok')
+        }}
+      />
+    )}
     </div>
   )
 }
