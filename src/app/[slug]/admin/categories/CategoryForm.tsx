@@ -25,7 +25,6 @@ const CATEGORY_TYPE_LABELS: Record<CategoryType, string> = {
 export function CategoryForm({
   form, editingId, saving, onFieldChange, onSubmit, onCancel,
 }: CategoryFormProps) {
-
   const [newSize, setNewSize] = useState('')
   const sizes: string[] = form.sizes ?? []
   const showSizes = form.category_type === 'clothing' || form.category_type === 'footwear'
@@ -49,15 +48,11 @@ export function CategoryForm({
   const handleTypeChange = (type: CategoryType) => {
     onFieldChange('category_type', form.category_type === type ? undefined : type)
     onFieldChange('sizes', [])
-    // 'other' não tem size_group
     if (type === 'other') onFieldChange('size_group', undefined)
   }
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-6 mb-8 space-y-5">
-      <h2 className="text-base font-medium text-gray-900">
-        {editingId !== null ? 'Editar categoria' : 'Nova categoria'}
-      </h2>
+    <div className="flex flex-col gap-5">
 
       {/* Slug + Nome */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -112,12 +107,10 @@ export function CategoryForm({
         </div>
       </div>
 
-      {/* Público-alvo — só quando tem tipo com tamanhos */}
+      {/* Público-alvo */}
       {showSizes && (
         <div>
-          <label className="block text-xs font-medium text-gray-600 mb-2">
-            Público-alvo
-          </label>
+          <label className="block text-xs font-medium text-gray-600 mb-2">Público-alvo</label>
           <div className="flex gap-2">
             {(['adult', 'kids'] as SizeGroup[]).map(g => (
               <button
@@ -151,29 +144,22 @@ export function CategoryForm({
             </button>
           </div>
 
-          {/* Tags */}
           <div className="flex flex-wrap gap-2 mb-3 min-h-8">
             {sizes.length === 0
               ? <span className="text-xs text-gray-400 italic">Nenhum tamanho adicionado.</span>
               : sizes.map(s => (
-                  <span
-                    key={s}
-                    className="inline-flex items-center gap-1 bg-gray-100 text-gray-700 text-xs px-2.5 py-1 rounded-full"
-                  >
+                  <span key={s} className="inline-flex items-center gap-1 bg-gray-100 text-gray-700 text-xs px-2.5 py-1 rounded-full">
                     <span className="font-medium">{s}</span>
                     <button
                       type="button"
                       onClick={() => removeSize(s)}
                       className="ml-0.5 text-gray-400 hover:text-red-500 transition-colors leading-none"
-                    >
-                      ×
-                    </button>
+                    >×</button>
                   </span>
                 ))
             }
           </div>
 
-          {/* Input para adicionar */}
           <div className="flex gap-2">
             <input
               type="text"
@@ -191,12 +177,12 @@ export function CategoryForm({
               Adicionar
             </button>
           </div>
-          <p className="text-xs text-gray-400 mt-1">Enter também adiciona. Ordem livre — arraste para reordenar.</p>
+          <p className="text-xs text-gray-400 mt-1">Enter também adiciona.</p>
         </div>
       )}
 
       {/* Ações */}
-      <div className="flex gap-3 pt-1">
+      <div className="flex gap-3 pt-4 border-t border-gray-100 mt-2">
         <button
           onClick={onSubmit}
           disabled={saving}
