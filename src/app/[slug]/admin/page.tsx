@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { Product, CategoryItem, Order } from '@/types/product'
@@ -19,7 +19,6 @@ import { CategoriesTab } from './categories/CategoriesTab'
 import { OrdersTab } from './orders/OrdersTab'
 import { ReportsTab } from './reports/ReportsTab'
 import { MotoboyTab } from '@/components/motoboy/motoboy-tab'
-
 import { FiscalTab } from '@/settings/SettingsTab'
 import { CustomersTab } from './customers/CustomersTab'
 import { BillingTab } from '@/components/billing/BillingTab'
@@ -27,6 +26,7 @@ import type { BillingSubTab } from '@/types/billing'
 import { OperatorsView } from './tabs/OperatorsView'
 import { CashTab } from './cash/CashTab'
 import { StoreTab } from '@/settings/StoreTab'
+import { ErrorModal } from '@/components/ui/ErrorModal'
 
 function todayLocalISO() {
   const d = new Date()
@@ -42,38 +42,52 @@ export default function AdminPage() {
   const router = useRouter()
   const [billingSubTab, setBillingSubTab] = useState<BillingSubTab>('nf-entrada')
 
-  // ── Auth guard ──────────────────────────────────────────────────────────────
-  const [authReady,  setAuthReady]  = useState(false)
-  const [companyId,  setCompanyId]  = useState<string>('')
+  // ── Auth ────────────────────────────────────────────────────────────────────
+  const [authReady, setAuthReady] = useState(false)
+  const [companyId, setCompanyId] = useState<string>('')
 
-// ✅ Adicione o filtro do usuário autenticado
-useEffect(() => {
-  supabase.auth.getSession().then(async ({ data, error }) => {
-    if (error || !data.session) {
-      router.replace(`/${params?.slug}/admin/login`)
-      return
-    }
+  useEffect(() => {
+    supabase.auth.getSession().then(async ({ data, error }) => {
+      if (error || !data.session) {
+        router.replace(`/${params?.slug}/admin/login`)
+        return
+      }
+      const { data: company } = await supabase
+        .from('companies')
+        .select('id')
+        .eq('id', data.session.user.id)
+        .single()
+      if (!company) {
+        router.replace(`/${params?.slug}/admin/login`)
+        return
+      }
+      setCompanyId(company.id)
+      setAuthReady(true)
+    })
+  }, [])
 
-    // ← busca o company_id real pelo user_id
-    const { data: company } = await supabase
-      .from('companies')
-      .select('id')
-      .eq('id', data.session.user.id)
-      .single()
+  // ── Notificações centralizadas ──────────────────────────────────────────────
+  const [notification, setNotification] = useState<{
+    message: string
+    type: 'error' | 'success' | 'warning'
+  } | null>(null)
 
-    if (!company) {
-      router.replace(`/${params?.slug}/admin/login`)
-      return
-    }
+  const showNotification = useCallback((
+    message: string | null,
+    type: 'error' | 'success' | 'warning' = 'error'
+  ) => {
+    if (!message) return
+    setNotification({ message, type })
+  }, [])
 
-    setCompanyId(company.id)  // ← UUID da empresa, não do usuário
-    setAuthReady(true)
-  })
-}, [])
+  // onError compatível com a assinatura (string | null) já usada em todos os filhos
+  const handleError = useCallback((msg: string | null) => {
+    if (!msg) return
+    setNotification({ message: msg, type: 'error' })
+  }, [])
 
-  // ── Tabs & UI state ─────────────────────────────────────────────────────────
-  const [tab,   setTab]   = useState<Tab>('products')
-  const [error, setError] = useState<string | null>(null)
+  // ── Tabs & UI ───────────────────────────────────────────────────────────────
+  const [tab, setTab] = useState<Tab>('products')
 
   const [orderSearch,    setOrderSearch]    = useState('')
   const [searchedOrder,  setSearchedOrder]  = useState<Order | null>(null)
@@ -84,16 +98,16 @@ useEffect(() => {
   const [loadingProducts, setLoadingProducts] = useState(true)
   const [showProductForm, setShowProductForm] = useState(false)
 
-  const [categories,   setCategories]   = useState<CategoryItem[]>([])
-  const [loadingCats,  setLoadingCats]  = useState(true)
-  const [showCatForm,  setShowCatForm]  = useState(false)
+  const [categories,  setCategories]  = useState<CategoryItem[]>([])
+  const [loadingCats, setLoadingCats] = useState(true)
+  const [showCatForm, setShowCatForm] = useState(false)
 
-  const [orders,         setOrders]         = useState<Order[]>([])
-  const [allOrders,      setAllOrders]      = useState<Order[]>([])
-  const [loadingOrders,  setLoadingOrders]  = useState(false)
-  const [dateFrom,       setDateFrom]       = useState(todayLocalISO)
-  const [dateTo,         setDateTo]         = useState(todayLocalISO)
-  const [reportSubTab,   setReportSubTab]   = useState<'overview' | 'products' | 'categories' | 'inventory'>('overview')
+  const [orders,        setOrders]        = useState<Order[]>([])
+  const [allOrders,     setAllOrders]     = useState<Order[]>([])
+  const [loadingOrders, setLoadingOrders] = useState(false)
+  const [dateFrom,      setDateFrom]      = useState(todayLocalISO)
+  const [dateTo,        setDateTo]        = useState(todayLocalISO)
+  const [reportSubTab,  setReportSubTab]  = useState<'overview' | 'products' | 'categories' | 'inventory'>('overview')
 
   const [motoboys,        setMotoboys]        = useState<Motoboy[]>([])
   const [loadingMotoboys, setLoadingMotoboys] = useState(false)
@@ -103,18 +117,21 @@ useEffect(() => {
   const [loadingCustomers, setLoadingCustomers] = useState(false)
   const [showCustomerForm, setShowCustomerForm] = useState(false)
   const [showOperatorForm, setShowOperatorForm] = useState(false)
-  const [operatorCount, setOperatorCount] = useState(0)
+  const [operatorCount,    setOperatorCount]    = useState(0)
 
-
-  // ── Fetch inicial (após auth) ───────────────────────────────────────────────
-  useEffect(() => {
-    if (!authReady) return
-    fetchOperatorCount()
+  // ── Fetch inicial ───────────────────────────────────────────────────────────
+  const fetchOperatorCount = useCallback(() => {
+    if (!companyId) return
     supabase
       .from('operators')
       .select('id', { count: 'exact', head: true })
       .eq('company_id', companyId)
       .then(({ count }) => setOperatorCount(count ?? 0))
+  }, [companyId])
+
+  useEffect(() => {
+    if (!authReady) return
+    fetchOperatorCount()
 
     const run = async <T,>(
       setLoading: (v: boolean) => void,
@@ -125,7 +142,7 @@ useEffect(() => {
         setLoading(true)
         setter(await fetcher())
       } catch (e: any) {
-        setError(e.message)
+        handleError(e.message)
       } finally {
         setLoading(false)
       }
@@ -136,7 +153,7 @@ useEffect(() => {
     run(setLoadingCustomers, setCustomers, getAllCustomers)
   }, [authReady])
 
-  // ── Busca de pedido por código ──────────────────────────────────────────────
+  // ── Busca pedido por código ─────────────────────────────────────────────────
   useEffect(() => {
     if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current)
     if (!orderSearch) { setSearchedOrder(null); return }
@@ -147,7 +164,7 @@ useEffect(() => {
     }, 400)
   }, [orderSearch])
 
-  // ── Fetch de pedidos ────────────────────────────────────────────────────────
+  // ── Fetch pedidos ───────────────────────────────────────────────────────────
   const fetchOrders = useCallback(async () => {
     try {
       setLoadingOrders(true)
@@ -157,24 +174,15 @@ useEffect(() => {
           : await getAllOrders()
       )
     } catch (e: any) {
-      setError(e.message)
+      handleError(e.message)
     } finally {
       setLoadingOrders(false)
     }
   }, [dateFrom, dateTo])
 
-  const fetchOperatorCount = useCallback(() => {
-  if (!companyId) return
-  supabase
-    .from('operators')
-    .select('id', { count: 'exact', head: true })
-    .eq('company_id', companyId)
-    .then(({ count }) => setOperatorCount(count ?? 0))
-}, [companyId])
-
   const fetchAllOrders = useCallback(async () => {
     try { setAllOrders(await getAllOrders()) }
-    catch (e: any) { setError(e.message) }
+    catch (e: any) { handleError(e.message) }
   }, [])
 
   const fetchOrdersRef = useRef(fetchOrders)
@@ -211,7 +219,7 @@ useEffect(() => {
           setAllOrders(prev => prev.some(o => o.id === newOrder.id) ? prev : [newOrder, ...prev])
         }
       )
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders',filter: `company_id=eq.${companyId}` },
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders', filter: `company_id=eq.${companyId}` },
         (payload) => {
           const incoming = payload.new as Order
           const patch    = (prev: Order[]) => prev.map(o => o.id !== incoming.id ? o : { ...o, ...incoming })
@@ -226,7 +234,7 @@ useEffect(() => {
   // ── Tab change ──────────────────────────────────────────────────────────────
   const handleTabChange = (newTab: Tab) => {
     setTab(newTab)
-    setError(null)
+    setNotification(null)
     setOrderSearch('')
     setSearchedOrder(null)
     setShowProductForm(false)
@@ -255,7 +263,7 @@ useEffect(() => {
     )
   }
 
-  // ── Main render ─────────────────────────────────────────────────────────────
+  // ── Render ──────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gray-50 text-black flex items-stretch">
       <AdminTabs
@@ -284,19 +292,10 @@ useEffect(() => {
           showCustomerForm={showCustomerForm}
           orderSearch={orderSearch}
           onOrderSearchChange={v => { setOrderSearch(v); if (!v) setSearchedOrder(null) }}
-          operatorCount={operatorCount}              // ou buscar do banco se quiser
+          operatorCount={operatorCount}
           onNewOperator={() => setShowOperatorForm(true)}
           showOperatorForm={showOperatorForm}
         />
-
-        {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm
-            flex items-start justify-between gap-3">
-            <span>{error}</span>
-            <button onClick={() => setError(null)}
-              className="text-red-400 hover:text-red-600 shrink-0 text-xs">✕</button>
-          </div>
-        )}
 
         {tab === 'products' && (
           <ProductsTab
@@ -307,7 +306,7 @@ useEffect(() => {
             loading={loadingProducts}
             showForm={showProductForm}
             setShowForm={setShowProductForm}
-            onError={setError}
+            onError={handleError}
             onGoToCategories={() => handleTabChange('categories')}
           />
         )}
@@ -320,7 +319,7 @@ useEffect(() => {
             loading={loadingCats}
             showForm={showCatForm}
             setShowForm={setShowCatForm}
-            onError={setError}
+            onError={handleError}
           />
         )}
         {tab === 'orders' && (
@@ -329,7 +328,7 @@ useEffect(() => {
             orders={orders}
             setOrders={setOrders}
             loading={loadingOrders}
-            onError={setError}
+            onError={handleError}
             dateFrom={dateFrom}
             dateTo={dateTo}
             onDateFromChange={setDateFrom}
@@ -366,7 +365,7 @@ useEffect(() => {
             loading={loadingMotoboys}
             showForm={showMotoboyForm}
             setShowForm={setShowMotoboyForm}
-            onError={setError}
+            onError={handleError}
           />
         )}
         {tab === 'customers' && (
@@ -377,7 +376,7 @@ useEffect(() => {
             showForm={showCustomerForm}
             setShowForm={setShowCustomerForm}
             companyId={companyId}
-            onError={setError}
+            onError={handleError}
           />
         )}
         {tab === 'operators' && (
@@ -387,20 +386,29 @@ useEffect(() => {
             onCountChange={fetchOperatorCount}
           />
         )}
-        {tab === 'caixa' && <CashTab />}
+        {tab === 'caixa'    && <CashTab />}
         {tab === 'billing'  && (
           <BillingTab
             subTab={billingSubTab}
             onSubTabChange={setBillingSubTab}
             companyId={companyId}
-            onError={setError}
+            onError={handleError}
           />
         )}
-        {tab === 'settings' && <FiscalTab onError={setError} />}
-        {tab === 'store' && <StoreTab onError={setError} companyId={companyId} />}
+        {tab === 'settings' && <FiscalTab onError={handleError} />}
+        {tab === 'store'    && <StoreTab onError={handleError} companyId={companyId} />}
         {tab === 'ifood'    && <IfoodSync />}
-        
       </div>
+
+      {/* ── Modal de notificação global ── */}
+      {notification && (
+        <ErrorModal
+          message={notification.message}
+          type={notification.type}
+          onClose={() => setNotification(null)}
+          autoClose={6000}
+        />
+      )}
     </div>
   )
 }

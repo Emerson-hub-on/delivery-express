@@ -93,13 +93,12 @@ export function ProductsTab({
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    if (!file.type.startsWith('image/')) return onError('Apenas imagens são permitidas.')
-    if (file.size > 2 * 1024 * 1024) return onError('A imagem deve ter no máximo 2MB.')
+    if (!file.type.startsWith('image/')) { onError('Apenas imagens são permitidas.'); return }
+    if (file.size > 2 * 1024 * 1024)    { onError('A imagem deve ter no máximo 2MB.'); return }
     setImagePreview(URL.createObjectURL(file))
     try {
       setUploading(true)
-      onError(null)
-      const ext = file.name.split('.').pop()
+      const ext      = file.name.split('.').pop()
       const fileName = `${Date.now()}.${ext}`
       const { error: uploadError } = await supabase.storage
         .from('products').upload(fileName, file, { upsert: false })
@@ -119,8 +118,8 @@ export function ProductsTab({
     if (form.price <= 0)    return onError('Informe um preço válido.')
     if (uploading)          return onError('Aguarde o upload da imagem terminar antes de salvar.')
     if (!form.image)        return onError('Adicione uma imagem ao produto antes de salvar.')
-    if (form.ncm && !/^\d{8}$/.test(form.ncm))  return onError('NCM deve ter exatamente 8 dígitos numéricos.')
-    if (form.cest && !/^\d{7}$/.test(form.cest)) return onError('CEST deve ter exatamente 7 dígitos numéricos.')
+    if (form.ncm  && !/^\d{8}$/.test(form.ncm))  return onError('NCM deve ter exatamente 8 dígitos numéricos.')
+    if (form.cest && !/^\d{7}$/.test(form.cest))  return onError('CEST deve ter exatamente 7 dígitos numéricos.')
 
     const payload: Omit<Product, 'id' | 'code'> = {
       ...form,
@@ -132,7 +131,6 @@ export function ProductsTab({
 
     try {
       setSaving(true)
-      onError(null)
       if (editingId !== null) {
         const updated = await updateProduct(editingId, payload)
         setProducts(prev => prev.map(p => p.id === editingId ? updated : p))
@@ -156,20 +154,11 @@ export function ProductsTab({
     setImagePreview(product.image)
   }
 
-  const handleShowForm = () => {
-    setForm({ ...EMPTY_PRODUCT, category: categories[0]?.name ?? '' })
-    setEditingId(null)
-    setImagePreview(null)
-    setShowForm(true)
-    onError(null)
-  }
-
   const handleDeleteRequest = async (id: number) => {
     const product = products.find(p => p.id === id)
     if (!product) return
     try {
       setDeleteChecking(true)
-      onError(null)
       const orderCount = await checkProductHasOrders(id)
       setDeleteModal({ productId: id, productName: product.name, orderCount })
     } catch (e: any) {
@@ -205,7 +194,6 @@ export function ProductsTab({
 
   const handleToggleActive = async (id: number, active: boolean) => {
     try {
-      onError(null)
       const updated = await updateProduct(id, { active })
       setProducts(prev => prev.map(p => p.id === id ? updated : p))
     } catch (e: any) {
@@ -213,7 +201,7 @@ export function ProductsTab({
     }
   }
 
-  const handleCancel = () => { resetForm(); onError(null) }
+  const handleCancel = () => resetForm()
 
   const resetForm = () => {
     setForm({ ...EMPTY_PRODUCT, category: categories[0]?.name ?? '' })
@@ -237,19 +225,11 @@ export function ProductsTab({
         onToggleActive={handleToggleActive}
       />
 
-      {/* ── Modal do formulário ── */}
+      {/* ── Modal formulário ── */}
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-y-auto">
-          {/* backdrop */}
-          <div
-            className="fixed inset-0 bg-black/50 backdrop-blur-sm"
-            onClick={handleCancel}
-          />
-
-          {/* card */}
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={handleCancel} />
           <div className="relative w-full max-w-3xl my-8 bg-white rounded-2xl shadow-2xl flex flex-col">
-
-            {/* header do modal */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 shrink-0">
               <h2 className="text-base font-semibold text-gray-900">
                 {editingId !== null ? 'Editar produto' : 'Novo produto'}
@@ -261,8 +241,6 @@ export function ProductsTab({
                 ✕
               </button>
             </div>
-
-            {/* conteúdo scrollável */}
             <div className="overflow-y-auto p-6">
               <ProductForm
                 form={form}
@@ -287,10 +265,7 @@ export function ProductsTab({
       {/* ── Modal exclusão ── */}
       {deleteModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div
-            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-            onClick={() => setDeleteModal(null)}
-          />
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setDeleteModal(null)} />
           <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 flex flex-col gap-4">
             {deleteModal.orderCount === 0 ? (
               <>
@@ -305,16 +280,10 @@ export function ProductsTab({
                   </div>
                 </div>
                 <div className="flex gap-2 justify-end">
-                  <button
-                    onClick={() => setDeleteModal(null)}
-                    className="text-sm px-4 py-2 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
-                  >
+                  <button onClick={() => setDeleteModal(null)} className="text-sm px-4 py-2 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
                     Cancelar
                   </button>
-                  <button
-                    onClick={handleConfirmDelete}
-                    className="text-sm px-4 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white transition-colors"
-                  >
+                  <button onClick={handleConfirmDelete} className="text-sm px-4 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white transition-colors">
                     Excluir permanentemente
                   </button>
                 </div>
@@ -337,16 +306,10 @@ export function ProductsTab({
                   </div>
                 </div>
                 <div className="flex gap-2 justify-end flex-wrap">
-                  <button
-                    onClick={() => setDeleteModal(null)}
-                    className="text-sm px-4 py-2 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
-                  >
+                  <button onClick={() => setDeleteModal(null)} className="text-sm px-4 py-2 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
                     Cancelar
                   </button>
-                  <button
-                    onClick={handleConfirmArchive}
-                    className="text-sm px-4 py-2 rounded-lg bg-black hover:bg-gray-800 text-white transition-colors"
-                  >
+                  <button onClick={handleConfirmArchive} className="text-sm px-4 py-2 rounded-lg bg-black hover:bg-gray-800 text-white transition-colors">
                     Arquivar produto
                   </button>
                 </div>
