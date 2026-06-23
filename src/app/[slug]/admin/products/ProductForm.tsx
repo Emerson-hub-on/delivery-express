@@ -279,13 +279,45 @@ export function ProductForm({
             </div>
           </div>
 
+          {/* Agora em modo de edição com categoria sem tamanhos, 
+          aparece o campo de estoque do produto 
+          (que edita form.stock) e logo abaixo o VariantSection 
+          para gerenciar cores. O usuário pode usar um ou outro 
+          — se tiver variantes de cor cadastradas, o estoque por 
+          cor prevalece; se não tiver, o form.stock é o controle 
+          simples. A nota explicativa deixa isso claro pra quem 
+          for usar. */}
+          
           {/* Estoque / Tamanhos / Variantes */}
           {editingId !== null && companyId ? (
-            <VariantSection
-              productId={editingId}
-              companyId={companyId}
-              availableSizes={availableSizes}
-            />
+            <>
+              {/* Estoque simples — só quando a categoria não tem tamanhos */}
+              {availableSizes.length === 0 && (
+                <div>
+                  <FieldLabel>Estoque</FieldLabel>
+                  <input
+                    type="number"
+                    min={0}
+                    step="1"
+                    placeholder="Deixe vazio para não controlar"
+                    value={form.stock ?? ''}
+                    onChange={e => onFieldChange('stock', e.target.value === '' ? null : Number(e.target.value))}
+                    className={inputCls}
+                  />
+                  <p className="text-xs text-gray-400 mt-1">
+                    Deixe vazio para não controlar estoque deste produto diretamente.
+                    Se adicionar variantes de cor abaixo, o estoque passará a ser controlado por cor.
+                  </p>
+                </div>
+              )}
+
+              {/* Variantes de cor (com ou sem tamanhos) */}
+              <VariantSection
+                productId={editingId}
+                companyId={companyId}
+                availableSizes={availableSizes}
+              />
+            </>
           ) : availableSizes.length > 0 ? (
             <div>
               <ProductSizeStock
