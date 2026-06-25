@@ -371,7 +371,7 @@ export function PDVTab({ companyId, cashRegisterId, serie, onError, onCloseCash,
       <div className="flex items-center gap-1.5 px-3.5 py-2.5 border-b border-slate-200 bg-white shrink-0 overflow-x-auto">
         {fkeys.map(({ key, label, fn, danger, highlight }) => (
           <button key={key} onClick={fn}
-            className={`flex flex-col items-center min-w-[58px] px-2 py-1.5 rounded-lg border transition-all select-none relative cursor-pointer
+            className={`flex flex-col items-center min-w-14.5 px-2 py-1.5 rounded-lg border transition-all select-none relative cursor-pointer
               ${danger   ? 'border-red-200    bg-red-50    hover:bg-red-100'
               : highlight ? 'border-indigo-200 bg-indigo-50 hover:bg-indigo-100'
               :             'border-slate-200  bg-white     hover:bg-slate-100'}`}>
