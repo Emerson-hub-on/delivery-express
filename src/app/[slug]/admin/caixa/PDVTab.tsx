@@ -433,7 +433,7 @@ export function PDVTab({ companyId, cashRegisterId, serie, onError, onCloseCash,
           </div>
 
           {/* itens */}
-          <div className="flex-1 overflow-y-auto [scrollbar-width:thin]">
+          <div className="flex-1 overflow-y-auto scrollbar-thin">
             {cart.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full gap-3">
                 <div className="opacity-20">
