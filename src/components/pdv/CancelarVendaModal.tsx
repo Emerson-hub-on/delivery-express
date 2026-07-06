@@ -287,7 +287,7 @@ export function CancelarVendaModal({ companyId, cashRegisterId, onClose, onCance
                 Voltar
               </button>
               <button onClick={handleCancelar} disabled={cancelling}
-                className="flex-[2] py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white border-none text-[13px] font-bold cursor-pointer transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                className="flex-2 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white border-none text-[13px] font-bold cursor-pointer transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2">
                 {cancelling && <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />}
                 {cancelling ? 'Cancelando...' : '✓ Confirmar cancelamento'}
               </button>
