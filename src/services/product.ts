@@ -13,7 +13,7 @@ async function getCompanyId(): Promise<string> {
     .single()
 
   if (error || !company) throw new Error('Empresa não encontrada')
-  return company.id  // ← company.id, não user.id
+  return company.id  
 }
 
 export const getAllProducts = async (): Promise<Product[]> => {
