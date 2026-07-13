@@ -109,7 +109,7 @@ export function CancelarVendaModal({ companyId, cashRegisterId, onClose, onCance
   const podeCancel = selected && !selected.cupom_cancelado && selected.status !== 'cancelled'
 
   return (
-    <div className="absolute inset-0 bg-black/45 flex items-center justify-center z-[70] p-4">
+    <div className="absolute inset-0 bg-black/45 flex items-center justify-center z-70 p-4">
       <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
 
         {/* header */}
