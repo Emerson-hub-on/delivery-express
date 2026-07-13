@@ -133,7 +133,7 @@ export function CancelarVendaModal({ companyId, cashRegisterId, onClose, onCance
             <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
               className="bg-white border-[1.5px] border-slate-200 focus:border-indigo-400 rounded-lg px-2.5 py-1.5 text-[12px] text-slate-900 outline-none" />
           </div>
-          <div className="flex flex-col gap-1 flex-1 min-w-[160px]">
+          <div className="flex flex-col gap-1 flex-1 min-w-40">
             <label className="text-[11px] text-slate-500 font-semibold">Número da venda</label>
             <input type="text" value={search} onChange={e => setSearch(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && buscar()} placeholder="Ex: 000142"
