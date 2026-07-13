@@ -5,13 +5,17 @@ export const runtime = 'nodejs'
 export const maxDuration = 60
 
 export async function POST(req: NextRequest) {
-  // Valida o secret para evitar uso indevido
   const secret = req.headers.get('x-proxy-secret')
   if (secret !== process.env.PROXY_SECRET) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   const targetUrl = req.headers.get('x-target-url')
+  
+  // Log temporário
+  console.log('[proxy-sefaz] targetUrl:', targetUrl)
+  console.log('[proxy-sefaz] secret ok:', !!secret)
+
   if (!targetUrl) {
     return NextResponse.json({ error: 'x-target-url obrigatório' }, { status: 400 })
   }
