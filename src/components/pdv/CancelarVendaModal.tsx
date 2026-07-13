@@ -242,7 +242,7 @@ export function CancelarVendaModal({ companyId, cashRegisterId, onClose, onCance
       {/* ── Confirm modal ── */}
       {confirming && selected && (
         <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-[80]">
-          <div className="bg-white rounded-2xl p-6 w-[400px] shadow-2xl border border-slate-200 flex flex-col gap-5">
+          <div className="bg-white rounded-2xl p-6 w-100 shadow-2xl border border-slate-200 flex flex-col gap-5">
             <div className="flex items-start gap-3">
               <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center shrink-0 text-xl">⚠️</div>
               <div>
