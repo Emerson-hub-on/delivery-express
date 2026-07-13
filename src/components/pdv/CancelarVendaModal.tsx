@@ -146,7 +146,7 @@ export function CancelarVendaModal({ companyId, cashRegisterId, onClose, onCance
         </div>
 
         {/* lista */}
-        <div className="flex-1 overflow-y-auto [scrollbar-width:thin]">
+        <div className="flex-1 overflow-y-auto scrollbar-thin">
           {loading && (
             <div className="flex items-center justify-center gap-2 py-12 text-slate-400 text-[13px]">
               <div className="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
