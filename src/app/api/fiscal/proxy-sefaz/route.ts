@@ -4,6 +4,27 @@ import { NextRequest, NextResponse } from 'next/server'
 export const runtime = 'nodejs'
 export const maxDuration = 60
 
+
+// Rota de teste GET
+export async function GET(req: NextRequest) {
+  try {
+    const resp = await fetch('https://nfce.svrs.rs.gov.br/ws/NfceAutorizacao/NfceAutorizacao4.asmx', {
+      method: 'GET',
+    })
+    return NextResponse.json({ 
+      ok: true, 
+      status: resp.status,
+      message: 'Vercel consegue acessar a SEFAZ'
+    })
+  } catch (e: any) {
+    return NextResponse.json({ 
+      ok: false, 
+      error: e.message,
+      message: 'Vercel NÃO consegue acessar a SEFAZ'
+    })
+  }
+}
+
 export async function POST(req: NextRequest) {
   const secret = req.headers.get('x-proxy-secret')
   
