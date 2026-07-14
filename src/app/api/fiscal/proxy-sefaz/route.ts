@@ -6,6 +6,10 @@ export const maxDuration = 60
 
 export async function POST(req: NextRequest) {
   const secret = req.headers.get('x-proxy-secret')
+  
+  console.log('[proxy] secret recebido:', JSON.stringify(secret))
+  console.log('[proxy] secret esperado:', JSON.stringify(process.env.PROXY_SECRET))
+  
   if (secret !== process.env.PROXY_SECRET) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
