@@ -163,8 +163,7 @@ export function buildNfceXml(p: NfceBuildPayload): string {
   const tPag     = tPagMap[p.paymentMethod] ?? '01'
   const trocoXml = p.troco > 0 ? `<vTroco>${p.troco.toFixed(2)}</vTroco>` : ''
 
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<nfeProc versao="4.00" xmlns="http://www.portalfiscal.inf.br/nfe">
+return `<?xml version="1.0" encoding="UTF-8"?>
 <NFe xmlns="http://www.portalfiscal.inf.br/nfe">
 <infNFe versao="4.00" Id="NFe${chaveBase43}0">
   <ide>
@@ -255,6 +254,5 @@ export function buildNfceXml(p: NfceBuildPayload): string {
     <urlChave>https://www.sefaz${p.config.uf.toLowerCase()}.gov.br/</urlChave>
   </infNFeSupl>
 </infNFe>
-</NFe>
-</nfeProc>`
+</NFe>`
 }
