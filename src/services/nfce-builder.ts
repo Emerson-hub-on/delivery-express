@@ -157,6 +157,7 @@ export function buildNfceXml(p: NfceBuildPayload): string {
     ? `<dest>
         ${p.consumer.name ? `<xNome>${escXml(p.consumer.name.substring(0,60))}</xNome>` : ''}
         <CPF>${p.consumer.cpf.replace(/\D/g,'').substring(0,11)}</CPF>
+        <indIEDest>9</indIEDest>
       </dest>`
     : ''
 
@@ -165,7 +166,7 @@ export function buildNfceXml(p: NfceBuildPayload): string {
 
 return `<?xml version="1.0" encoding="UTF-8"?>
 <NFe xmlns="http://www.portalfiscal.inf.br/nfe">
-<infNFe versao="4.00" Id="NFe${chaveBase43}0">
+<infNFe Id="NFe${chaveBase43}0" versao="4.00">
   <ide>
     <cUF>${cUF}</cUF>
     <cNF>${cNF}</cNF>
