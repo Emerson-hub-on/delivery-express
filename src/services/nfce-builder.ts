@@ -209,7 +209,9 @@ return `<?xml version="1.0" encoding="UTF-8"?>
       <xPais>Brasil</xPais>
       ${p.config.telefone ? `<fone>${p.config.telefone.replace(/\D/g,'')}</fone>` : ''}
     </enderEmit>
-    <IE>${p.config.ie ?? 'ISENTO'}</IE>
+    ${p.config.crt === 1 || p.config.crt === 4 
+  ? '' 
+  : `<IE>${p.config.ie ?? 'ISENTO'}</IE>`}
     <CRT>${p.config.crt}</CRT>
   </emit>
   ${consumerXml}
@@ -250,10 +252,10 @@ return `<?xml version="1.0" encoding="UTF-8"?>
   <infAdic>
     <infCpl>NFC-e emitida em ambiente de ${tpAmb === '1' ? 'producao' : 'homologacao'}. ${p.contingencia ? 'EMITIDA EM CONTINGENCIA OFFLINE.' : ''}</infCpl>
   </infAdic>
-  <infNFeSupl>
+</infNFe>
+<infNFeSupl>
     <qrCode></qrCode>
     <urlChave>https://www.sefaz${p.config.uf.toLowerCase()}.gov.br/</urlChave>
   </infNFeSupl>
-</infNFe>
 </NFe>`
 }
