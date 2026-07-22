@@ -726,7 +726,7 @@ export function PDVTab({ companyId, cashRegisterId, serie, onError, onCloseCash,
       {/* ── Modal finalizar ── */}
       {finalModal && (
         <div className="absolute inset-0 bg-black/35 flex items-center justify-center z-50">
-          <div className="bg-white border border-slate-200 rounded-2xl p-6 w-[400px] flex flex-col gap-4 shadow-2xl">
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 w-100 flex flex-col gap-4 shadow-2xl">
             <h2 className="text-base font-bold text-slate-900">Finalizar venda</h2>
             <div className="bg-slate-100 rounded-xl px-4 py-3 flex justify-between items-center border border-slate-200">
               <span className="text-slate-500 text-[13px] font-medium">Total</span>
