@@ -691,128 +691,142 @@ const handleSave = async () => {
 
       {/* ── Certificado Digital ── */}
       
-      {section === 'certificado' && (
-        <div className="bg-white rounded-xl shadow-sm p-5 space-y-4">
-          <h3 className="text-sm font-semibold text-gray-700 border-b border-gray-100 pb-3">
-            Certificado Digital A1 (.pfx)
-          </h3>
+{section === 'certificado' && (
+  <div className="bg-white rounded-xl shadow-sm p-5 space-y-4">
+    <h3 className="text-sm font-semibold text-gray-700 border-b border-gray-100 pb-3">
+      Certificado Digital A1 (.pfx)
+      <span className="ml-2 text-xs font-normal text-gray-400">(opcional)</span>
+    </h3>
 
+    {/* Aviso informativo em vez de obrigatório */}
+    <div className="flex items-start gap-2.5 bg-blue-50 border border-blue-200 
+      rounded-lg p-3 text-xs text-blue-700">
+      <span className="text-base leading-none">ℹ️</span>
+      <span>
+        O certificado digital é necessário apenas para emissão de NFC-e e NF-e. 
+        Clientes que utilizam o sistema apenas para controle de vendas podem 
+        deixar este campo em branco.
+      </span>
+    </div>
 
+    {certError && (
+      <div className={`flex items-start gap-2 rounded-lg px-4 py-3 text-xs
+        ${certError.startsWith('⚠️')
+          ? 'bg-amber-50 border border-amber-200 text-amber-700'
+          : 'bg-red-50 border border-red-100 text-red-600'}`}>
+        <span className="shrink-0">{certError.startsWith('⚠️') ? '' : '❌'}</span>
+        <span>{certError.replace('⚠️ ', '')}</span>
+        <button onClick={() => setCertError(null)} className="ml-auto opacity-60 hover:opacity-100">✕</button>
+      </div>
+    )}
 
-          {certError && (
-            <div className={`flex items-start gap-2 rounded-lg px-4 py-3 text-xs
-              ${certError.startsWith('⚠️')
-                ? 'bg-amber-50 border border-amber-200 text-amber-700'
-                : 'bg-red-50 border border-red-100 text-red-600'}`}>
-              <span className="shrink-0">{certError.startsWith('⚠️') ? '' : '❌'}</span>
-              <span>{certError.replace('⚠️ ', '')}</span>
-              <button onClick={() => setCertError(null)} className="ml-auto opacity-60 hover:opacity-100">✕</button>
-            </div>
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div>
+        <label className={labelCls}>Senha do Certificado <span className="text-gray-300">(opcional)</span></label>
+        <input
+          type="password"
+          className={inputCls}
+          value={form.cert_senha ?? ''}
+          onChange={e => set('cert_senha', e.target.value)}
+          placeholder="••••••••"
+          autoComplete="new-password"
+        />
+      </div>
+
+      <div
+        onClick={() => certRef.current?.click()}
+        className="border-2 border-dashed border-gray-200 rounded-xl p-6 text-center 
+          cursor-pointer hover:border-[#1a4a8a]/40 hover:bg-blue-50/30 transition-all"
+      >
+        <input
+          ref={certRef}
+          type="file"
+          accept=".pfx,.p12"
+          className="hidden"
+          onChange={handleCertUpload}
+        />
+        <div className="flex flex-col items-center gap-2">
+          {uploadingCert ? (
+            <Loader2 size={24} className="text-[#1a4a8a] animate-spin" />
+          ) : form.cert_pfx_base64 ? (
+            <CheckCircle2 size={24} className="text-green-500" />
+          ) : (
+            <Upload size={24} className="text-gray-300" />
           )}
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className={labelCls}>Senha do Certificado</label>
-              <input
-                type="password"
-                className={inputCls}
-                value={form.cert_senha ?? ''}
-                onChange={e => set('cert_senha', e.target.value)}
-                placeholder="••••••••"
-                autoComplete="new-password"
-              />
-            </div>
-                      {/* Upload area */}
-          <div
-            onClick={() => certRef.current?.click()}
-            className="border-2 border-dashed border-gray-200 rounded-xl p-6 text-center cursor-pointer hover:border-[#1a4a8a]/40 hover:bg-blue-50/30 transition-all"
-          >
-            <input
-              ref={certRef}
-              type="file"
-              accept=".pfx,.p12"
-              className="hidden"
-              onChange={handleCertUpload}
-            />
-            <div className="flex flex-col items-center gap-2">
-              {uploadingCert ? (
-                <Loader2 size={24} className="text-[#1a4a8a] animate-spin" />
-              ) : form.cert_pfx_base64 ? (
-                <CheckCircle2 size={24} className="text-green-500" />
-              ) : (
-                <Upload size={24} className="text-gray-300" />
-              )}
-              <p className="text-sm font-medium text-gray-600">
-                {form.cert_pfx_base64
-                  ? 'Certificado carregado — clique para substituir'
-                  : 'Clique para selecionar o arquivo .pfx'}
-              </p>
-              <p className="text-xs text-gray-400">Certificado A1 no formato PFX / PKCS#12</p>
-            </div>
-          </div>
-
-            <div>
-              <label className={labelCls}>Validade do Certificado</label>
-              <input
-                type="date"
-                className={inputCls}
-                value={form.cert_validade ?? ''}
-                onChange={e => set('cert_validade', e.target.value)}
-              />
-            </div>
-          </div>
-          
-
-          <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-700">
-            <span className="text-base leading-none">⚠️</span>
-            <span>
-              O certificado é armazenado de forma segura como base64 no banco de dados.
-              Recomendamos verificar a validade periodicamente para evitar interrupções na emissão.
-            </span>
-          </div>
-          {form.crt === 4 && (
-          <div className="space-y-4 border-t border-gray-100 pt-4">
-            <h4 className="text-xs font-semibold text-gray-600">
-              Certificado vinculado ao CPF (opcional para MEI)
-            </h4>
-            <div
-              onClick={() => certCpfRef.current?.click()}
-              className="border-2 border-dashed border-gray-200 rounded-xl p-5 text-center cursor-pointer hover:border-[#1a4a8a]/40 hover:bg-blue-50/30 transition-all"
-            >
-              <input
-                ref={certCpfRef}
-                type="file"
-                accept=".pfx,.p12"
-                className="hidden"
-                onChange={handleCertCpfUpload}
-              />
-              <div className="flex flex-col items-center gap-2">
-                {form.cert_cpf_pfx_base64
-                  ? <CheckCircle2 size={22} className="text-green-500" />
-                  : <Upload size={22} className="text-gray-300" />
-                }
-                <p className="text-sm font-medium text-gray-600">
-                  {form.cert_cpf_pfx_base64
-                    ? 'Certificado CPF carregado — clique para substituir'
-                    : 'Certificado .pfx vinculado ao CPF'}
-                </p>
-              </div>
-            </div>
-            <div>
-              <label className={labelCls}>Senha do certificado CPF</label>
-              <input
-                type="password"
-                className={inputCls}
-                value={form.cert_cpf_senha ?? ''}
-                onChange={e => set('cert_cpf_senha', e.target.value)}
-                placeholder="••••••••"
-                autoComplete="new-password"
-              />
-            </div>
-          </div>
-        )}
+          <p className="text-sm font-medium text-gray-600">
+            {form.cert_pfx_base64
+              ? 'Certificado carregado — clique para substituir'
+              : 'Clique para selecionar o arquivo .pfx (opcional)'}
+          </p>
+          <p className="text-xs text-gray-400">Certificado A1 no formato PFX / PKCS#12</p>
         </div>
-      )}
+      </div>
+
+      <div>
+        <label className={labelCls}>Validade do Certificado <span className="text-gray-300">(opcional)</span></label>
+        <input
+          type="date"
+          className={inputCls}
+          value={form.cert_validade ?? ''}
+          onChange={e => set('cert_validade', e.target.value)}
+        />
+      </div>
+    </div>
+
+    {/* Aviso de segurança — mantido */}
+    <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-200 
+      rounded-lg p-3 text-xs text-amber-700">
+      <span className="text-base leading-none">⚠️</span>
+      <span>
+        O certificado é armazenado de forma segura como base64 no banco de dados.
+        Recomendamos verificar a validade periodicamente para evitar interrupções na emissão.
+      </span>
+    </div>
+
+    {form.crt === 4 && (
+      <div className="space-y-4 border-t border-gray-100 pt-4">
+        <h4 className="text-xs font-semibold text-gray-600">
+          Certificado vinculado ao CPF <span className="font-normal text-gray-400">(opcional para MEI)</span>
+        </h4>
+        <div
+          onClick={() => certCpfRef.current?.click()}
+          className="border-2 border-dashed border-gray-200 rounded-xl p-5 text-center 
+            cursor-pointer hover:border-[#1a4a8a]/40 hover:bg-blue-50/30 transition-all"
+        >
+          <input
+            ref={certCpfRef}
+            type="file"
+            accept=".pfx,.p12"
+            className="hidden"
+            onChange={handleCertCpfUpload}
+          />
+          <div className="flex flex-col items-center gap-2">
+            {form.cert_cpf_pfx_base64
+              ? <CheckCircle2 size={22} className="text-green-500" />
+              : <Upload size={22} className="text-gray-300" />
+            }
+            <p className="text-sm font-medium text-gray-600">
+              {form.cert_cpf_pfx_base64
+                ? 'Certificado CPF carregado — clique para substituir'
+                : 'Certificado .pfx vinculado ao CPF (opcional)'}
+            </p>
+          </div>
+        </div>
+        <div>
+          <label className={labelCls}>Senha do certificado CPF <span className="text-gray-300">(opcional)</span></label>
+          <input
+            type="password"
+            className={inputCls}
+            value={form.cert_cpf_senha ?? ''}
+            onChange={e => set('cert_cpf_senha', e.target.value)}
+            placeholder="••••••••"
+            autoComplete="new-password"
+          />
+        </div>
+      </div>
+    )}
+  </div>
+)}
 
       {/* Botão salvar configurações fiscais */}
       <div className="flex items-center justify-end gap-3 pt-1">

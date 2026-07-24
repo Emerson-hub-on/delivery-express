@@ -53,12 +53,12 @@ function useProducts(companyId: string, onError: (m: string) => void) {
   const [products, setProducts] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
+  const fetchProducts = useCallback((opts?: { silent?: boolean }) => {
     if (!companyId) return
-    setLoading(true)
+    if (!opts?.silent) setLoading(true)
     supabase
       .from('products')
-      .select('id, code, name, price, image, category, ean, active, stock, sizes') // sizes adicionado
+      .select('id, code, name, price, image, category, ean, active, stock, sizes')
       .eq('company_id', companyId).eq('active', true).order('name', { ascending: true })
       .then(({ data, error }) => {
         if (error) { onError(error.message); return }
@@ -66,6 +66,8 @@ function useProducts(companyId: string, onError: (m: string) => void) {
         setLoading(false)
       })
   }, [companyId, onError])
+
+  useEffect(() => { fetchProducts() }, [fetchProducts])
 
   const getByCode = useCallback(async (code: string): Promise<any | null> => {
     const { data } = await supabase
@@ -77,16 +79,34 @@ function useProducts(companyId: string, onError: (m: string) => void) {
     return data ?? null
   }, [companyId])
 
-  return { products, loading, getByCode }
+  return { products, loading, getByCode, refetch: fetchProducts }
 }
 
 // ─── componente ──────────────────────────────────────────────────────────────
 
 export function PDVTab({ companyId, cashRegisterId, serie, onError, onCloseCash, onLogout, operatorName }: PDVProps) {
-  const { products, loading, getByCode } = useProducts(companyId, onError)
+    const { products, loading, getByCode, refetch: refetchProducts } = useProducts(companyId, onError)
 
   // operator
   const [operatorId, setOperatorId] = useState<string | undefined>()
+  // fiscal config — verifica se a empresa tem certificado configurado
+  const [fiscalConfigured, setFiscalConfigured] = useState<boolean | null>(null)
+  useEffect(() => {
+    if (!companyId) return
+    supabase
+      .from('fiscal_configs')
+      .select('cert_pfx_base64, cert_senha, cert_cpf_pfx_base64, cert_cpf_senha')
+      .eq('company_id', companyId)
+      .maybeSingle()
+      .then(({ data }) => {
+        const configured = !!(
+          (data?.cert_pfx_base64 && data?.cert_senha) ||
+          (data?.cert_cpf_pfx_base64 && data?.cert_cpf_senha)
+        )
+        setFiscalConfigured(configured)
+      })
+  }, [companyId])
+
   useEffect(() => {
     if (!companyId) return
     supabase.from('operators').select('id').eq('company_id', companyId).eq('active', true).limit(1).maybeSingle()
@@ -258,7 +278,7 @@ export function PDVTab({ companyId, cashRegisterId, serie, onError, onCloseCash,
     setFinalModal(true); setChange('')
   }
 
-  const confirmVenda = async () => {
+const confirmVenda = async () => {
     try {
       const result = await createPdvSale({
         companyId, cashRegisterId, serie, operatorId, operatorName,
@@ -272,8 +292,18 @@ export function PDVTab({ companyId, cashRegisterId, serie, onError, onCloseCash,
         changeAmount:   payMethod === 'dinheiro' && change ? Math.max(0, parseFloat(change.replace(',', '.')) - cartTotal) : undefined,
         consumerName: consumer?.name, consumerCpf: consumer?.cpf?.replace(/\D/g, ''),
       })
-      setSaleResult({ orderId: result.orderId, nfceNumero: result.nfceNumero, serie: result.serie })
-      setFinalModal(false); setNfceModal(true)
+      setFinalModal(false)
+      refetchProducts({ silent: true })
+
+      if (fiscalConfigured) {
+        setSaleResult({ orderId: result.orderId, nfceNumero: result.nfceNumero, serie: result.serie })
+        setNfceModal(true)
+      } else {
+        // empresa sem certificado configurado → não emite NFC-e, finaliza direto
+        const total = cartTotal
+        setCart([]); setSelectedCartId(null); setConsumer(null)
+        showToast(`Venda finalizada — ${fmt(total)}`)
+      }
     } catch (e: any) {
       showToast(e.message, 'err'); onError(e.message); setFinalModal(false)
     }
@@ -598,9 +628,9 @@ export function PDVTab({ companyId, cashRegisterId, serie, onError, onCloseCash,
         </div>
       </div>
 
-      {/* ── Toast ── */}
+{/* ── Toast ── */}
       {toast && (
-        <div className={`absolute bottom-5 left-1/2 -translate-x-1/2 z-50 px-5 py-2.5 rounded-xl text-[13px] font-semibold text-white shadow-xl whitespace-nowrap
+        <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 px-5 py-2.5 rounded-xl text-[13px] font-semibold text-white shadow-xl whitespace-nowrap
           ${toast.type === 'err' ? 'bg-red-600' : 'bg-green-600'}`}>
           {toast.msg}
         </div>
@@ -982,6 +1012,7 @@ export function PDVTab({ companyId, cashRegisterId, serie, onError, onCloseCash,
         onClose={() => setCancelVendaModal(false)}
         onCancelado={(msg) => {
           setCancelVendaModal(false)
+          refetchProducts({ silent: true })
           showToast(msg, 'ok')
         }}
       />
