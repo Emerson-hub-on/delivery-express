@@ -51,29 +51,36 @@ export function NfcePdvSection({ companyId, onError }: Props) {
   const [adding,     setAdding]     = useState(false)
 
   // ── Carrega PDVs + limite da empresa ────────────────────────────────────
-  useEffect(() => {
-    if (!companyId) return
+useEffect(() => {
+  if (!companyId) return
 
-    Promise.all([
-      supabase
+  const load = async () => {
+    try {
+      // Carrega PDVs
+      const { data: pdvData, error: pdvError } = await supabase
         .from('nfce_pdv')
         .select('*')
         .eq('company_id', companyId)
-        .order('serie'),
-      supabase
-        .from('companies')
-        .select('pdv_limit')
-        .eq('id', companyId)
-        .single(),
-    ]).then(([{ data: pdvData, error: pdvError }, { data: company, error: compError }]) => {
+        .order('serie')
+
       if (pdvError) onError(pdvError.message)
       else setPdvs((pdvData ?? []) as NfcePdv[])
 
-      if (!compError && company) setPdvLimit(company.pdv_limit ?? 1)
+      // Tenta buscar pdv_limit — se RLS bloquear, usa padrão 3
+      const { data: company } = await supabase
+        .from('companies')
+        .select('pdv_limit')
+        .eq('id', companyId)
+        .maybeSingle()
 
+      setPdvLimit(company?.pdv_limit ?? 3)
+    } finally {
       setLoading(false)
-    })
-  }, [companyId])
+    }
+  }
+
+  load()
+}, [companyId])
 
   // Derivados
   const atingiuLimite = pdvs.length >= pdvLimit

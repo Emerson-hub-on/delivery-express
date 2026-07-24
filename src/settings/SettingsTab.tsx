@@ -230,26 +230,37 @@ export function FiscalTab({ onError }: FiscalTabProps) {
     }
   }
 
-  const handleSave = async () => {
-    setSaving(true)
-    setSaved(false)
-    try {
-      const payload = {
-        ...form,
-        nfce_serie: (form.nfce_serie ?? '').padStart(3, '0') || '001',
-        // Nunca sobrescreve o certificado com marcador visual
-        cert_pfx_base64:     form.cert_pfx_base64     === '__saved__' ? undefined : form.cert_pfx_base64,
-        cert_cpf_pfx_base64: form.cert_cpf_pfx_base64 === '__saved__' ? undefined : form.cert_cpf_pfx_base64,
-      }
-      await saveFiscalConfig(payload)
-      setSaved(true)
-      setTimeout(() => setSaved(false), 3000)
-    } catch (e: any) {
-      onError(e.message)
-    } finally {
-      setSaving(false)
+const handleSave = async () => {
+  setSaving(true)
+  setSaved(false)
+  try {
+    const payload = {
+      ...form,
+      nfce_serie: (form.nfce_serie ?? '').padStart(3, '0') || '001',
+      // Converte string vazia em null para campos de data e opcionais
+      cert_validade:       form.cert_validade       || null,
+      cpf:                 form.cpf                 || null,
+      ie:                  form.ie                  || null,
+      complemento:         form.complemento         || null,
+      nome_fantasia:       form.nome_fantasia        || null,
+      telefone:            form.telefone             || null,
+      csc_id:              form.csc_id               || null,
+      csc_token:           form.csc_token            || null,
+      // Nunca sobrescreve o certificado com marcador visual
+      cert_pfx_base64:     form.cert_pfx_base64     === '__saved__' ? undefined : (form.cert_pfx_base64 || null),
+      cert_cpf_pfx_base64: form.cert_cpf_pfx_base64 === '__saved__' ? undefined : (form.cert_cpf_pfx_base64 || null),
+      cert_senha:          form.cert_senha           || null,
+      cert_cpf_senha:      form.cert_cpf_senha       || null,
     }
+    await saveFiscalConfig(payload)
+    setSaved(true)
+    setTimeout(() => setSaved(false), 3000)
+  } catch (e: any) {
+    onError(e.message)
+  } finally {
+    setSaving(false)
   }
+}
 
   // ── Salvar sequências de numeração ────────────────────────────────────────
   const handleSaveSeq = async () => {
