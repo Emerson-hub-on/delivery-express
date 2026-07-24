@@ -188,8 +188,14 @@ export function FiscalTab({ onError }: FiscalTabProps) {
     const file = e.target.files?.[0]
     if (!file) return
 
-    if (!companyId) { onError('Salve as configurações fiscais antes de enviar o certificado.'); return }
-    if (!form.cert_senha) { onError('Informe a senha do certificado antes de fazer o upload.'); return }
+    if (!companyId) { 
+    onError('Salve as configurações fiscais antes de enviar o certificado.')
+    return 
+  }
+    if (!form.cert_senha) {
+    onError('Informe a senha do certificado para fazer o upload.')
+    return
+  }
 
     setUploadingCert(true)
     setCertError(null)
