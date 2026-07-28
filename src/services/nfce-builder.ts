@@ -4,7 +4,7 @@ export type NfceItem = {
   order:          number
   product_id:     number
   product_name:   string
-  variant_label?: string   // ← novo: "AMARELO / M", "VINHO", "GG" …
+  variant_label?: string
   ean:            string | null
   quantity:       number
   unit_price:     number
@@ -60,7 +60,6 @@ function calcItem(item: NfceItem) {
   return { unitLiq, vProd, vDesc }
 }
 
-// Escapa caracteres especiais XML
 function escXml(s: string) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
@@ -75,9 +74,6 @@ export function buildNfceXml(p: NfceBuildPayload): string {
 
   const nNF      = String(p.nfceNumero).padStart(9, '0')
   const mod      = '65'
-  const tpNF     = '1'
-  const indFinal = '1'
-  const indPres  = '1'
   const tpAmb    = p.config.ambiente === 1 ? '1' : '2'
   const tpEmis   = p.contingencia ? '9' : '1'
 
@@ -89,56 +85,12 @@ export function buildNfceXml(p: NfceBuildPayload): string {
     vProdTotal += vProd
     vDescTotal += vDesc
 
-    const nItem = String(idx + 1).padStart(3, '0')
-    const cEAN  = item.ean ?? 'SEM GTIN'
+    const nItem    = String(idx + 1).padStart(3, '0')
+    const cEAN     = item.ean ?? 'SEM GTIN'
+    const xProdRaw = [item.product_name, item.variant_label].filter(Boolean).join(' ')
+    const xProd    = escXml(xProdRaw.substring(0, 120))
 
-    // ── xProd: nome do produto + variante (cor/tamanho) ──────────────────
-    // Compõe antes de truncar para garantir que o label da variante
-    // não seja cortado separado do nome base.
-    // Ex: "Camisa Básica Mengotti AMARELO / M"
-    const xProdRaw = [item.product_name, item.variant_label]
-      .filter(Boolean)
-      .join(' ')
-    const xProd = escXml(xProdRaw.substring(0, 120))
-
-    return `
-    <det nItem="${nItem}">
-      <prod>
-        <cProd>${String(item.product_id).padStart(6, '0')}</cProd>
-        <cEAN>${cEAN}</cEAN>
-        <xProd>${xProd}</xProd>
-        <NCM>${item.ncm}</NCM>
-        <CFOP>${item.cfop}</CFOP>
-        <uCom>${item.unit}</uCom>
-        <qCom>${item.quantity.toFixed(4)}</qCom>
-        <vUnCom>${item.unit_price.toFixed(10)}</vUnCom>
-        <vProd>${vProd.toFixed(2)}</vProd>
-        <cEANTrib>${cEAN}</cEANTrib>
-        <uTrib>${item.unit}</uTrib>
-        <qTrib>${item.quantity.toFixed(4)}</qTrib>
-        <vUnTrib>${item.unit_price.toFixed(10)}</vUnTrib>
-        ${vDesc > 0 ? `<vDesc>${vDesc.toFixed(2)}</vDesc>` : ''}
-        <indTot>1</indTot>
-      </prod>
-      <imposto>
-        <ICMS>
-          <ICMSSN400>
-            <orig>0</orig>
-            <CSOSN>${item.cst}</CSOSN>
-          </ICMSSN400>
-        </ICMS>
-        <PIS>
-          <PISNT>
-            <CST>07</CST>
-          </PISNT>
-        </PIS>
-        <COFINS>
-          <COFINSNT>
-            <CST>07</CST>
-          </COFINSNT>
-        </COFINS>
-      </imposto>
-    </det>`
+    return `<det nItem="${nItem}"><prod><cProd>${String(item.product_id).padStart(6,'0')}</cProd><cEAN>${cEAN}</cEAN><xProd>${xProd}</xProd><NCM>${item.ncm}</NCM><CFOP>${item.cfop}</CFOP><uCom>${item.unit}</uCom><qCom>${item.quantity.toFixed(4)}</qCom><vUnCom>${item.unit_price.toFixed(10)}</vUnCom><vProd>${vProd.toFixed(2)}</vProd><cEANTrib>${cEAN}</cEANTrib><uTrib>${item.unit}</uTrib><qTrib>${item.quantity.toFixed(4)}</qTrib><vUnTrib>${item.unit_price.toFixed(10)}</vUnTrib>${vDesc > 0 ? `<vDesc>${vDesc.toFixed(2)}</vDesc>` : ''}<indTot>1</indTot></prod><imposto><ICMS><ICMSSN400><orig>0</orig><CSOSN>${item.cst}</CSOSN></ICMSSN400></ICMS><PIS><PISNT><CST>07</CST></PISNT></PIS><COFINS><COFINSNT><CST>07</CST></COFINSNT></COFINS></imposto></det>`
   }).join('')
 
   vProdTotal = parseFloat(vProdTotal.toFixed(2))
@@ -153,109 +105,18 @@ export function buildNfceXml(p: NfceBuildPayload): string {
   const yymm = `${String(now.getFullYear()).slice(-2)}${String(now.getMonth()+1).padStart(2,'0')}`
   const chaveBase43 = `${cUF}${yymm}${docEmit}${mod}${p.serie.padStart(3,'0')}${nNF}${tpEmis}${cNF}`
 
+  // IE: obrigatório para CRT 3 (Regime Normal), ISENTO para Simples (1,2,4)
+  const ieXml = (p.config.crt === 3)
+    ? `<IE>${escXml(p.config.ie ?? 'ISENTO')}</IE>`
+    : `<IE>ISENTO</IE>`
+
   const consumerXml = p.consumer?.cpf
-    ? `<dest>
-        ${p.consumer.name ? `<xNome>${escXml(p.consumer.name.substring(0,60))}</xNome>` : ''}
-        <CPF>${p.consumer.cpf.replace(/\D/g,'').substring(0,11)}</CPF>
-        <indIEDest>9</indIEDest>
-      </dest>`
+    ? `<dest>${p.consumer.name ? `<xNome>${escXml(p.consumer.name.substring(0,60))}</xNome>` : ''}<CPF>${p.consumer.cpf.replace(/\D/g,'').substring(0,11)}</CPF><indIEDest>9</indIEDest></dest>`
     : ''
 
   const tPag     = tPagMap[p.paymentMethod] ?? '01'
   const trocoXml = p.troco > 0 ? `<vTroco>${p.troco.toFixed(2)}</vTroco>` : ''
 
-return `<?xml version="1.0" encoding="UTF-8"?>
-<NFe xmlns="http://www.portalfiscal.inf.br/nfe">
-<infNFe Id="NFe${chaveBase43}0" versao="4.00">
-  <ide>
-    <cUF>${cUF}</cUF>
-    <cNF>${cNF}</cNF>
-    <natOp>VENDA</natOp>
-    <mod>${mod}</mod>
-    <serie>${p.serie}</serie>
-    <nNF>${p.nfceNumero}</nNF>
-    <dhEmi>${dhEmi}</dhEmi>
-    <tpNF>${tpNF}</tpNF>
-    <idDest>1</idDest>
-    <cMunFG>${p.config.codigo_ibge}</cMunFG>
-    <tpImp>4</tpImp>
-    <tpEmis>${tpEmis}</tpEmis>
-    <cDV>0</cDV>
-    <tpAmb>${tpAmb}</tpAmb>
-    <finNFe>1</finNFe>
-    <indFinal>${indFinal}</indFinal>
-    <indPres>${indPres}</indPres>
-    <procEmi>0</procEmi>
-    <verProc>1.0.0</verProc>
-    ${p.contingencia ? `<dhCont>${dhEmi}</dhCont><xJust>Contingencia por falha de comunicacao com a SEFAZ</xJust>` : ''}
-  </ide>
-  <emit>
-    ${isMei && p.config.cpf
-      ? `<CPF>${p.config.cpf.replace(/\D/g, '')}</CPF>`
-      : `<CNPJ>${p.config.cnpj}</CNPJ>`
-    }
-    <xNome>${escXml(p.config.razao_social.substring(0,60))}</xNome>
-    ${p.config.nome_fantasia ? `<xFant>${escXml(p.config.nome_fantasia.substring(0,60))}</xFant>` : ''}
-    <enderEmit>
-      <xLgr>${escXml(p.config.logradouro)}</xLgr>
-      <nro>${p.config.numero}</nro>
-      ${p.config.complemento ? `<xCpl>${p.config.complemento}</xCpl>` : ''}
-      <xBairro>${escXml(p.config.bairro)}</xBairro>
-      <cMun>${p.config.codigo_ibge}</cMun>
-      <xMun>${escXml(p.config.municipio)}</xMun>
-      <UF>${p.config.uf}</UF>
-      <CEP>${p.config.cep}</CEP>
-      <cPais>1058</cPais>
-      <xPais>Brasil</xPais>
-      ${p.config.telefone ? `<fone>${p.config.telefone.replace(/\D/g,'')}</fone>` : ''}
-    </enderEmit>
-    ${p.config.crt === 1 || p.config.crt === 4 
-  ? '' 
-  : `<IE>${p.config.ie ?? 'ISENTO'}</IE>`}
-    <CRT>${p.config.crt}</CRT>
-  </emit>
-  ${consumerXml}
-  ${itemsXml}
-  <total>
-    <ICMSTot>
-      <vBC>0.00</vBC>
-      <vICMS>0.00</vICMS>
-      <vICMSDeson>0.00</vICMSDeson>
-      <vFCP>0.00</vFCP>
-      <vBCST>0.00</vBCST>
-      <vST>0.00</vST>
-      <vFCPST>0.00</vFCPST>
-      <vFCPSTRet>0.00</vFCPSTRet>
-      <vProd>${vProdTotal.toFixed(2)}</vProd>
-      <vFrete>0.00</vFrete>
-      <vSeg>0.00</vSeg>
-      <vDesc>${vDescTotal.toFixed(2)}</vDesc>
-      <vII>0.00</vII>
-      <vIPI>0.00</vIPI>
-      <vIPIDevol>0.00</vIPIDevol>
-      <vPIS>0.00</vPIS>
-      <vCOFINS>0.00</vCOFINS>
-      <vOutro>0.00</vOutro>
-      <vNF>${vNF.toFixed(2)}</vNF>
-    </ICMSTot>
-  </total>
-  <transp>
-    <modFrete>9</modFrete>
-  </transp>
-  <pag>
-    <detPag>
-      <tPag>${tPag}</tPag>
-      <vPag>${vNF.toFixed(2)}</vPag>
-      ${trocoXml}
-    </detPag>
-  </pag>
-  <infAdic>
-    <infCpl>NFC-e emitida em ambiente de ${tpAmb === '1' ? 'producao' : 'homologacao'}. ${p.contingencia ? 'EMITIDA EM CONTINGENCIA OFFLINE.' : ''}</infCpl>
-  </infAdic>
-</infNFe>
-<infNFeSupl>
-    <qrCode></qrCode>
-    <urlChave>https://www.sefaz${p.config.uf.toLowerCase()}.gov.br/</urlChave>
-  </infNFeSupl>
-</NFe>`
+  // ── XML sem indentação para evitar whitespace que invalida a assinatura ──
+  return `<?xml version="1.0" encoding="UTF-8"?><NFe xmlns="http://www.portalfiscal.inf.br/nfe"><infNFe Id="NFe${chaveBase43}0" versao="4.00"><ide><cUF>${cUF}</cUF><cNF>${cNF}</cNF><natOp>VENDA</natOp><mod>${mod}</mod><serie>${p.serie}</serie><nNF>${p.nfceNumero}</nNF><dhEmi>${dhEmi}</dhEmi><tpNF>1</tpNF><idDest>1</idDest><cMunFG>${p.config.codigo_ibge}</cMunFG><tpImp>4</tpImp><tpEmis>${tpEmis}</tpEmis><cDV>0</cDV><tpAmb>${tpAmb}</tpAmb><finNFe>1</finNFe><indFinal>1</indFinal><indPres>1</indPres><procEmi>0</procEmi><verProc>1.0.0</verProc>${p.contingencia ? `<dhCont>${dhEmi}</dhCont><xJust>Contingencia por falha de comunicacao com a SEFAZ</xJust>` : ''}</ide><emit>${isMei && p.config.cpf ? `<CPF>${p.config.cpf.replace(/\D/g,'')}</CPF>` : `<CNPJ>${p.config.cnpj}</CNPJ>`}<xNome>${escXml(p.config.razao_social.substring(0,60))}</xNome>${p.config.nome_fantasia ? `<xFant>${escXml(p.config.nome_fantasia.substring(0,60))}</xFant>` : ''}<enderEmit><xLgr>${escXml(p.config.logradouro)}</xLgr><nro>${p.config.numero}</nro>${p.config.complemento ? `<xCpl>${escXml(p.config.complemento)}</xCpl>` : ''}<xBairro>${escXml(p.config.bairro)}</xBairro><cMun>${p.config.codigo_ibge}</cMun><xMun>${escXml(p.config.municipio)}</xMun><UF>${p.config.uf}</UF><CEP>${p.config.cep}</CEP><cPais>1058</cPais><xPais>Brasil</xPais>${p.config.telefone ? `<fone>${p.config.telefone.replace(/\D/g,'')}</fone>` : ''}</enderEmit>${ieXml}<CRT>${p.config.crt}</CRT></emit>${consumerXml}${itemsXml}<total><ICMSTot><vBC>0.00</vBC><vICMS>0.00</vICMS><vICMSDeson>0.00</vICMSDeson><vFCP>0.00</vFCP><vBCST>0.00</vBCST><vST>0.00</vST><vFCPST>0.00</vFCPST><vFCPSTRet>0.00</vFCPSTRet><vProd>${vProdTotal.toFixed(2)}</vProd><vFrete>0.00</vFrete><vSeg>0.00</vSeg><vDesc>${vDescTotal.toFixed(2)}</vDesc><vII>0.00</vII><vIPI>0.00</vIPI><vIPIDevol>0.00</vIPIDevol><vPIS>0.00</vPIS><vCOFINS>0.00</vCOFINS><vOutro>0.00</vOutro><vNF>${vNF.toFixed(2)}</vNF></ICMSTot></total><transp><modFrete>9</modFrete></transp><pag><detPag><tPag>${tPag}</tPag><vPag>${vNF.toFixed(2)}</vPag>${trocoXml}</detPag></pag><infAdic><infCpl>NFC-e emitida em ambiente de ${tpAmb === '1' ? 'producao' : 'homologacao'}.</infCpl></infAdic><infNFeSupl><qrCode></qrCode><urlChave>https://www.sefaz${p.config.uf.toLowerCase()}.gov.br/</urlChave></infNFeSupl></infNFe></NFe>`
 }
